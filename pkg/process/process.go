@@ -11,6 +11,12 @@ type ProcessSpace struct {
 	Processes map[int]*Process
 }
 
+type NewProcessSpace() *ProcessSpace {
+	return &ProcessSpace{
+		Processes: map[int]*Process,
+	}
+}
+
 func (ps *ProcessSpace) Add(p *Process) error {
 	ps.Processes[ps.next] = p
 	ps.next ++
