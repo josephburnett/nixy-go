@@ -13,7 +13,7 @@ type ProcessSpace struct {
 
 type NewProcessSpace() *ProcessSpace {
 	return &ProcessSpace{
-		Processes: map[int]*Process,
+		Processes: map[int]*Process{},
 	}
 }
 
