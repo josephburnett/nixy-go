@@ -8,16 +8,16 @@ type Process interface {
 
 type ProcessSpace struct {
 	next      int
-	Processes map[int]*Process
+	processes map[int]*Process
 }
 
-type NewProcessSpace() *ProcessSpace {
+func NewProcessSpace() *ProcessSpace {
 	return &ProcessSpace{
-		Processes: map[int]*Process{},
+		processes: map[int]*Process{},
 	}
 }
 
-func (ps *ProcessSpace) Add(p *Process) error {
-	ps.Processes[ps.next] = p
-	ps.next ++
+func (ps *ProcessSpace) Add(p *Process) {
+	ps.processes[ps.next] = p
+	ps.next++
 }

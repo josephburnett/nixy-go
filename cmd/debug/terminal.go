@@ -1,13 +1,19 @@
 package debug
 
+import (
+	"github.com/josephburnett/nixy-go/pkg/environment"
+)
+
 type Terminal struct {
-	ps *process.ProcessSpace
-	fs *filesystem.File
+	env *environment.Environment
 }
 
 func NewTerminal() (*Terminal, error) {
-	return &Terminal{
-		ps: process.NewProcessSpace(),
-		fs: filesystem: NewFileSystem(),
+	e, err := environment.NewEnvironment(nil)
+	if err != nil {
+		return nil, err
 	}
+	return &Terminal{
+		env: e,
+	}, nil
 }

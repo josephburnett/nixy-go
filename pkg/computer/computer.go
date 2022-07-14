@@ -1,20 +1,20 @@
 package computer
 
 import (
-	"github.com/josephburnett/nixy-go/pkg/model"
+	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
 type Computer struct {
-	Filesystem *model.File
-	Processes  *process.ProcessSpace
+	filesystem *file.File
+	processes  *process.ProcessSpace
 }
 
-func NewComputer(filesystem *mode.File) *Computer {
+func NewComputer(filesystem *file.File) *Computer {
 	return &Computer{
-		FileSystem: f,
-		Processes:  process.NewProcessSpace(),
-	}, 
+		filesystem: filesystem,
+		processes:  process.NewProcessSpace(),
+	}
 }
 
 func (c *Computer) Boot() error {
