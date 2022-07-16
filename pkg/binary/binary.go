@@ -5,15 +5,10 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-type FuncName struct {
-	Name     string
-	Namspace string
-}
+type Func func(env *environment.Environment, hostname string, args string, dryrun bool) (*process.Process, error)
 
-type Func func(env *environment.Environment, hostname string, args string) (*process.Process, error)
+var registry = map[string]Func{}
 
-var registry = map[FuncName]Func{}
-
-func Register(name FuncName, f Func) {
+func Register(name string, f Func) {
 	registry[name] = f
 }
