@@ -7,12 +7,15 @@ import (
 )
 
 func init() {
-	binary.Register("pwd", func(
-		env *environment.Environment,
-		hostname string,
-		args string,
-		dryrun bool,
-	) (*process.Process, error) {
-		return nil, nil
-	})
+	binary.Register("pwd", pwd)
+}
+
+func pwd(
+	env *environment.Environment,
+	hostname string,
+	parent process.Process,
+	args string,
+	dryrun bool,
+) (process.Process, error) {
+	return nil, nil
 }
