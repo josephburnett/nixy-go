@@ -5,13 +5,16 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-type Func func(
-	env *environment.Environment,
-	hostname string,
-	parent process.Process,
-	args string,
-	dryrun bool,
-) (process.Process, error)
+type Func func(args Args) (process.Process, error)
+
+type Args struct {
+	Env       *environment.Environment
+	Parent    process.Process
+	Hostname  string
+	Directory []string
+	Args      string
+	DryRun    bool
+}
 
 var registry = map[string]Func{}
 

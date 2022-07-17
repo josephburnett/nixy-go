@@ -1,8 +1,9 @@
 package command
 
 import (
+	"strings"
+
 	"github.com/josephburnett/nixy-go/pkg/binary"
-	"github.com/josephburnett/nixy-go/pkg/environment"
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
@@ -10,12 +11,9 @@ func init() {
 	binary.Register("pwd", pwd)
 }
 
-func pwd(
-	env *environment.Environment,
-	hostname string,
-	parent process.Process,
-	args string,
-	dryrun bool,
-) (process.Process, error) {
-	return nil, nil
+func pwd(args binary.Args) (process.Process, error) {
+	return &singleValueProcess{
+		parent: args.Parent,
+		value:  strings.Join(args.Directory, "/"),
+	}, nil
 }
