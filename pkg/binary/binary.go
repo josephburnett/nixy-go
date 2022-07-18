@@ -5,19 +5,24 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-type Func func(args Args) (process.Process, error)
+type Binary struct {
+	Launch   Launch
+	Validate Validate
+}
 
-type Args struct {
+type Launch func(context Context, args string) (process.Process, error)
+
+type Validate func(context Context, argsList []string) []error
+
+type Context struct {
 	Env       *environment.Environment
 	Parent    process.Process
 	Hostname  string
 	Directory []string
-	Args      string
-	DryRun    bool
 }
 
-var registry = map[string]Func{}
+var registry = map[string]Binary{}
 
-func Register(name string, f Func) {
-	registry[name] = f
+func Register(name string, b Binary) {
+	registry[name] = b
 }

@@ -8,6 +8,13 @@ type singleValueProcess struct {
 	eof    bool
 }
 
+func NewSingleValueProcess(parent process.Process, value string) process.Process {
+	return &singleValueProcess{
+		parent: parent,
+		value:  value,
+	}
+}
+
 func (s *singleValueProcess) Read() (string, error) {
 	if s.eof {
 		return "", ErrEndOfFile
