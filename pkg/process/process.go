@@ -1,7 +1,7 @@
 package process
 
 type Process interface {
-	Read() (string, error)
+	Read() (string, bool, error)
 	Write(string) error
 	Owner() string
 	Parent() Process

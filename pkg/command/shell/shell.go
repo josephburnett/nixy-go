@@ -30,8 +30,8 @@ type shellType struct {
 	currentDirectory []string
 }
 
-func (s *shellType) Read() (string, error)   { return "", nil }
-func (s *shellType) Write(string) error      { return nil }
-func (s *shellType) Owner() string           { return "" }
-func (s *shellType) Parent() process.Process { return nil }
-func (s *shellType) Kill() error             { return nil }
+func (s *shellType) Read() (string, bool, error) { return "", false, nil }
+func (s *shellType) Write(string) error          { return nil }
+func (s *shellType) Owner() string               { return "" }
+func (s *shellType) Parent() process.Process     { return nil }
+func (s *shellType) Kill() error                 { return nil }

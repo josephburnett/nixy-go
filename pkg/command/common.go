@@ -15,12 +15,12 @@ func NewSingleValueProcess(parent process.Process, value string) process.Process
 	}
 }
 
-func (s *singleValueProcess) Read() (string, error) {
+func (s *singleValueProcess) Read() (string, bool, error) {
 	if s.eof {
-		return "", ErrEndOfFile
+		return "", s.eof, ErrEndOfFile
 	}
 	s.eof = true
-	return s.value, nil
+	return s.value, s.eof, nil
 }
 
 func (s *singleValueProcess) Write(_ string) error {
