@@ -12,7 +12,7 @@ func init() {
 	})
 }
 
-func launch(context binary.Context, args string, rest binary.Pipeline) (process.Process, error) {
+func launch(context binary.Context, args string, input process.Process) (process.Process, error) {
 	return &shellType{
 		Context:          context,
 		args:             args,
@@ -20,7 +20,7 @@ func launch(context binary.Context, args string, rest binary.Pipeline) (process.
 	}, nil
 }
 
-func validate(context binary.Context, args []string, rest []binary.Pipeline) []error {
+func validate(context binary.Context, args []string) []error {
 	return make([]error, len(args))
 }
 

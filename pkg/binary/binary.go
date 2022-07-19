@@ -10,9 +10,9 @@ type Binary struct {
 	Validate Validate
 }
 
-type Launch func(context Context, args string, rest Pipeline) (process.Process, error)
+type Launch func(context Context, args string, input process.Process) (process.Process, error)
 
-type Validate func(context Context, args []string, rest []Pipeline) []error
+type Validate func(context Context, args []string) []error
 
 type Context struct {
 	Env       *environment.Environment
@@ -20,8 +20,6 @@ type Context struct {
 	Hostname  string
 	Directory []string
 }
-
-type Pipeline []string
 
 var registry = map[string]Binary{}
 
