@@ -12,7 +12,7 @@ func init() {
 	})
 }
 
-func launch(context binary.Context, args string) (process.Process, error) {
+func launch(context binary.Context, args string, rest binary.Pipeline) (process.Process, error) {
 	return &shellType{
 		Context:          context,
 		args:             args,
@@ -20,8 +20,8 @@ func launch(context binary.Context, args string) (process.Process, error) {
 	}, nil
 }
 
-func validate(context binary.Context, argsList []string) []error {
-	return make([]error, len(argsList))
+func validate(context binary.Context, args []string, rest []binary.Pipeline) []error {
+	return make([]error, len(args))
 }
 
 type shellType struct {

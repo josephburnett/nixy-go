@@ -16,16 +16,16 @@ func init() {
 	})
 }
 
-func launch(context binary.Context, _ string) (process.Process, error) {
+func launch(context binary.Context, _ string, _ binary.Pipeline) (process.Process, error) {
 	return command.NewSingleValueProcess(
 		context.Parent,
 		strings.Join(context.Directory, "/"),
 	), nil
 }
 
-func validate(_ binary.Context, argsList []string) []error {
-	errs := make([]error, len(argsList))
-	for i := range argsList {
+func validate(_ binary.Context, args []string, _ []binary.Pipeline) []error {
+	errs := make([]error, len(args))
+	for i := range args {
 		errs[i] = errAcceptNoArgs
 	}
 	return errs
