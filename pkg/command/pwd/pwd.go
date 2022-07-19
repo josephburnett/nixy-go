@@ -31,4 +31,4 @@ func validate(_ binary.Context, args []string, _ []binary.Pipeline) []error {
 	return errs
 }
 
-var errAcceptNoArgs = fmt.Errorf("args does not accept parameters")
+var errAcceptNoArgs = fmt.Errorf("pwd does not accept parameters")
