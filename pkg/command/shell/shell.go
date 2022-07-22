@@ -32,16 +32,23 @@ type shell struct {
 	args             string
 	currentDirectory []string
 	currentCommand   string
+	echo             string
 }
 
 func (s *shell) Read() (string, bool, error) {
-	return "", false, nil
+	if s.eof {
+		return "", true, nil
+	}
+	e := s.echo
+	s.echo = ""
+	return e, false, nil
 }
 
-func (s *shell) Write(string) error {
+func (s *shell) Write(in string) error {
 	if s.eof {
 		return command.ErrEndOfFile
 	}
+	s.echo += in
 	return nil
 }
 
