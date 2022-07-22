@@ -18,7 +18,7 @@ func init() {
 
 func launch(context binary.Context, _ string, _ process.Process) (process.Process, error) {
 	return command.NewSingleValueProcess(
-		context.Parent,
+		context.ParentProcess,
 		strings.Join(context.Directory, "/"),
 	), nil
 }

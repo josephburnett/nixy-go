@@ -15,10 +15,10 @@ type Launch func(context Context, args string, input process.Process) (process.P
 type Validate func(context Context, args []string) []error
 
 type Context struct {
-	Env       *environment.Environment
-	Parent    process.Process
-	Hostname  string
-	Directory []string
+	Env           *environment.Environment
+	ParentProcess process.Process
+	Hostname      string
+	Directory     []string
 }
 
 var registry = map[string]Binary{}
