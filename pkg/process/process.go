@@ -1,8 +1,8 @@
 package process
 
 type Process interface {
-	Read() ([]Datum, bool, error)
-	Write([]Datum) error
+	Read() (Data, bool, error)
+	Write(Data) error
 	Owner() string
 	Parent() Process
 	Kill() error

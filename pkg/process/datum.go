@@ -3,6 +3,7 @@ package process
 type Datum interface {
 	isDatum()
 }
+type Data []Datum
 
 type Chars string
 type CharPotentialProbe string
@@ -33,3 +34,7 @@ var (
 	TermEnter     TermCode = "TermEnter"
 	TermClear     TermCode = "TermClear"
 )
+
+func CharsData(s string) Data {
+	return Data{Chars(s)}
+}
