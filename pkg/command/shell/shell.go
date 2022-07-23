@@ -35,20 +35,24 @@ type shell struct {
 	echo             string
 }
 
-func (s *shell) Read() (string, bool, error) {
+func (s *shell) Read() ([]process.Datum, bool, error) {
 	if s.eof {
-		return "", true, nil
+		return nil, true, nil
 	}
 	e := s.echo
 	s.echo = ""
-	return e, false, nil
+	return []process.Datum{process.Chars(e)}, false, nil
 }
 
-func (s *shell) Write(in string) error {
+func (s *shell) Write(in []process.Datum) error {
 	if s.eof {
 		return command.ErrEndOfFile
 	}
-	s.echo += in
+	for _, d := range in {
+		if c, ok := d.(process.Chars); ok {
+			s.echo += string(c)
+		}
+	}
 	return nil
 }
 

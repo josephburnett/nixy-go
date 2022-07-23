@@ -15,15 +15,15 @@ func NewSingleValueProcess(parent process.Process, value string) process.Process
 	}
 }
 
-func (s *singleValueProcess) Read() (string, bool, error) {
+func (s *singleValueProcess) Read() ([]process.Datum, bool, error) {
 	if s.eof {
-		return "", s.eof, ErrEndOfFile
+		return nil, s.eof, ErrEndOfFile
 	}
 	s.eof = true
-	return s.value, s.eof, nil
+	return []process.Datum{process.Chars(s.value)}, s.eof, nil
 }
 
-func (s *singleValueProcess) Write(_ string) error {
+func (s *singleValueProcess) Write(_ []process.Datum) error {
 	return ErrReadOnlyProcess
 }
 
