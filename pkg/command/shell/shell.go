@@ -1,19 +1,19 @@
 package shell
 
 import (
-	"github.com/josephburnett/nixy-go/pkg/binary"
 	"github.com/josephburnett/nixy-go/pkg/command"
+	"github.com/josephburnett/nixy-go/pkg/environment"
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
 func init() {
-	binary.Register("shell", binary.Binary{
+	environment.Register("shell", environment.Binary{
 		Launch:   launch,
 		Validate: validate,
 	})
 }
 
-func launch(context binary.Context, args string, input process.Process) (process.Process, error) {
+func launch(context environment.Context, args string, input process.Process) (process.Process, error) {
 	return &shell{
 		Context:          context,
 		args:             args,
@@ -22,13 +22,13 @@ func launch(context binary.Context, args string, input process.Process) (process
 	}, nil
 }
 
-func validate(context binary.Context, args []string) []error {
+func validate(context environment.Context, args []string) []error {
 	return make([]error, len(args))
 }
 
 type shell struct {
 	eof bool
-	binary.Context
+	environment.Context
 	args             string
 	currentDirectory []string
 	currentCommand   string

@@ -20,3 +20,7 @@ func NewComputer(filesystem *file.File) *Computer {
 func (c *Computer) Boot() error {
 	return nil
 }
+
+func (c *Computer) Add(p process.Process) {
+	c.processes.Add(p)
+}
