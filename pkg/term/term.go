@@ -2,6 +2,7 @@ package term
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
@@ -29,7 +30,7 @@ func (t *Term) Write(in process.Data) error {
 			switch d {
 			case process.TermBackspace:
 				if len(t.line) > 0 {
-					t.line = t.line[:len(t.line)-2]
+					t.line = t.line[:len(t.line)-1]
 				}
 			case process.TermClear:
 				t.line = ""
@@ -48,18 +49,26 @@ func (t *Term) Write(in process.Data) error {
 }
 
 func (t *Term) Render() string {
-	out := ""
-	lineCount := len(t.lines)
-	if lineCount > t.y {
-		lineCount = t.y
-	}
-	for _, line := range t.lines[len(t.lines)-(lineCount+1) : len(t.lines)-1] {
-		columnCount := len(line)
-		if columnCount > t.x {
-			columnCount = t.x
+	border := strings.Repeat("=", 55) + "\n"
+	var buf [20]string
+	i := len(t.lines) - 20
+	for j := range buf {
+		if i < 0 {
+			buf[j] = "|"
+			i++
+			continue
 		}
-		out += line[:columnCount-1]
-		out += "\n"
+		buf[j] = "| " + t.lines[i]
+		i++
 	}
+	out := strings.Repeat("\n", 100)
+	out += "\n"
+	out += " Term codes: Enter = '>', Backspace = '<', Clear = '_'"
+	out += "\n\n"
+	out += border
+	out += strings.Join(buf[:], "\n") + "\n"
+	out += "> " + t.line + "\n"
+	out += border
+	out += "\n"
 	return out
 }

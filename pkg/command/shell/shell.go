@@ -32,27 +32,23 @@ type shell struct {
 	args             string
 	currentDirectory []string
 	currentCommand   string
-	echo             string
+	echo             process.Data
 }
 
 func (s *shell) Read() (process.Data, bool, error) {
 	if s.eof {
 		return nil, true, nil
 	}
-	e := s.echo
-	s.echo = ""
-	return process.CharsData(e), false, nil
+	data := s.echo
+	s.echo = nil
+	return data, false, nil
 }
 
 func (s *shell) Write(in process.Data) error {
 	if s.eof {
 		return command.ErrEndOfFile
 	}
-	for _, d := range in {
-		if c, ok := d.(process.Chars); ok {
-			s.echo += string(c)
-		}
-	}
+	s.echo = append(s.echo, in...)
 	return nil
 }
 
