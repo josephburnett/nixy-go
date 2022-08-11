@@ -55,7 +55,7 @@ func main() {
 			if s == "<" {
 				data[0] = process.TermBackspace
 			}
-			if s == "_" {
+			if s == "^" {
 				data[0] = process.TermClear
 			}
 			if s == "\n" {

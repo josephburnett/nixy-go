@@ -63,7 +63,7 @@ func (t *Term) Render() string {
 	}
 	out := strings.Repeat("\n", 100)
 	out += "\n"
-	out += " Term codes: Enter = '>', Backspace = '<', Clear = '_'"
+	out += " Term codes: Enter = '>', Backspace = '<', Clear = '^'"
 	out += "\n\n"
 	out += border
 	out += strings.Join(buf[:], "\n") + "\n"
