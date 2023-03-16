@@ -67,13 +67,13 @@ func main() {
 }
 
 func launch() (*term.Term, process.Process, error) {
-	env, err := environment.NewEnvironment(nil)
+	env, err := environment.NewEnvironment()
 	comp := computer.NewComputer(nil)
 	err = comp.Boot()
 	if err != nil {
 		return nil, nil, err
 	}
-	env.Add("repl", comp)
+	err = env.AddComputer("repl", comp)
 	if err != nil {
 		return nil, nil, err
 	}

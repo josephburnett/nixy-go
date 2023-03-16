@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/josephburnett/nixy-go/pkg/computer"
-	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
@@ -12,7 +11,7 @@ type Environment struct {
 	computers map[string]*computer.Computer
 }
 
-func NewEnvironment(filesystems map[string]*file.File) (*Environment, error) {
+func NewEnvironment() (*Environment, error) {
 	return &Environment{
 		computers: map[string]*computer.Computer{},
 	}, nil
@@ -57,6 +56,10 @@ func Register(name string, b Binary) {
 	registry[name] = b
 }
 
-func (e *Environment) Add(hostname string, c *computer.Computer) {
+func (e *Environment) AddComputer(hostname string, c *computer.Computer) error {
+	if _, present := e.computers[hostname]; present {
+		return fmt.Errorf("host %v already present", hostname)
+	}
 	e.computers[hostname] = c
+	return nil
 }
