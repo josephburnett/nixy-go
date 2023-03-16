@@ -8,8 +8,8 @@ import (
 
 	_ "github.com/josephburnett/nixy-go/pkg/command/shell"
 	"github.com/josephburnett/nixy-go/pkg/computer"
-	"github.com/josephburnett/nixy-go/pkg/environment"
 	"github.com/josephburnett/nixy-go/pkg/process"
+	"github.com/josephburnett/nixy-go/pkg/simulation"
 	"github.com/josephburnett/nixy-go/pkg/term"
 )
 
@@ -67,7 +67,7 @@ func main() {
 }
 
 func launch() (*term.Term, process.Process, error) {
-	env := environment.NewEnvironment()
+	env := simulation.NewSimulation()
 	comp := computer.NewComputer(nil)
 	err := comp.Boot()
 	if err != nil {
@@ -77,7 +77,7 @@ func launch() (*term.Term, process.Process, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	ctx := environment.Context{
+	ctx := simulation.Context{
 		Env: env,
 	}
 	proc, err := env.Launch("repl", "shell", ctx, "", nil)

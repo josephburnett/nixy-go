@@ -2,18 +2,18 @@ package shell
 
 import (
 	"github.com/josephburnett/nixy-go/pkg/command"
-	"github.com/josephburnett/nixy-go/pkg/environment"
 	"github.com/josephburnett/nixy-go/pkg/process"
+	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
 func init() {
-	environment.Register("shell", environment.Binary{
+	simulation.Register("shell", simulation.Binary{
 		Launch: launch,
 		Test:   test,
 	})
 }
 
-func launch(context environment.Context, args string, input process.Process) (process.Process, error) {
+func launch(context simulation.Context, args string, input process.Process) (process.Process, error) {
 	return &shell{
 		Context:          context,
 		args:             args,
@@ -22,7 +22,7 @@ func launch(context environment.Context, args string, input process.Process) (pr
 	}, nil
 }
 
-func test(context environment.Context, args []string) []error {
+func test(context simulation.Context, args []string) []error {
 	return make([]error, len(args))
 }
 
@@ -30,7 +30,7 @@ var _ process.Process = &shell{}
 
 type shell struct {
 	eof bool
-	environment.Context
+	simulation.Context
 	args             string
 	currentDirectory []string
 	currentCommand   string
