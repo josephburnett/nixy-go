@@ -11,10 +11,10 @@ type Environment struct {
 	computers map[string]*computer.Computer
 }
 
-func NewEnvironment() (*Environment, error) {
+func NewEnvironment() *Environment {
 	return &Environment{
 		computers: map[string]*computer.Computer{},
-	}, nil
+	}
 }
 
 func (e *Environment) Launch(hostname, binaryName string, ctx Context, args string, input process.Process) (process.Process, error) {
@@ -35,13 +35,13 @@ func (e *Environment) Launch(hostname, binaryName string, ctx Context, args stri
 }
 
 type Binary struct {
-	Launch   Launch
-	Validate Validate
+	Launch Launch
+	Test   Test
 }
 
 type Launch func(context Context, args string, input process.Process) (process.Process, error)
 
-type Validate func(context Context, args []string) []error
+type Test func(context Context, args []string) []error
 
 type Context struct {
 	Env           *Environment

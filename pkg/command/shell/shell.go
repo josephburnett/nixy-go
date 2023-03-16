@@ -8,8 +8,8 @@ import (
 
 func init() {
 	environment.Register("shell", environment.Binary{
-		Launch:   launch,
-		Validate: validate,
+		Launch: launch,
+		Test:   test,
 	})
 }
 
@@ -22,9 +22,11 @@ func launch(context environment.Context, args string, input process.Process) (pr
 	}, nil
 }
 
-func validate(context environment.Context, args []string) []error {
+func test(context environment.Context, args []string) []error {
 	return make([]error, len(args))
 }
+
+var _ process.Process = &shell{}
 
 type shell struct {
 	eof bool
@@ -44,11 +46,15 @@ func (s *shell) Read() (process.Data, bool, error) {
 	return data, false, nil
 }
 
-func (s *shell) Write(in process.Data) error {
+func (s *shell) Write(in process.Data) (bool, error) {
 	if s.eof {
-		return command.ErrEndOfFile
+		return true, command.ErrEndOfFile
 	}
 	s.echo = append(s.echo, in...)
+	return false, nil
+}
+
+func (s *shell) Test(in []process.Data) []error {
 	return nil
 }
 

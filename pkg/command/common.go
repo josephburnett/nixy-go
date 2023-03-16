@@ -2,6 +2,8 @@ package command
 
 import "github.com/josephburnett/nixy-go/pkg/process"
 
+var _ process.Process = &singleValueProcess{}
+
 type singleValueProcess struct {
 	parent process.Process
 	value  string
@@ -23,8 +25,12 @@ func (s *singleValueProcess) Read() (process.Data, bool, error) {
 	return process.CharsData(s.value), s.eof, nil
 }
 
-func (s *singleValueProcess) Write(_ process.Data) error {
-	return ErrReadOnlyProcess
+func (s *singleValueProcess) Write(_ process.Data) (bool, error) {
+	return false, ErrReadOnlyProcess
+}
+
+func (s *singleValueProcess) Test(_ []process.Data) []error {
+	return nil
 }
 
 func (s *singleValueProcess) Owner() string {
