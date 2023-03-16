@@ -1,4 +1,4 @@
-package term
+package terminal
 
 import (
 	"fmt"
@@ -7,21 +7,21 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-type Term struct {
+type T struct {
 	x, y  int
 	line  string
 	lines []string
 }
 
-func NewTerm() *Term {
-	return &Term{
+func New() *T {
+	return &T{
 		x:     40,
 		y:     20,
 		lines: []string{},
 	}
 }
 
-func (t *Term) Write(in process.Data) error {
+func (t *T) Write(in process.Data) error {
 	for _, d := range in {
 		switch d := d.(type) {
 		case process.Chars:
@@ -48,7 +48,7 @@ func (t *Term) Write(in process.Data) error {
 	return nil
 }
 
-func (t *Term) Render() string {
+func (t *T) Render() string {
 	border := strings.Repeat("=", 55) + "\n"
 	var buf [20]string
 	i := len(t.lines) - 20

@@ -5,22 +5,22 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-type Computer struct {
+type C struct {
 	filesystem *file.File
-	processes  *process.ProcessSpace
+	processes  *process.Space
 }
 
-func NewComputer(filesystem *file.File) *Computer {
-	return &Computer{
+func New(filesystem *file.File) *C {
+	return &C{
 		filesystem: filesystem,
-		processes:  process.NewProcessSpace(),
+		processes:  process.NewSpace(),
 	}
 }
 
-func (c *Computer) Boot() error {
+func (c *C) Boot() error {
 	return nil
 }
 
-func (c *Computer) Add(p process.Process) {
+func (c *C) Add(p process.P) {
 	c.processes.Add(p)
 }

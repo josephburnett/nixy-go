@@ -2,36 +2,36 @@ package process
 
 import "fmt"
 
-type Process interface {
+type P interface {
 	Read() (Data, bool, error)
 	Write(Data) (bool, error)
 	Test([]Data) []error
 	Owner() string
-	Parent() Process
+	Parent() P
 	Kill() error
 }
 
-type ProcessSpace struct {
+type Space struct {
 	next      int
-	processes map[int]Process
+	processes map[int]P
 }
 
-func NewProcessSpace() *ProcessSpace {
-	return &ProcessSpace{
-		processes: map[int]Process{},
+func NewSpace() *Space {
+	return &Space{
+		processes: map[int]P{},
 	}
 }
 
-func (ps *ProcessSpace) Add(p Process) {
+func (ps *Space) Add(p P) {
 	ps.processes[ps.next] = p
 	ps.next++
 }
 
-func (ps *ProcessSpace) List() map[int]Process {
+func (ps *Space) List() map[int]P {
 	return ps.processes
 }
 
-func (ps *ProcessSpace) Kill(id int) error {
+func (ps *Space) Kill(id int) error {
 	p, ok := ps.processes[id]
 	if !ok {
 		return fmt.Errorf("invalid process id %v", id)

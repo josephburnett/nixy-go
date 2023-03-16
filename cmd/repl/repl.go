@@ -10,7 +10,7 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/computer"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
-	"github.com/josephburnett/nixy-go/pkg/term"
+	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
 
 func main() {
@@ -66,24 +66,24 @@ func main() {
 	}
 }
 
-func launch() (*term.Term, process.Process, error) {
-	env := simulation.NewSimulation()
-	comp := computer.NewComputer(nil)
+func launch() (*terminal.T, process.P, error) {
+	sim := simulation.New()
+	comp := computer.New(nil)
 	err := comp.Boot()
 	if err != nil {
 		return nil, nil, err
 	}
-	err = env.AddComputer("repl", comp)
+	err = sim.AddComputer("repl", comp)
 	if err != nil {
 		return nil, nil, err
 	}
 	ctx := simulation.Context{
-		Env: env,
+		Simulation: sim,
 	}
-	proc, err := env.Launch("repl", "shell", ctx, "", nil)
+	proc, err := sim.Launch("repl", "shell", ctx, "", nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	t := term.NewTerm()
+	t := terminal.New()
 	return t, proc, nil
 }

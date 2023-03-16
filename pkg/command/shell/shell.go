@@ -13,7 +13,7 @@ func init() {
 	})
 }
 
-func launch(context simulation.Context, args string, input process.Process) (process.Process, error) {
+func launch(context simulation.Context, args string, input process.P) (process.P, error) {
 	return &shell{
 		Context:          context,
 		args:             args,
@@ -26,7 +26,7 @@ func test(context simulation.Context, args []string) []error {
 	return make([]error, len(args))
 }
 
-var _ process.Process = &shell{}
+var _ process.P = &shell{}
 
 type shell struct {
 	eof bool
@@ -62,7 +62,7 @@ func (s *shell) Owner() string {
 	return s.ParentProcess.Owner()
 }
 
-func (s *shell) Parent() process.Process {
+func (s *shell) Parent() process.P {
 	return s.ParentProcess
 }
 
