@@ -17,8 +17,8 @@ func New() *S {
 	}
 }
 
-func (e *S) Launch(hostname, binaryName string, ctx Context, args string, input process.P) (process.P, error) {
-	c, ok := e.computers[hostname]
+func (s *S) Launch(hostname, binaryName string, ctx Context, args string, input process.P) (process.P, error) {
+	c, ok := s.computers[hostname]
 	if !ok {
 		return nil, fmt.Errorf("hostname %v not found", hostname)
 	}
@@ -52,14 +52,18 @@ type Context struct {
 
 var registry = map[string]Binary{}
 
-func Register(name string, b Binary) {
+func Register(name string, b Binary) error {
+	if _, registered := registry[name]; registered {
+		return fmt.Errorf("binary %v already registered", name)
+	}
 	registry[name] = b
+	return nil
 }
 
-func (e *S) AddComputer(hostname string, c *computer.C) error {
-	if _, present := e.computers[hostname]; present {
+func (s *S) AddComputer(hostname string, c *computer.C) error {
+	if _, present := s.computers[hostname]; present {
 		return fmt.Errorf("host %v already present", hostname)
 	}
-	e.computers[hostname] = c
+	s.computers[hostname] = c
 	return nil
 }

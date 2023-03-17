@@ -3,16 +3,16 @@ package process
 import "fmt"
 
 type P interface {
-	Read() (Data, bool, error)
-	Write(Data) (bool, error)
-	Test([]Data) []error
+	Read() (out Data, eof bool, err error)
+	Write(in Data) (eof bool, err error)
+	Test(in []Data) []error
 	Owner() string
 	Parent() P
 	Kill() error
 }
 
 type Space struct {
-	next      int
+	i         int
 	processes map[int]P
 }
 
@@ -22,9 +22,11 @@ func NewSpace() *Space {
 	}
 }
 
-func (ps *Space) Add(p P) {
-	ps.processes[ps.next] = p
-	ps.next++
+func (ps *Space) Add(p P) int {
+	id := ps.i
+	ps.processes[id] = p
+	ps.i++
+	return id
 }
 
 func (ps *Space) List() map[int]P {
