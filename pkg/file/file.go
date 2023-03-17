@@ -1,16 +1,18 @@
 package file
 
-type File struct {
+type F struct {
 	Type             FileType
 	Owner            string
 	OwnerPermission  FilePermission
 	CommonPermission FilePermission
 	Data             string
+	Files            map[string]*F
 }
 
 type FileType string
 
 const (
+	Folder FileType = "Folder"
 	Text   FileType = "Text"
 	Binary FileType = "Binary"
 )
@@ -18,7 +20,11 @@ const (
 type FilePermission string
 
 const (
-	Read    FilePermission = "Read"
-	Write   FilePermission = "Write"
-	Execute FilePermission = "Execute"
+	None  FilePermission = "None"
+	Read  FilePermission = "Read"
+	Write FilePermission = "Write"
+)
+
+const (
+	OwnerRoot = "root"
 )

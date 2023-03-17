@@ -6,11 +6,11 @@ import (
 )
 
 type C struct {
-	filesystem *file.File
+	filesystem *file.F
 	processes  *process.Space
 }
 
-func New(filesystem *file.File) *C {
+func New(filesystem *file.F) *C {
 	return &C{
 		filesystem: filesystem,
 		processes:  process.NewSpace(),

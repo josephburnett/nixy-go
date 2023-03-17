@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	_ "github.com/josephburnett/nixy-go/pkg/command/shell"
-	"github.com/josephburnett/nixy-go/pkg/computer"
+	"github.com/josephburnett/nixy-go/pkg/hosts/nixy"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 	"github.com/josephburnett/nixy-go/pkg/terminal"
@@ -68,12 +68,7 @@ func main() {
 
 func launch() (*terminal.T, process.P, error) {
 	sim := simulation.New()
-	comp := computer.New(nil)
-	err := comp.Boot()
-	if err != nil {
-		return nil, nil, err
-	}
-	err = sim.AddComputer("repl", comp)
+	err := sim.Boot("repl", nixy.Filesystem)
 	if err != nil {
 		return nil, nil, err
 	}

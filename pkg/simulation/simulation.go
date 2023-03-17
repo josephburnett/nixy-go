@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/josephburnett/nixy-go/pkg/computer"
+	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
@@ -60,9 +61,14 @@ func Register(name string, b Binary) error {
 	return nil
 }
 
-func (s *S) AddComputer(hostname string, c *computer.C) error {
+func (s *S) Boot(hostname string, filesystem *file.F) error {
 	if _, present := s.computers[hostname]; present {
 		return fmt.Errorf("host %v already present", hostname)
+	}
+	c := computer.New(filesystem)
+	err := c.Boot()
+	if err != nil {
+		return err
 	}
 	s.computers[hostname] = c
 	return nil
