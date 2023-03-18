@@ -3,41 +3,32 @@ package guide
 import (
 	"fmt"
 
-	"github.com/josephburnett/nixy-go/pkg/job"
+	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
 type G struct {
-	i       int
-	jobs    map[int]job.J
-	current job.J
+	process process.P
 }
 
-func (g *G) AddJob(j job.J) int {
-	id := g.i
-	g.jobs[id] = j
-	g.i++
-	return id
-}
-
-func (g *G) ListJobs() map[int]job.J {
-	return g.jobs
-}
-
-func (g *G) ForegroundJob(id int) error {
-	j, ok := g.jobs[id]
-	if !ok {
-		return fmt.Errorf("invalid job id %v", id)
+func New(p process.P) *G {
+	return &G{
+		process: p,
 	}
-	if g.current != nil {
-		g.current.Background()
-	}
-	j.Foreground()
-	return nil
 }
 
-func (g *G) GetCurrentJob() (job.J, bool) {
-	if g.current == nil {
-		return nil, false
+func (g *G) Read() (out process.Data, eof bool, err error) {
+	return g.process.Read()
+}
+
+func (g *G) Write(in process.Data) (eof bool, err error) {
+	errs := g.process.Test([]process.Data{in})
+	if len(errs) != 1 {
+		return false, fmt.Errorf("guide: tested 1 data but got %v errs", len(errs))
 	}
-	return g.current, true
+	err = errs[0]
+	if err != nil {
+		// Filter out invalid input
+		return false, err
+	}
+	return g.process.Write(in)
 }

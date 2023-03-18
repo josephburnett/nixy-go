@@ -11,6 +11,7 @@ type T struct {
 	x, y  int
 	line  string
 	lines []string
+	hint  error
 }
 
 func New() *T {
@@ -69,6 +70,14 @@ func (t *T) Render() string {
 	out += strings.Join(buf[:], "\n") + "\n"
 	out += "> " + t.line + "\n"
 	out += border
-	out += "\n"
+	if t.hint != nil {
+		out += "hint: " + t.hint.Error() + "\n\n"
+	} else {
+		out += "\n\n"
+	}
 	return out
+}
+
+func (t *T) Hint(err error) {
+	t.hint = err
 }

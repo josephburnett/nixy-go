@@ -6,24 +6,12 @@ type Datum interface {
 type Data []Datum
 
 type Chars string
-type CharPotentialProbe string
-type CharPotential map[rune]Potential
-type Guide string
 type Signal string
 type TermCode string
 
-type Potential struct {
-	// err     error
-	// command bool
-	// guide   bool
-}
-
-func (c Chars) isDatum()              {}
-func (c CharPotentialProbe) isDatum() {}
-func (c CharPotential) isDatum()      {}
-func (g Guide) isDatum()              {}
-func (s Signal) isDatum()             {}
-func (t TermCode) isDatum()           {}
+func (c Chars) isDatum()    {}
+func (s Signal) isDatum()   {}
+func (t TermCode) isDatum() {}
 
 var (
 	SigHup  Signal = "SigHup"

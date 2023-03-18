@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	_ "github.com/josephburnett/nixy-go/pkg/command/shell"
+	"github.com/josephburnett/nixy-go/pkg/guide"
 	"github.com/josephburnett/nixy-go/pkg/hosts/nixy"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
@@ -61,12 +62,13 @@ func main() {
 			if s == "\n" {
 				continue
 			}
-			shell.Write(data)
+			_, err := shell.Write(data)
+			t.Hint(err)
 		}
 	}
 }
 
-func launch() (*terminal.T, process.P, error) {
+func launch() (*terminal.T, *guide.G, error) {
 	sim := simulation.New()
 	err := sim.Boot("repl", nixy.Filesystem)
 	if err != nil {
@@ -79,6 +81,7 @@ func launch() (*terminal.T, process.P, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	g := guide.New(proc)
 	t := terminal.New()
-	return t, proc, nil
+	return t, g, nil
 }

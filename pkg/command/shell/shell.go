@@ -55,7 +55,7 @@ func (s *shell) Write(in process.Data) (bool, error) {
 }
 
 func (s *shell) Test(in []process.Data) []error {
-	return nil
+	return make([]error, len(in))
 }
 
 func (s *shell) Owner() string {
