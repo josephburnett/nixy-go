@@ -13,28 +13,43 @@ func init() {
 	})
 }
 
-func launch(context simulation.Context, args string, input process.P) (process.P, error) {
+var launch simulation.Launch = func(
+	sim *simulation.S,
+	owner string,
+	hostname string,
+	cwd []string,
+	args string,
+	input process.P,
+) (process.P, error) {
+
 	return &shell{
-		Context:          context,
+		simulation:       sim,
 		args:             args,
-		currentDirectory: context.Directory, // clone me
+		currentDirectory: cwd,
 		currentCommand:   "",
 	}, nil
 }
 
-func test(context simulation.Context, args []string) []error {
+var test simulation.Test = func(
+	sim *simulation.S,
+	owner string,
+	hostname string,
+	cwd []string,
+	args []string,
+) []error {
 	return make([]error, len(args))
 }
 
 var _ process.P = &shell{}
 
 type shell struct {
-	eof bool
-	simulation.Context
+	eof              bool
+	simulation       *simulation.S
 	args             string
 	currentDirectory []string
 	currentCommand   string
 	echo             process.Data
+	parentProcess    process.P
 }
 
 func (s *shell) Read() (process.Data, bool, error) {
@@ -59,11 +74,11 @@ func (s *shell) Test(in []process.Data) []error {
 }
 
 func (s *shell) Owner() string {
-	return s.ParentProcess.Owner()
+	return s.parentProcess.Owner()
 }
 
 func (s *shell) Parent() process.P {
-	return s.ParentProcess
+	return s.parentProcess
 }
 
 func (s *shell) Kill() error {

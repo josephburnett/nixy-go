@@ -7,7 +7,6 @@ type P interface {
 	Write(in Data) (eof bool, err error)
 	Test(in []Data) []error
 	Owner() string
-	Parent() P
 	Kill() error
 }
 

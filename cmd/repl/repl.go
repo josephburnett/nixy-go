@@ -74,10 +74,7 @@ func launch() (*terminal.T, *guide.G, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	ctx := simulation.Context{
-		Simulation: sim,
-	}
-	proc, err := sim.Launch("repl", "shell", ctx, "", nil)
+	proc, err := sim.Launch("repl", "root", "shell", "", nil)
 	if err != nil {
 		return nil, nil, err
 	}

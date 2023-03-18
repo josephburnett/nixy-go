@@ -8,17 +8,27 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
+type State struct {
+	FileSystems map[string]*file.F
+}
+
 type S struct {
 	computers map[string]*computer.C
+
+	State State
 }
 
 func New() *S {
 	return &S{
 		computers: map[string]*computer.C{},
+
+		State: State{
+			FileSystems: map[string]*file.F{},
+		},
 	}
 }
 
-func (s *S) Launch(hostname, binaryName string, ctx Context, args string, input process.P) (process.P, error) {
+func (s *S) Launch(hostname, owner, binaryName string, args string, input process.P) (process.P, error) {
 	c, ok := s.computers[hostname]
 	if !ok {
 		return nil, fmt.Errorf("hostname %v not found", hostname)
@@ -27,7 +37,7 @@ func (s *S) Launch(hostname, binaryName string, ctx Context, args string, input 
 	if !ok {
 		return nil, fmt.Errorf("binary %v not found", binaryName)
 	}
-	p, err := b.Launch(ctx, args, input)
+	p, err := b.Launch(s, owner, hostname, []string{}, args, input)
 	if err != nil {
 		return nil, err
 	}
@@ -40,16 +50,22 @@ type Binary struct {
 	Test   Test
 }
 
-type Launch func(context Context, args string, input process.P) (process.P, error)
+type Launch func(
+	s *S,
+	owner string,
+	hostname string,
+	cwd []string,
+	args string,
+	input process.P,
+) (process.P, error)
 
-type Test func(context Context, args []string) []error
-
-type Context struct {
-	Simulation    *S
-	ParentProcess process.P
-	Hostname      string
-	Directory     []string
-}
+type Test func(
+	s *S,
+	owner string,
+	hostname string,
+	cwd []string,
+	args []string,
+) []error
 
 var registry = map[string]Binary{}
 
@@ -71,5 +87,6 @@ func (s *S) Boot(hostname string, filesystem *file.F) error {
 		return err
 	}
 	s.computers[hostname] = c
+	s.State.FileSystems[hostname] = filesystem
 	return nil
 }
