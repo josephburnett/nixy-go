@@ -1,6 +1,8 @@
 package computer
 
 import (
+	"fmt"
+
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
@@ -23,4 +25,19 @@ func (c *C) Boot() error {
 
 func (c *C) Add(p process.P) {
 	c.processes.Add(p)
+}
+
+func (c *C) GetFile(path []string) (*file.F, error) {
+	currentFile := c.filesystem
+	for _, p := range path {
+		if currentFile.Type != file.Folder {
+			return nil, fmt.Errorf("%v is not a folder", p)
+		}
+		f, ok := currentFile.Files[p]
+		if !ok {
+			return nil, fmt.Errorf("file %v not found", p)
+		}
+		currentFile = f
+	}
+	return currentFile, nil
 }

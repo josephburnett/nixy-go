@@ -15,14 +15,14 @@ type State struct {
 type S struct {
 	computers map[string]*computer.C
 
-	State State
+	state State
 }
 
 func New() *S {
 	return &S{
 		computers: map[string]*computer.C{},
 
-		State: State{
+		state: State{
 			FileSystems: map[string]*file.F{},
 		},
 	}
@@ -67,14 +67,21 @@ type Test func(
 	args []string,
 ) []error
 
-var registry = map[string]Binary{}
+var registry = map[string]*Binary{}
 
-func Register(name string, b Binary) error {
+func Register(name string, b *Binary) error {
 	if _, registered := registry[name]; registered {
 		return fmt.Errorf("binary %v already registered", name)
 	}
 	registry[name] = b
 	return nil
+}
+
+func GetBinary(name string) (*Binary, error) {
+	if b, ok := registry[name]; ok {
+		return b, nil
+	}
+	return nil, fmt.Errorf("binary %v not registered", name)
 }
 
 func (s *S) Boot(hostname string, filesystem *file.F) error {
@@ -87,6 +94,13 @@ func (s *S) Boot(hostname string, filesystem *file.F) error {
 		return err
 	}
 	s.computers[hostname] = c
-	s.State.FileSystems[hostname] = filesystem
+	s.state.FileSystems[hostname] = filesystem
 	return nil
+}
+
+func (s *S) GetComputer(hostname string) (*computer.C, error) {
+	if c, ok := s.computers[hostname]; ok {
+		return c, nil
+	}
+	return nil, fmt.Errorf("host %v not found", hostname)
 }
