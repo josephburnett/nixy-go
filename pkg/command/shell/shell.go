@@ -16,7 +16,7 @@ func init() {
 	})
 }
 
-var launch simulation.Launch = func(
+func launch(
 	sim *simulation.S,
 	owner string,
 	hostname string,
@@ -35,7 +35,7 @@ var launch simulation.Launch = func(
 	}, nil
 }
 
-var test simulation.Test = func(
+func test(
 	sim *simulation.S,
 	owner string,
 	hostname string,
@@ -84,6 +84,7 @@ func (s *shell) Write(d process.Data) (bool, error) {
 	switch in := in.(type) {
 	case process.Chars:
 		s.echo = append(s.echo, in)
+		s.currentCommand += string(in)
 		b, err := s.getBinary()
 		if err != nil {
 			return false, err

@@ -5,16 +5,20 @@ import "github.com/josephburnett/nixy-go/pkg/process"
 var _ process.P = &singleValueProcess{}
 
 type singleValueProcess struct {
-	parent process.P
-	value  string
-	eof    bool
+	owner string
+	value string
+	eof   bool
 }
 
-func NewSingleValueProcess(parent process.P, value string) process.P {
+func NewSingleValueProcess(owner, value string) process.P {
 	return &singleValueProcess{
-		parent: parent,
-		value:  value,
+		owner: owner,
+		value: value,
 	}
+}
+
+func (s *singleValueProcess) Owner() string {
+	return s.owner
 }
 
 func (s *singleValueProcess) Read() (process.Data, bool, error) {
@@ -31,14 +35,6 @@ func (s *singleValueProcess) Write(_ process.Data) (bool, error) {
 
 func (s *singleValueProcess) Test(_ []process.Data) []error {
 	return nil
-}
-
-func (s *singleValueProcess) Owner() string {
-	return s.parent.Owner()
-}
-
-func (s *singleValueProcess) Parent() process.P {
-	return s.parent
 }
 
 func (s *singleValueProcess) Kill() error {

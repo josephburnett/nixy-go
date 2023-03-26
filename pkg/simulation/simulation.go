@@ -28,7 +28,7 @@ func New() *S {
 	}
 }
 
-func (s *S) Launch(hostname, owner, binaryName string, args string, input process.P) (process.P, error) {
+func (s *S) Launch(hostname, owner, binaryName, args string, cwd []string, input process.P) (process.P, error) {
 	c, ok := s.computers[hostname]
 	if !ok {
 		return nil, fmt.Errorf("hostname %v not found", hostname)
@@ -37,7 +37,7 @@ func (s *S) Launch(hostname, owner, binaryName string, args string, input proces
 	if !ok {
 		return nil, fmt.Errorf("binary %v not found", binaryName)
 	}
-	p, err := b.Launch(s, owner, hostname, []string{}, args, input)
+	p, err := b.Launch(s, owner, hostname, cwd, args, input)
 	if err != nil {
 		return nil, err
 	}

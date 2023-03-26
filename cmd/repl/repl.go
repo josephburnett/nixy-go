@@ -6,7 +6,9 @@ import (
 	"os"
 	"unicode/utf8"
 
+	_ "github.com/josephburnett/nixy-go/pkg/command/pwd"
 	_ "github.com/josephburnett/nixy-go/pkg/command/shell"
+
 	"github.com/josephburnett/nixy-go/pkg/guide"
 	"github.com/josephburnett/nixy-go/pkg/hosts/nixy"
 	"github.com/josephburnett/nixy-go/pkg/process"
@@ -74,7 +76,7 @@ func launch() (*terminal.T, *guide.G, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	proc, err := sim.Launch("repl", "root", "shell", "", nil)
+	proc, err := sim.Launch("repl", "root", "shell", "", []string{"bin"}, nil)
 	if err != nil {
 		return nil, nil, err
 	}
