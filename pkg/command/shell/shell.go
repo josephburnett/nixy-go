@@ -61,6 +61,8 @@ type shell struct {
 }
 
 func (s *shell) Read() (process.Data, bool, error) {
+	data := s.echo
+	s.echo = nil
 	if s.childProcess != nil {
 		// Connected to child process
 		d, eof, err := s.childProcess.Read()
@@ -69,38 +71,59 @@ func (s *shell) Read() (process.Data, bool, error) {
 			s.childProcess.Kill()
 			s.childProcess = nil
 		}
-		return d, false, err // Shell is never EOF
+		data = append(data, d...)
+		return data, false, err
 	}
-	data := s.echo
-	s.echo = nil
 	return data, false, nil
 }
 
 func (s *shell) Write(d process.Data) (bool, error) {
+	if s.childProcess != nil {
+		// Connected to child child process
+		eof, err := s.childProcess.Write(d)
+		if eof {
+			// Terminate child childProcess
+			s.childProcess.Kill()
+			s.childProcess = nil
+		}
+		return false, err
+	}
+
 	if len(d) != 1 {
 		return false, fmt.Errorf("shell only supports 1 datum at a time: %v", len(d))
 	}
 	in := d[0]
+	s.echo = append(s.echo, in)
+
 	switch in := in.(type) {
 	case process.Chars:
-		s.echo = append(s.echo, in)
 		s.currentCommand += string(in)
-		b, err := s.getBinary()
-		if err != nil {
-			return false, err
+		return false, nil
+	case process.TermCode:
+		switch in {
+		case process.TermEnter:
+			b, err := s.getBinary()
+			s.currentCommand = ""
+			if err != nil {
+				return false, err
+			}
+			p, err := b.Launch(
+				s.simulation,
+				s.owner,
+				s.hostname,
+				s.currentDirectory,
+				"",
+				s,
+			)
+			if err != nil {
+				return false, err
+			}
+			s.childProcess = p
+		case process.TermBackspace:
+			if len(s.currentCommand) > 0 {
+				s.currentCommand = s.currentCommand[:len(s.currentCommand)-1]
+			}
 		}
-		p, err := b.Launch(
-			s.simulation,
-			s.owner,
-			s.hostname,
-			s.currentDirectory,
-			"",
-			s,
-		)
-		if err != nil {
-			return false, err
-		}
-		s.childProcess = p
 		return false, nil
 	default:
 		return false, fmt.Errorf("unhandled input type %T", in)

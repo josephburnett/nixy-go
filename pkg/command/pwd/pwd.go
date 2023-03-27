@@ -29,7 +29,7 @@ func launch(
 	}
 	return command.NewSingleValueProcess(
 		owner,
-		strings.Join(cwd, "/"),
+		strings.Join(cwd, "/")+"\n",
 	), nil
 }
 
