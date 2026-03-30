@@ -3,10 +3,17 @@ package process
 import "fmt"
 
 type P interface {
-	Read() (out Data, eof bool, err error)
-	Write(in Data) (eof bool, err error)
-	Test(in []Data) []error
+	// Stdout reads output from the process.
+	Stdout() (out Data, eof bool, err error)
+	// Stderr reads error output from the process.
+	Stderr() (out Data, eof bool, err error)
+	// Stdin writes input to the process.
+	Stdin(in Data) (eof bool, err error)
+	// Next returns the set of valid next inputs for this process.
+	Next() []Datum
+	// Owner returns the user who owns this process.
 	Owner() string
+	// Kill terminates the process.
 	Kill() error
 }
 

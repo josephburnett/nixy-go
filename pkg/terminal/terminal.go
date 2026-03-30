@@ -8,10 +8,11 @@ import (
 )
 
 type T struct {
-	x, y  int
-	line  string
-	lines []string
-	hint  error
+	x, y   int
+	line   string
+	lines  []string
+	hint   error
+	dialog []string
 }
 
 func New() *T {
@@ -70,6 +71,12 @@ func (t *T) Render() string {
 	out += strings.Join(buf[:], "\n") + "\n"
 	out += "> " + t.line + "\n"
 	out += border
+	if len(t.dialog) > 0 {
+		for _, line := range t.dialog {
+			out += "\033[33m" + line + "\033[0m\n" // Yellow for dialog
+		}
+		t.dialog = nil
+	}
 	if t.hint != nil {
 		out += "hint: " + t.hint.Error() + "\n\n"
 	} else {
@@ -80,4 +87,8 @@ func (t *T) Render() string {
 
 func (t *T) Hint(err error) {
 	t.hint = err
+}
+
+func (t *T) SetDialog(lines []string) {
+	t.dialog = lines
 }

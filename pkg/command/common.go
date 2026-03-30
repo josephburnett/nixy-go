@@ -21,23 +21,65 @@ func (s *singleValueProcess) Owner() string {
 	return s.owner
 }
 
-func (s *singleValueProcess) Read() (process.Data, bool, error) {
+func (s *singleValueProcess) Stdout() (process.Data, bool, error) {
 	if s.eof {
-		return nil, s.eof, ErrEndOfFile
+		return nil, true, ErrEndOfFile
 	}
 	s.eof = true
-	return process.CharsData(s.value), s.eof, nil
+	return process.CharsData(s.value), true, nil
 }
 
-func (s *singleValueProcess) Write(_ process.Data) (bool, error) {
+func (s *singleValueProcess) Stderr() (process.Data, bool, error) {
+	return nil, true, nil
+}
+
+func (s *singleValueProcess) Stdin(_ process.Data) (bool, error) {
 	return false, ErrReadOnlyProcess
 }
 
-func (s *singleValueProcess) Test(_ []process.Data) []error {
+func (s *singleValueProcess) Next() []process.Datum {
 	return nil
 }
 
 func (s *singleValueProcess) Kill() error {
 	s.eof = true
+	return nil
+}
+
+// errorProcess writes a message to stderr and exits.
+var _ process.P = &errorProcess{}
+
+type errorProcess struct {
+	owner string
+	msg   string
+	eof   bool
+}
+
+func NewErrorProcess(owner, msg string) process.P {
+	return &errorProcess{owner: owner, msg: msg}
+}
+
+func (e *errorProcess) Owner() string { return e.owner }
+
+func (e *errorProcess) Stdout() (process.Data, bool, error) {
+	return nil, true, nil
+}
+
+func (e *errorProcess) Stderr() (process.Data, bool, error) {
+	if e.eof {
+		return nil, true, nil
+	}
+	e.eof = true
+	return process.CharsData(e.msg), true, nil
+}
+
+func (e *errorProcess) Stdin(_ process.Data) (bool, error) {
+	return false, ErrReadOnlyProcess
+}
+
+func (e *errorProcess) Next() []process.Datum { return nil }
+
+func (e *errorProcess) Kill() error {
+	e.eof = true
 	return nil
 }

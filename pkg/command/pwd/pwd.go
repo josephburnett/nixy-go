@@ -12,7 +12,6 @@ import (
 func init() {
 	simulation.Register("pwd", &simulation.Binary{
 		Launch: launch,
-		Test:   test,
 	})
 }
 
@@ -21,30 +20,15 @@ func launch(
 	owner string,
 	_ string,
 	cwd []string,
-	args string,
-	_ process.P,
+	args []string,
 ) (process.P, error) {
 	if len(args) != 0 {
 		return nil, errAcceptNoArgs
 	}
 	return command.NewSingleValueProcess(
 		owner,
-		strings.Join(cwd, "/")+"\n",
+		"/"+strings.Join(cwd, "/")+"\n",
 	), nil
-}
-
-func test(
-	_ *simulation.S,
-	_ string,
-	_ string,
-	_ []string,
-	args []string,
-) []error {
-	errs := make([]error, len(args))
-	for i := range args {
-		errs[i] = errAcceptNoArgs
-	}
-	return errs
 }
 
 var errAcceptNoArgs = fmt.Errorf("pwd does not accept parameters")

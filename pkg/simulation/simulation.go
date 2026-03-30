@@ -8,27 +8,17 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-type State struct {
-	FileSystems map[string]*file.F
-}
-
 type S struct {
 	computers map[string]*computer.C
-
-	state State
 }
 
 func New() *S {
 	return &S{
 		computers: map[string]*computer.C{},
-
-		state: State{
-			FileSystems: map[string]*file.F{},
-		},
 	}
 }
 
-func (s *S) Launch(hostname, owner, binaryName, args string, cwd []string, input process.P) (process.P, error) {
+func (s *S) Launch(hostname, owner, binaryName string, args []string, cwd []string) (process.P, error) {
 	c, ok := s.computers[hostname]
 	if !ok {
 		return nil, fmt.Errorf("hostname %v not found", hostname)
@@ -37,7 +27,7 @@ func (s *S) Launch(hostname, owner, binaryName, args string, cwd []string, input
 	if !ok {
 		return nil, fmt.Errorf("binary %v not found", binaryName)
 	}
-	p, err := b.Launch(s, owner, hostname, cwd, args, input)
+	p, err := b.Launch(s, owner, hostname, cwd, args)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +37,6 @@ func (s *S) Launch(hostname, owner, binaryName, args string, cwd []string, input
 
 type Binary struct {
 	Launch Launch
-	Test   Test
 }
 
 type Launch func(
@@ -55,24 +44,13 @@ type Launch func(
 	owner string,
 	hostname string,
 	cwd []string,
-	args string,
-	input process.P,
-) (process.P, error)
-
-type Test func(
-	s *S,
-	owner string,
-	hostname string,
-	cwd []string,
 	args []string,
-) []error
+) (process.P, error)
 
 var registry = map[string]*Binary{}
 
 func Register(name string, b *Binary) error {
-	if _, registered := registry[name]; registered {
-		return fmt.Errorf("binary %v already registered", name)
-	}
+	// Idempotent: allow re-registration with the same binary.
 	registry[name] = b
 	return nil
 }
@@ -94,7 +72,6 @@ func (s *S) Boot(hostname string, filesystem *file.F) error {
 		return err
 	}
 	s.computers[hostname] = c
-	s.state.FileSystems[hostname] = filesystem
 	return nil
 }
 
