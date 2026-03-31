@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
-	"unicode/utf8"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	_ "github.com/josephburnett/nixy-go/pkg/command/apt"
 	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
@@ -27,76 +27,14 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
 
-func main() {
-	g, t, gd, err := launch()
-	if err != nil {
-		panic(err)
-	}
-	in := make([]byte, 1)
-	for {
-		// Read shell stdout
-		out, eof, err := gd.Stdout()
-		if err != nil {
-			panic(err)
-		}
-		if eof {
-			return
-		}
-		// Read shell stderr
-		errOut, _, _ := gd.Stderr()
-
-		// Write to terminal
-		_ = t.Write(out)
-		_ = t.Write(errOut)
-
-		// Show dialog if any
-		dialog := g.Manager.Dialog.Drain()
-		if len(dialog) > 0 {
-			t.SetDialog(dialog)
-		}
-
-		// Render
-		view := t.Render()
-		fmt.Print(view)
-
-		// Read keyboard
-		count, err := os.Stdin.Read(in)
-		if err == io.EOF {
-			return
-		}
-		if err != nil {
-			panic(err)
-		}
-
-		// Write to shell
-		if count > 0 {
-			r, _ := utf8.DecodeRune(in)
-			s := string(r)
-			data := process.CharsData(s)
-			if s == ">" {
-				data[0] = process.TermEnter
-			}
-			if s == "<" {
-				data[0] = process.TermBackspace
-			}
-			if s == "^" {
-				data[0] = process.TermClear
-			}
-			if s == "\n" {
-				continue
-			}
-			_, err := gd.Stdin(data)
-			t.Hint(err)
-
-			// After Enter, check quest state
-			if data[0] == process.TermEnter {
-				g.AfterCommand()
-			}
-		}
-	}
+type model struct {
+	game     *game.Game
+	guide    *guide.G
+	terminal *terminal.T
+	quitting bool
 }
 
-func launch() (*game.Game, *terminal.T, *guide.G, error) {
+func initialModel() (model, error) {
 	allQuests := []game.Quest{
 		&quests.Connect{},
 		&quests.Orientation{},
@@ -113,18 +51,114 @@ func launch() (*game.Game, *terminal.T, *guide.G, error) {
 
 	g, err := game.NewGame(allQuests, machines)
 	if err != nil {
-		return nil, nil, nil, err
+		return model{}, err
 	}
 
-	// Wire nx handler
 	shellpkg.DefaultNxHandler = g
 
-	// Launch shell on laptop
 	proc, err := g.Sim.Launch("laptop", "user", "shell", nil, []string{})
 	if err != nil {
-		return nil, nil, nil, err
+		return model{}, err
 	}
+
 	gd := guide.New(proc)
 	t := terminal.New()
-	return g, t, gd, nil
+
+	return model{
+		game:     g,
+		guide:    gd,
+		terminal: t,
+	}, nil
+}
+
+func (m model) Init() tea.Cmd {
+	return nil
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		var datum process.Datum
+
+		switch msg.Type {
+		case tea.KeyCtrlC:
+			m.quitting = true
+			return m, tea.Quit
+		case tea.KeyEnter:
+			datum = process.TermEnter
+		case tea.KeyBackspace:
+			datum = process.TermBackspace
+		case tea.KeyCtrlL:
+			datum = process.TermClear
+		case tea.KeyRunes:
+			if len(msg.Runes) == 1 {
+				datum = process.Chars(string(msg.Runes[0]))
+			}
+		case tea.KeySpace:
+			datum = process.Chars(" ")
+		}
+
+		if datum == nil {
+			return m, nil
+		}
+
+		// Write to shell through guide
+		_, err := m.guide.Stdin(process.Data{datum})
+		m.terminal.Hint(err)
+
+		// Drain stdout
+		for i := 0; i < 50; i++ {
+			out, eof, _ := m.guide.Stdout()
+			if eof {
+				m.quitting = true
+				return m, tea.Quit
+			}
+			if len(out) > 0 {
+				m.terminal.Write(out)
+			} else {
+				break
+			}
+		}
+
+		// Drain stderr
+		for i := 0; i < 10; i++ {
+			errOut, _, _ := m.guide.Stderr()
+			if len(errOut) > 0 {
+				m.terminal.Write(errOut)
+			} else {
+				break
+			}
+		}
+
+		// After Enter, check quest state and dialog
+		if _, ok := datum.(process.TermCode); ok && datum == process.TermEnter {
+			m.game.AfterCommand()
+			dialog := m.game.Manager.Dialog.Drain()
+			if len(dialog) > 0 {
+				m.terminal.SetDialog(dialog)
+			}
+		}
+	}
+
+	return m, nil
+}
+
+func (m model) View() string {
+	if m.quitting {
+		return "Goodbye!\n"
+	}
+	return m.terminal.Render()
+}
+
+func main() {
+	m, err := initialModel()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }

@@ -17,7 +17,7 @@ type T struct {
 
 func New() *T {
 	return &T{
-		x:     40,
+		x:     55,
 		y:     20,
 		lines: []string{},
 	}
@@ -51,38 +51,49 @@ func (t *T) Write(in process.Data) error {
 }
 
 func (t *T) Render() string {
-	border := strings.Repeat("=", 55) + "\n"
-	var buf [20]string
-	i := len(t.lines) - 20
-	for j := range buf {
-		if i < 0 {
-			buf[j] = "|"
-			i++
-			continue
+	var sb strings.Builder
+	border := strings.Repeat("─", t.x)
+
+	sb.WriteString("┌" + border + "┐\n")
+
+	// Show last y lines of history
+	start := len(t.lines) - t.y
+	for i := 0; i < t.y; i++ {
+		idx := start + i
+		if idx < 0 || idx >= len(t.lines) {
+			sb.WriteString("│" + strings.Repeat(" ", t.x) + "│\n")
+		} else {
+			line := t.lines[idx]
+			if len(line) > t.x {
+				line = line[:t.x]
+			}
+			padding := t.x - len(line)
+			sb.WriteString("│" + line + strings.Repeat(" ", padding) + "│\n")
 		}
-		buf[j] = "| " + t.lines[i]
-		i++
 	}
-	out := strings.Repeat("\n", 100)
-	out += "\n"
-	out += " Term codes: Enter = '>', Backspace = '<', Clear = '^'"
-	out += "\n\n"
-	out += border
-	out += strings.Join(buf[:], "\n") + "\n"
-	out += "> " + t.line + "\n"
-	out += border
-	if len(t.dialog) > 0 {
-		for _, line := range t.dialog {
-			out += "\033[33m" + line + "\033[0m\n" // Yellow for dialog
-		}
-		t.dialog = nil
+
+	// Current input line
+	prompt := "> " + t.line
+	if len(prompt) > t.x {
+		prompt = prompt[:t.x]
 	}
+	padding := t.x - len(prompt)
+	sb.WriteString("│" + prompt + strings.Repeat(" ", padding) + "│\n")
+
+	sb.WriteString("└" + border + "┘\n")
+
+	// Dialog (yellow)
+	for _, line := range t.dialog {
+		sb.WriteString("\033[33m" + line + "\033[0m\n")
+	}
+	t.dialog = nil
+
+	// Hint
 	if t.hint != nil {
-		out += "hint: " + t.hint.Error() + "\n\n"
-	} else {
-		out += "\n\n"
+		sb.WriteString("\033[2m" + t.hint.Error() + "\033[0m\n")
 	}
-	return out
+
+	return sb.String()
 }
 
 func (t *T) Hint(err error) {
