@@ -8,11 +8,13 @@ import (
 )
 
 type T struct {
-	x, y   int
-	line   string
-	lines  []string
-	hint   error
-	dialog []string
+	x, y     int
+	line     string
+	lines    []string
+	hint     error
+	dialog   []string
+	validKeys []process.Datum
+	hintKey   process.Datum
 }
 
 func New() *T {
@@ -100,6 +102,10 @@ func (t *T) Render() string {
 		sb.WriteString("\033[2m" + t.hint.Error() + "\033[0m\n")
 	}
 
+	// Keyboard
+	sb.WriteString("\n")
+	sb.WriteString(RenderKeyboard(t.validKeys, t.hintKey))
+
 	return sb.String()
 }
 
@@ -109,4 +115,9 @@ func (t *T) Hint(err error) {
 
 func (t *T) SetDialog(lines []string) {
 	t.dialog = lines
+}
+
+func (t *T) SetKeyboard(valid []process.Datum, hint process.Datum) {
+	t.validKeys = valid
+	t.hintKey = hint
 }

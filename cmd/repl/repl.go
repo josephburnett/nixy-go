@@ -138,6 +138,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.terminal.SetDialog(dialog)
 			}
 		}
+
+		// Update keyboard display
+		valid := m.guide.Next()
+		hint := m.game.GetHint("", nil, "") // TODO: pass real hostname/cwd
+		m.terminal.SetKeyboard(valid, hint)
 	}
 
 	return m, nil
