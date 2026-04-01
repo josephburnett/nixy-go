@@ -27,7 +27,14 @@ func (t *T) Write(in process.Data) error {
 	for _, d := range in {
 		switch d := d.(type) {
 		case process.Chars:
-			t.line += string(d)
+			for _, c := range string(d) {
+				if c == '\n' {
+					t.lines = append(t.lines, t.line)
+					t.line = ""
+				} else {
+					t.line += string(c)
+				}
+			}
 		case process.TermCode:
 			switch d {
 			case process.TermBackspace:
