@@ -244,18 +244,27 @@ func (s *shell) builtinNx(args []string) error {
 	return nil
 }
 
-// Hostname returns the hostname this shell is running on.
+// Hostname returns the hostname of the innermost active shell.
 func (s *shell) Hostname() string {
+	if child, ok := s.childProcess.(*shell); ok {
+		return child.Hostname()
+	}
 	return s.hostname
 }
 
-// CurrentDirectory returns the shell's current working directory.
+// CurrentDirectory returns the cwd of the innermost active shell.
 func (s *shell) CurrentDirectory() []string {
+	if child, ok := s.childProcess.(*shell); ok {
+		return child.CurrentDirectory()
+	}
 	return s.currentDirectory
 }
 
-// CurrentCommand returns what the user has typed so far.
+// CurrentCommand returns what the user has typed in the innermost active shell.
 func (s *shell) CurrentCommand() string {
+	if child, ok := s.childProcess.(*shell); ok {
+		return child.CurrentCommand()
+	}
 	return s.currentCommand
 }
 

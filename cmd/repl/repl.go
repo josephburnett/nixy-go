@@ -27,9 +27,17 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
 
+// shellInfo provides context about the current shell for hints.
+type shellInfo interface {
+	Hostname() string
+	CurrentDirectory() []string
+	CurrentCommand() string
+}
+
 type model struct {
 	game     *game.Game
 	guide    *guide.G
+	shell    shellInfo
 	terminal *terminal.T
 	quitting bool
 }
@@ -67,6 +75,7 @@ func initialModel() (model, error) {
 	return model{
 		game:     g,
 		guide:    gd,
+		shell:    proc.(shellInfo),
 		terminal: t,
 	}, nil
 }
@@ -141,7 +150,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Update keyboard display
 		valid := m.guide.Next()
-		hint := m.game.GetHint("", nil, "") // TODO: pass real hostname/cwd
+		hint := m.game.GetHint(m.shell.Hostname(), m.shell.CurrentDirectory(), m.shell.CurrentCommand())
 		m.terminal.SetKeyboard(valid, hint)
 	}
 
