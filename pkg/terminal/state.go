@@ -40,7 +40,7 @@ func (s *State) Write(in process.Data) error {
 				s.Line = ""
 				s.Lines = []string{}
 			case process.TermEnter:
-				s.Lines = append(s.Lines, s.Line)
+				s.Lines = append(s.Lines, "> "+s.Line)
 				s.Line = ""
 			default:
 				return fmt.Errorf("unknown term code: %v", d)

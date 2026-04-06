@@ -21,34 +21,39 @@ func (h *HTMLRenderer) Render(f Frame) string {
 
 	sb.WriteString("<pre>")
 
-	// Dialog — above the terminal box
+	// Dialog area — padded to fixed height so terminal stays put
+	blankLines := f.DialogSpace - len(f.Dialog)
+	for i := 0; i < blankLines; i++ {
+		sb.WriteString("\n")
+	}
 	for _, line := range f.Dialog {
 		sb.WriteString(`<span class="dialog">` + html.EscapeString(line) + "</span>\n")
 	}
 
-	// Hint — above the terminal box
+	// Hint line — always occupies 1 line (blank if no hint)
 	if f.Hint != "" {
 		sb.WriteString(`<span class="hint">` + html.EscapeString(f.Hint) + "</span>\n")
+	} else {
+		sb.WriteString("\n")
 	}
 
 	// Box top
 	sb.WriteString(`<span class="box">┌` + border + "┐</span>\n")
 
-	// Display lines
-	for i := 0; i < f.Height; i++ {
+	// Display lines (bottom-aligned: blank lines at top, content above prompt)
+	blankCount := f.Height - len(f.DisplayLines)
+	for i := 0; i < blankCount; i++ {
+		sb.WriteString(`<span class="box">│</span>` + strings.Repeat(" ", f.Width) + `<span class="box">│</span>` + "\n")
+	}
+	for _, line := range f.DisplayLines {
 		sb.WriteString(`<span class="box">│</span>`)
-		if i < len(f.DisplayLines) {
-			line := f.DisplayLines[i]
-			runeLen := utf8.RuneCountInString(line)
-			if runeLen > f.Width {
-				line = string([]rune(line)[:f.Width])
-				runeLen = f.Width
-			}
-			padding := f.Width - runeLen
-			sb.WriteString(html.EscapeString(line) + strings.Repeat(" ", padding))
-		} else {
-			sb.WriteString(strings.Repeat(" ", f.Width))
+		runeLen := utf8.RuneCountInString(line)
+		if runeLen > f.Width {
+			line = string([]rune(line)[:f.Width])
+			runeLen = f.Width
 		}
+		padding := f.Width - runeLen
+		sb.WriteString(html.EscapeString(line) + strings.Repeat(" ", padding))
 		sb.WriteString(`<span class="box">│</span>` + "\n")
 	}
 

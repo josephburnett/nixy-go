@@ -114,16 +114,17 @@ func TestReflowLinesEmpty(t *testing.T) {
 
 func TestRenderReflowOnResize(t *testing.T) {
 	// Verify that resizing the terminal reflows content
+	// Default screen is 57 wide (55 content + 2 borders)
 	term := New(NewANSI())
 	long := strings.Repeat("x", 100)
 	term.Write(process.Data{process.Chars(long + "\n")})
 
-	// At default width (55), line wraps to 2 display lines
+	// At default width (57 screen = 55 content), line wraps to 2 display lines
 	out1 := term.Render()
 	count1 := strings.Count(out1, strings.Repeat("x", 55))
 
-	// Resize to 25
-	term.Resize(25, 20)
+	// Resize to 27 screen width (25 content)
+	term.Resize(27, 30)
 	out2 := term.Render()
 	count2 := strings.Count(out2, strings.Repeat("x", 25))
 

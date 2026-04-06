@@ -56,15 +56,7 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		w := msg.Width - 2 // left+right border
-		h := msg.Height - 10 // borders + prompt + keyboard + dialog
-		if w < 20 {
-			w = 20
-		}
-		if h < 5 {
-			h = 5
-		}
-		m.terminal.Resize(w, h)
+		m.terminal.Resize(msg.Width, msg.Height)
 
 	case tea.KeyMsg:
 		var datum process.Datum

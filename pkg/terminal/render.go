@@ -7,6 +7,7 @@ type Frame struct {
 	DisplayLines []string
 	Prompt       string
 	Dialog       []string
+	DialogSpace  int // total lines allocated for dialog (pad with blank lines)
 	Hint         string
 	ValidKeys    []process.Datum
 	HintKey      process.Datum

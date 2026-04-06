@@ -33,11 +33,9 @@
 
             function updateSize() {
                 const ch = measureChar();
-                const cols = Math.floor(container.clientWidth / ch.w) - 2;
-                const rows = Math.floor(container.clientHeight / ch.h) - 10;
-                const w = Math.max(cols, 20);
-                const h = Math.max(rows, 5);
-                container.innerHTML = nixyResize(w, h);
+                const cols = Math.floor(container.clientWidth / ch.w);
+                const rows = Math.floor(container.clientHeight / ch.h);
+                container.innerHTML = nixyResize(cols, rows);
             }
 
             // Handle keyboard input

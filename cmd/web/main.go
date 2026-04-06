@@ -127,14 +127,6 @@ func handleResize(_ js.Value, args []js.Value) any {
 	if len(args) < 2 {
 		return nil
 	}
-	w := args[0].Int()
-	h := args[1].Int()
-	if w < 20 {
-		w = 20
-	}
-	if h < 5 {
-		h = 5
-	}
-	term.Resize(w, h)
+	term.Resize(args[0].Int(), args[1].Int())
 	return term.Render()
 }

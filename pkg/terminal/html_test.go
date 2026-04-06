@@ -43,10 +43,10 @@ func TestHTMLRenderDialog(t *testing.T) {
 	if !strings.Contains(out, "Nixy says hi") {
 		t.Fatal("expected dialog content")
 	}
-	// Cleared after render
+	// Dialog persists across renders
 	out2 := term.Render()
-	if strings.Contains(out2, "Nixy says hi") {
-		t.Fatal("dialog should be cleared after render")
+	if !strings.Contains(out2, "Nixy says hi") {
+		t.Fatal("dialog should persist across renders")
 	}
 }
 

@@ -27,32 +27,37 @@ func (a *ANSIRenderer) Render(f Frame) string {
 	var sb strings.Builder
 	border := strings.Repeat("─", f.Width)
 
-	// Dialog (yellow) — above the terminal box
+	// Dialog area — padded to fixed height so terminal stays put
+	blankLines := f.DialogSpace - len(f.Dialog)
+	for i := 0; i < blankLines; i++ {
+		sb.WriteString("\n")
+	}
 	for _, line := range f.Dialog {
 		sb.WriteString(colorDialog + line + colorReset + "\n")
 	}
 
-	// Hint (dim) — above the terminal box
+	// Hint line — always occupies 1 line (blank if no hint)
 	if f.Hint != "" {
 		sb.WriteString(colorDim + f.Hint + colorReset + "\n")
+	} else {
+		sb.WriteString("\n")
 	}
 
 	sb.WriteString("┌" + border + "┐\n")
 
-	// Display lines (padded to fill viewport)
-	for i := 0; i < f.Height; i++ {
-		if i < len(f.DisplayLines) {
-			line := f.DisplayLines[i]
-			runeLen := utf8.RuneCountInString(line)
-			if runeLen > f.Width {
-				line = string([]rune(line)[:f.Width])
-				runeLen = f.Width
-			}
-			padding := f.Width - runeLen
-			sb.WriteString("│" + line + strings.Repeat(" ", padding) + "│\n")
-		} else {
-			sb.WriteString("│" + strings.Repeat(" ", f.Width) + "│\n")
+	// Display lines (bottom-aligned: blank lines at top, content above prompt)
+	blankCount := f.Height - len(f.DisplayLines)
+	for i := 0; i < blankCount; i++ {
+		sb.WriteString("│" + strings.Repeat(" ", f.Width) + "│\n")
+	}
+	for _, line := range f.DisplayLines {
+		runeLen := utf8.RuneCountInString(line)
+		if runeLen > f.Width {
+			line = string([]rune(line)[:f.Width])
+			runeLen = f.Width
 		}
+		padding := f.Width - runeLen
+		sb.WriteString("│" + line + strings.Repeat(" ", padding) + "│\n")
 	}
 
 	// Prompt line
