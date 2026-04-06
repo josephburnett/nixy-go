@@ -1,17 +1,7 @@
 package terminal
 
 import (
-	"strings"
-
 	"github.com/josephburnett/nixy-go/pkg/process"
-)
-
-// ANSI color codes
-const (
-	colorReset  = "\033[0m"
-	colorDim    = "\033[2m"    // dim grey
-	colorWhite  = "\033[1;37m" // bold white
-	colorGreen  = "\033[1;32m" // bold green
 )
 
 // keyboardRows defines the qwerty layout.
@@ -35,60 +25,15 @@ var specialKeys = []struct {
 	{"bksp", process.TermBackspace},
 }
 
-// RenderKeyboard renders a visual keyboard with color-coded keys.
-// valid = keys from Next(), hint = the planner's recommended key.
-func RenderKeyboard(valid []process.Datum, hint process.Datum) string {
-	validSet := buildDatumSet(valid)
-
-	var sb strings.Builder
-
-	// Letter rows
-	indents := []string{" ", "  ", "   "}
-	for row, keys := range keyboardRows {
-		sb.WriteString(indents[row])
-		for i, key := range keys {
-			if i > 0 {
-				sb.WriteString(" ")
-			}
-			datum := process.Chars(key)
-			sb.WriteString(colorKey(key, datum, validSet, hint))
-		}
-		sb.WriteString("\n")
-	}
-
-	// Special keys row
-	sb.WriteString(" ")
-	for i, sk := range specialKeys {
-		if i > 0 {
-			sb.WriteString(" ")
-		}
-		label := "[" + sk.label + "]"
-		sb.WriteString(colorKey(label, sk.datum, validSet, hint))
-	}
-	sb.WriteString("\n")
-
-	return sb.String()
-}
-
-func colorKey(label string, datum process.Datum, validSet datumSet, hint process.Datum) string {
-	if hint != nil && datumEqual(datum, hint) {
-		return colorGreen + label + colorReset
-	}
-	if validSet.contains(datum) {
-		return colorWhite + label + colorReset
-	}
-	return colorDim + label + colorReset
-}
-
 // datumSet is a simple set for checking datum membership.
 type datumSet struct {
-	chars    map[string]bool
+	chars     map[string]bool
 	termCodes map[process.TermCode]bool
 }
 
 func buildDatumSet(datums []process.Datum) datumSet {
 	s := datumSet{
-		chars:    map[string]bool{},
+		chars:     map[string]bool{},
 		termCodes: map[process.TermCode]bool{},
 	}
 	for _, d := range datums {

@@ -11,7 +11,8 @@ import (
 
 func init() {
 	simulation.Register("rm", &simulation.Binary{
-		Launch: launch,
+		Launch:    launch,
+		ValidArgs: command.ValidArgsFile,
 	})
 }
 

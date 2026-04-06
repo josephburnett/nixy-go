@@ -12,7 +12,8 @@ import (
 
 func init() {
 	simulation.Register("touch", &simulation.Binary{
-		Launch: launch,
+		Launch:    launch,
+		ValidArgs: command.ValidArgsFile,
 	})
 }
 

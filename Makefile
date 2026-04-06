@@ -1,4 +1,4 @@
-.PHONY: build test test-v fuzz check vet lint repl all
+.PHONY: build test test-v fuzz check vet lint repl all build-wasm wasm-exec web serve check-wasm
 
 # Build & Run
 build :
@@ -6,6 +6,21 @@ build :
 
 repl :
 	go run ./cmd/repl
+
+# WASM & Web
+build-wasm :
+	GOOS=js GOARCH=wasm go build -o web/nixy.wasm ./cmd/web
+
+wasm-exec :
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" web/
+
+web : wasm-exec build-wasm
+
+serve : web
+	cd web && python3 -m http.server 8080
+
+check-wasm :
+	GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/web
 
 # Testing
 test :

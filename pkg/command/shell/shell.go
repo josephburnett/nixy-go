@@ -404,11 +404,23 @@ func (s *shell) Next() []process.Datum {
 		}
 	} else if strings.Contains(s.currentCommand, " ") {
 		// After command name + space: we're in arguments.
-		// For now, allow any printable character, space, enter.
-		for c := byte(32); c < 127; c++ {
-			valid = append(valid, process.Chars(string(c)))
+		// Check if the command has a ValidArgs function.
+		fields := strings.SplitN(s.currentCommand, " ", 2)
+		cmdName := fields[0]
+		partialArgs := ""
+		if len(fields) > 1 {
+			partialArgs = fields[1]
 		}
-		valid = append(valid, process.TermEnter)
+		argValidator := s.getArgValidator(cmdName)
+		if argValidator != nil {
+			valid = append(valid, argValidator(s.simulation, s.hostname, s.currentDirectory, partialArgs)...)
+		} else {
+			// Default: allow any printable character, space, enter
+			for c := byte(32); c < 127; c++ {
+				valid = append(valid, process.Chars(string(c)))
+			}
+			valid = append(valid, process.TermEnter)
+		}
 	} else {
 		// Mid-command-name: chars that continue toward a valid command
 		continuations := map[byte]bool{}
@@ -434,6 +446,28 @@ func (s *shell) Next() []process.Datum {
 	}
 
 	return valid
+}
+
+func (s *shell) getArgValidator(cmdName string) simulation.ValidArgs {
+	// Check builtins first
+	switch cmdName {
+	case "cd":
+		return command.ValidArgsFolder
+	}
+	// Check binary registry
+	c, err := s.simulation.GetComputer(s.hostname)
+	if err != nil {
+		return nil
+	}
+	f, err := c.Filesystem.Navigate([]string{"bin", cmdName})
+	if err != nil {
+		return nil
+	}
+	b, err := simulation.GetBinary(f.Data)
+	if err != nil {
+		return nil
+	}
+	return b.ValidArgs
 }
 
 func (s *shell) availableCommands() []string {

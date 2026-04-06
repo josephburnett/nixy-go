@@ -8,99 +8,99 @@ import (
 )
 
 func TestWriteChars(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("hello")})
-	if term.line != "hello" {
-		t.Fatalf("expected 'hello', got %q", term.line)
+	if term.State.Line != "hello" {
+		t.Fatalf("expected 'hello', got %q", term.State.Line)
 	}
 }
 
 func TestWriteCharsWithNewlines(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("bin\netc\nhome\n")})
-	if len(term.lines) != 3 {
-		t.Fatalf("expected 3 lines, got %d: %v", len(term.lines), term.lines)
+	if len(term.State.Lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d: %v", len(term.State.Lines), term.State.Lines)
 	}
-	if term.lines[0] != "bin" || term.lines[1] != "etc" || term.lines[2] != "home" {
-		t.Fatalf("expected [bin etc home], got %v", term.lines)
+	if term.State.Lines[0] != "bin" || term.State.Lines[1] != "etc" || term.State.Lines[2] != "home" {
+		t.Fatalf("expected [bin etc home], got %v", term.State.Lines)
 	}
-	if term.line != "" {
-		t.Fatalf("expected empty current line, got %q", term.line)
+	if term.State.Line != "" {
+		t.Fatalf("expected empty current line, got %q", term.State.Line)
 	}
 }
 
 func TestWriteCharsPartialNewline(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("hello\nworld")})
-	if len(term.lines) != 1 || term.lines[0] != "hello" {
-		t.Fatalf("expected lines=['hello'], got %v", term.lines)
+	if len(term.State.Lines) != 1 || term.State.Lines[0] != "hello" {
+		t.Fatalf("expected lines=['hello'], got %v", term.State.Lines)
 	}
-	if term.line != "world" {
-		t.Fatalf("expected current line 'world', got %q", term.line)
+	if term.State.Line != "world" {
+		t.Fatalf("expected current line 'world', got %q", term.State.Line)
 	}
 }
 
 func TestWriteEnter(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("cmd")})
 	term.Write(process.Data{process.TermEnter})
-	if len(term.lines) != 1 || term.lines[0] != "cmd" {
-		t.Fatalf("expected lines=['cmd'], got %v", term.lines)
+	if len(term.State.Lines) != 1 || term.State.Lines[0] != "cmd" {
+		t.Fatalf("expected lines=['cmd'], got %v", term.State.Lines)
 	}
-	if term.line != "" {
-		t.Fatalf("expected empty line after enter, got %q", term.line)
+	if term.State.Line != "" {
+		t.Fatalf("expected empty line after enter, got %q", term.State.Line)
 	}
 }
 
 func TestWriteBackspace(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("abc")})
 	term.Write(process.Data{process.TermBackspace})
-	if term.line != "ab" {
-		t.Fatalf("expected 'ab', got %q", term.line)
+	if term.State.Line != "ab" {
+		t.Fatalf("expected 'ab', got %q", term.State.Line)
 	}
 }
 
 func TestWriteBackspaceEmpty(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Write(process.Data{process.TermBackspace})
-	if term.line != "" {
-		t.Fatalf("expected empty, got %q", term.line)
+	if term.State.Line != "" {
+		t.Fatalf("expected empty, got %q", term.State.Line)
 	}
 }
 
 func TestWriteClear(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("hello")})
 	term.Write(process.Data{process.TermEnter})
 	term.Write(process.Data{process.Chars("world")})
 	term.Write(process.Data{process.TermClear})
-	if len(term.lines) != 0 {
-		t.Fatalf("expected no lines after clear, got %v", term.lines)
+	if len(term.State.Lines) != 0 {
+		t.Fatalf("expected no lines after clear, got %v", term.State.Lines)
 	}
-	if term.line != "" {
-		t.Fatalf("expected empty line after clear, got %q", term.line)
+	if term.State.Line != "" {
+		t.Fatalf("expected empty line after clear, got %q", term.State.Line)
 	}
 }
 
 func TestWriteMultipleDatums(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Write(process.Data{
 		process.Chars("h"),
 		process.Chars("i"),
 		process.TermEnter,
 		process.Chars("bye"),
 	})
-	if len(term.lines) != 1 || term.lines[0] != "hi" {
-		t.Fatalf("expected lines=['hi'], got %v", term.lines)
+	if len(term.State.Lines) != 1 || term.State.Lines[0] != "hi" {
+		t.Fatalf("expected lines=['hi'], got %v", term.State.Lines)
 	}
-	if term.line != "bye" {
-		t.Fatalf("expected 'bye', got %q", term.line)
+	if term.State.Line != "bye" {
+		t.Fatalf("expected 'bye', got %q", term.State.Line)
 	}
 }
 
 func TestRenderEmptyTerminal(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	out := term.Render()
 	if !strings.Contains(out, "┌") || !strings.Contains(out, "└") {
 		t.Fatal("expected box drawing characters in render")
@@ -111,7 +111,7 @@ func TestRenderEmptyTerminal(t *testing.T) {
 }
 
 func TestRenderWithContent(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("output line\n")})
 	term.Write(process.Data{process.Chars("typing")})
 	out := term.Render()
@@ -124,7 +124,7 @@ func TestRenderWithContent(t *testing.T) {
 }
 
 func TestRenderDialog(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.SetDialog([]string{"Nixy: Hello!", "Nixy: Welcome."})
 	out := term.Render()
 	if !strings.Contains(out, "Nixy: Hello!") {
@@ -141,7 +141,7 @@ func TestRenderDialog(t *testing.T) {
 }
 
 func TestRenderHintNil(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Hint(nil)
 	out := term.Render()
 	if strings.Contains(out, "invalid") {
@@ -150,7 +150,7 @@ func TestRenderHintNil(t *testing.T) {
 }
 
 func TestRenderHintWithError(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	term.Hint(errInvalid("invalid input"))
 	out := term.Render()
 	if !strings.Contains(out, "invalid input") {
@@ -163,7 +163,7 @@ type errInvalid string
 func (e errInvalid) Error() string { return string(e) }
 
 func TestRenderScrolling(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	// Add more lines than the viewport (20 lines)
 	for i := 0; i < 30; i++ {
 		term.Write(process.Data{process.Chars("line\n")})
@@ -181,18 +181,17 @@ func TestRenderScrolling(t *testing.T) {
 }
 
 func TestRenderLineTruncation(t *testing.T) {
-	term := New()
+	term := New(NewANSI())
 	long := strings.Repeat("x", 100)
 	term.Write(process.Data{process.Chars(long + "\n")})
 	out := term.Render()
 	// Line should be truncated to fit within the box
-	// Each content line is at most term.x chars
 	lines := strings.Split(out, "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "│") && strings.HasSuffix(line, "│") {
 			content := line[len("│") : len(line)-len("│")]
-			if len(content) > term.x {
-				t.Fatalf("line exceeds terminal width: %d > %d", len(content), term.x)
+			if len(content) > term.Width {
+				t.Fatalf("line exceeds terminal width: %d > %d", len(content), term.Width)
 			}
 		}
 	}

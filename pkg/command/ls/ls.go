@@ -13,7 +13,8 @@ import (
 
 func init() {
 	simulation.Register("ls", &simulation.Binary{
-		Launch: launch,
+		Launch:    launch,
+		ValidArgs: command.ValidArgsFolder,
 	})
 }
 

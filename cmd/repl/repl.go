@@ -18,64 +18,33 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
 
-	shellpkg "github.com/josephburnett/nixy-go/pkg/command/shell"
 	"github.com/josephburnett/nixy-go/pkg/game"
-	"github.com/josephburnett/nixy-go/pkg/game/quests"
-	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/guide"
 	"github.com/josephburnett/nixy-go/pkg/process"
+	"github.com/josephburnett/nixy-go/pkg/session"
 	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
-
-// shellInfo provides context about the current shell for hints.
-type shellInfo interface {
-	Hostname() string
-	CurrentDirectory() []string
-	CurrentCommand() string
-}
 
 type model struct {
 	game     *game.Game
 	guide    *guide.G
-	shell    shellInfo
+	shell    session.ShellInfo
 	terminal *terminal.T
 	quitting bool
 }
 
 func initialModel() (model, error) {
-	allQuests := []game.Quest{
-		&quests.Connect{},
-		&quests.Orientation{},
-		&quests.Inspection{},
-		&quests.Modification{},
-		&quests.Composition{},
-		&quests.Permissions{},
-	}
-	machines := []game.MachineEntry{
-		{Hostname: "laptop", Filesystem: worlds.Laptop},
-		{Hostname: "nixy", Filesystem: worlds.Nixy},
-		{Hostname: "server", Filesystem: worlds.Server, UnlockedBy: "server-unlocked"},
-	}
-
-	g, err := game.NewGame(allQuests, machines)
+	sess, err := session.New()
 	if err != nil {
 		return model{}, err
 	}
 
-	shellpkg.DefaultNxHandler = g
-
-	proc, err := g.Sim.Launch("laptop", "user", "shell", nil, []string{})
-	if err != nil {
-		return model{}, err
-	}
-
-	gd := guide.New(proc)
-	t := terminal.New()
+	t := terminal.New(terminal.NewANSI())
 
 	return model{
-		game:     g,
-		guide:    gd,
-		shell:    proc.(shellInfo),
+		game:     sess.Game,
+		guide:    sess.Guide,
+		shell:    sess.Shell,
 		terminal: t,
 	}, nil
 }
@@ -86,6 +55,17 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		w := msg.Width - 2 // left+right border
+		h := msg.Height - 10 // borders + prompt + keyboard + dialog
+		if w < 20 {
+			w = 20
+		}
+		if h < 5 {
+			h = 5
+		}
+		m.terminal.Resize(w, h)
+
 	case tea.KeyMsg:
 		var datum process.Datum
 

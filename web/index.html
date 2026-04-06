@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nixy</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="terminal"></div>
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go();
+        WebAssembly.instantiateStreaming(fetch("nixy.wasm"), go.importObject).then(result => {
+            go.run(result.instance);
+
+            const container = document.getElementById("terminal");
+            container.innerHTML = nixyInit();
+
+            // Measure monospace character dimensions
+            function measureChar() {
+                const span = document.createElement("span");
+                span.style.fontFamily = "monospace";
+                span.style.fontSize = "16px";
+                span.style.position = "absolute";
+                span.style.visibility = "hidden";
+                span.textContent = "M";
+                document.body.appendChild(span);
+                const rect = span.getBoundingClientRect();
+                document.body.removeChild(span);
+                return { w: rect.width, h: rect.height };
+            }
+
+            function updateSize() {
+                const ch = measureChar();
+                const cols = Math.floor(container.clientWidth / ch.w) - 2;
+                const rows = Math.floor(container.clientHeight / ch.h) - 10;
+                const w = Math.max(cols, 20);
+                const h = Math.max(rows, 5);
+                container.innerHTML = nixyResize(w, h);
+            }
+
+            // Handle keyboard input
+            document.addEventListener("keydown", e => {
+                // Ignore modifier-only keys and key combos (except shift for uppercase)
+                if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") {
+                    return;
+                }
+                if (e.ctrlKey || e.altKey || e.metaKey) {
+                    return;
+                }
+
+                const html = nixyKeystroke(e.key);
+                if (html) {
+                    container.innerHTML = html;
+                }
+                e.preventDefault();
+            });
+
+            // Handle resize
+            new ResizeObserver(() => updateSize()).observe(container);
+        });
+    </script>
+</body>
+</html>

@@ -11,7 +11,8 @@ import (
 
 func init() {
 	simulation.Register("ssh", &simulation.Binary{
-		Launch: launch,
+		Launch:    launch,
+		ValidArgs: command.ValidArgsHostname,
 	})
 }
 

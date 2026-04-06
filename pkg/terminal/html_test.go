@@ -1,0 +1,107 @@
+package terminal
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/josephburnett/nixy-go/pkg/process"
+)
+
+func TestHTMLRenderBox(t *testing.T) {
+	term := New(NewHTML())
+	out := term.Render()
+	if !strings.Contains(out, "<pre>") || !strings.Contains(out, "</pre>") {
+		t.Fatal("expected <pre> tags")
+	}
+	if !strings.Contains(out, `class="box"`) {
+		t.Fatal("expected box class")
+	}
+	if !strings.Contains(out, "┌") || !strings.Contains(out, "┘") {
+		t.Fatal("expected box-drawing characters")
+	}
+}
+
+func TestHTMLRenderPrompt(t *testing.T) {
+	term := New(NewHTML())
+	term.Write(process.Data{process.Chars("hello")})
+	out := term.Render()
+	if !strings.Contains(out, `class="prompt"`) {
+		t.Fatal("expected prompt class")
+	}
+	if !strings.Contains(out, "&gt; hello") {
+		t.Fatal("expected escaped prompt content")
+	}
+}
+
+func TestHTMLRenderDialog(t *testing.T) {
+	term := New(NewHTML())
+	term.SetDialog([]string{"Nixy says hi"})
+	out := term.Render()
+	if !strings.Contains(out, `class="dialog"`) {
+		t.Fatal("expected dialog class")
+	}
+	if !strings.Contains(out, "Nixy says hi") {
+		t.Fatal("expected dialog content")
+	}
+	// Cleared after render
+	out2 := term.Render()
+	if strings.Contains(out2, "Nixy says hi") {
+		t.Fatal("dialog should be cleared after render")
+	}
+}
+
+func TestHTMLRenderHint(t *testing.T) {
+	term := New(NewHTML())
+	term.Hint(errInvalid("bad input"))
+	out := term.Render()
+	if !strings.Contains(out, `class="hint"`) {
+		t.Fatal("expected hint class")
+	}
+	if !strings.Contains(out, "bad input") {
+		t.Fatal("expected hint content")
+	}
+}
+
+func TestHTMLRenderKeyboardClasses(t *testing.T) {
+	valid := []process.Datum{process.Chars("s")}
+	hint := process.Chars("s")
+	out := renderHTMLKeyboard(valid, hint)
+	if !strings.Contains(out, `class="key-hint"`) {
+		t.Fatal("expected key-hint class for hint key")
+	}
+	if !strings.Contains(out, `class="key-dim"`) {
+		t.Fatal("expected key-dim class for unavailable keys")
+	}
+}
+
+func TestHTMLRenderKeyboardValid(t *testing.T) {
+	valid := []process.Datum{process.Chars("l"), process.TermEnter}
+	out := renderHTMLKeyboard(valid, nil)
+	if !strings.Contains(out, `class="key-valid">l</span>`) {
+		t.Fatal("expected key-valid class for 'l'")
+	}
+	if !strings.Contains(out, `class="key-valid">[enter]</span>`) {
+		t.Fatal("expected key-valid class for enter")
+	}
+}
+
+func TestHTMLRenderEscaping(t *testing.T) {
+	term := New(NewHTML())
+	term.Write(process.Data{process.Chars("<script>alert('xss')</script>\n")})
+	out := term.Render()
+	if strings.Contains(out, "<script>") {
+		t.Fatal("HTML should be escaped in output")
+	}
+	if !strings.Contains(out, "&lt;script&gt;") {
+		t.Fatal("expected escaped HTML entities")
+	}
+}
+
+func TestHTMLRenderKeyboardAllLetters(t *testing.T) {
+	out := renderHTMLKeyboard(nil, nil)
+	for c := 'a'; c <= 'z'; c++ {
+		if !strings.Contains(out, string(c)) {
+			t.Fatalf("keyboard missing letter '%c'", c)
+		}
+	}
+}
