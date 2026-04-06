@@ -21,6 +21,16 @@ func (h *HTMLRenderer) Render(f Frame) string {
 
 	sb.WriteString("<pre>")
 
+	// Dialog — above the terminal box
+	for _, line := range f.Dialog {
+		sb.WriteString(`<span class="dialog">` + html.EscapeString(line) + "</span>\n")
+	}
+
+	// Hint — above the terminal box
+	if f.Hint != "" {
+		sb.WriteString(`<span class="hint">` + html.EscapeString(f.Hint) + "</span>\n")
+	}
+
 	// Box top
 	sb.WriteString(`<span class="box">┌` + border + "┐</span>\n")
 
@@ -56,16 +66,6 @@ func (h *HTMLRenderer) Render(f Frame) string {
 
 	// Box bottom
 	sb.WriteString(`<span class="box">└` + border + "┘</span>\n")
-
-	// Dialog
-	for _, line := range f.Dialog {
-		sb.WriteString(`<span class="dialog">` + html.EscapeString(line) + "</span>\n")
-	}
-
-	// Hint
-	if f.Hint != "" {
-		sb.WriteString(`<span class="hint">` + html.EscapeString(f.Hint) + "</span>\n")
-	}
 
 	// Keyboard
 	sb.WriteString("\n")

@@ -27,6 +27,16 @@ func (a *ANSIRenderer) Render(f Frame) string {
 	var sb strings.Builder
 	border := strings.Repeat("─", f.Width)
 
+	// Dialog (yellow) — above the terminal box
+	for _, line := range f.Dialog {
+		sb.WriteString(colorDialog + line + colorReset + "\n")
+	}
+
+	// Hint (dim) — above the terminal box
+	if f.Hint != "" {
+		sb.WriteString(colorDim + f.Hint + colorReset + "\n")
+	}
+
 	sb.WriteString("┌" + border + "┐\n")
 
 	// Display lines (padded to fill viewport)
@@ -56,16 +66,6 @@ func (a *ANSIRenderer) Render(f Frame) string {
 	sb.WriteString("│" + prompt + strings.Repeat(" ", padding) + "│\n")
 
 	sb.WriteString("└" + border + "┘\n")
-
-	// Dialog (yellow)
-	for _, line := range f.Dialog {
-		sb.WriteString(colorDialog + line + colorReset + "\n")
-	}
-
-	// Hint (dim)
-	if f.Hint != "" {
-		sb.WriteString(colorDim + f.Hint + colorReset + "\n")
-	}
 
 	// Keyboard
 	sb.WriteString("\n")

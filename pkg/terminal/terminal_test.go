@@ -158,6 +158,34 @@ func TestRenderHintWithError(t *testing.T) {
 	}
 }
 
+func TestRenderDialogAboveBox(t *testing.T) {
+	term := New(NewANSI())
+	term.SetDialog([]string{"Nixy: Hello!"})
+	out := term.Render()
+	dialogIdx := strings.Index(out, "Nixy: Hello!")
+	boxIdx := strings.Index(out, "┌")
+	if dialogIdx < 0 || boxIdx < 0 {
+		t.Fatalf("expected dialog and box in output, got:\n%s", out)
+	}
+	if dialogIdx > boxIdx {
+		t.Fatal("dialog should appear above the terminal box")
+	}
+}
+
+func TestRenderHintAboveBox(t *testing.T) {
+	term := New(NewANSI())
+	term.Hint(errInvalid("oops"))
+	out := term.Render()
+	hintIdx := strings.Index(out, "oops")
+	boxIdx := strings.Index(out, "┌")
+	if hintIdx < 0 || boxIdx < 0 {
+		t.Fatalf("expected hint and box in output, got:\n%s", out)
+	}
+	if hintIdx > boxIdx {
+		t.Fatal("hint should appear above the terminal box")
+	}
+}
+
 type errInvalid string
 
 func (e errInvalid) Error() string { return string(e) }
