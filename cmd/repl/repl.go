@@ -41,10 +41,22 @@ func initialModel() (model, error) {
 
 	t := terminal.New(terminal.NewANSI())
 
+	// Drain initial dialog (e.g. first quest activation greeting)
+	dialog := sess.Game.Manager.Dialog.Drain()
+	if len(dialog) > 0 {
+		t.SetDialog(dialog)
+	}
+
+	// Set initial keyboard state
+	valid := sess.Guide.Next()
+	sh := sess.Shell
+	hint := sess.Game.GetHint(sh.Hostname(), sh.CurrentDirectory(), sh.CurrentCommand())
+	t.SetKeyboard(valid, hint)
+
 	return model{
 		game:     sess.Game,
 		guide:    sess.Guide,
-		shell:    sess.Shell,
+		shell:    sh,
 		terminal: t,
 	}, nil
 }

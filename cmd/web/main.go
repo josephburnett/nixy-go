@@ -43,6 +43,17 @@ func main() {
 	sh = sess.Shell
 	term = terminal.New(terminal.NewHTML())
 
+	// Drain initial dialog (e.g. first quest activation greeting)
+	dialog := g.Manager.Dialog.Drain()
+	if len(dialog) > 0 {
+		term.SetDialog(dialog)
+	}
+
+	// Set initial keyboard state
+	valid := gd.Next()
+	hint := g.GetHint(sh.Hostname(), sh.CurrentDirectory(), sh.CurrentCommand())
+	term.SetKeyboard(valid, hint)
+
 	js.Global().Set("nixyInit", js.FuncOf(handleInit))
 	js.Global().Set("nixyKeystroke", js.FuncOf(handleKeystroke))
 	js.Global().Set("nixyResize", js.FuncOf(handleResize))
