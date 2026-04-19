@@ -18,17 +18,13 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
 
-	"github.com/josephburnett/nixy-go/pkg/game"
-	"github.com/josephburnett/nixy-go/pkg/guide"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/session"
 	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
 
 type model struct {
-	game     *game.Game
-	guide    *guide.G
-	shell    session.ShellInfo
+	sess     *session.Session
 	terminal *terminal.T
 	quitting bool
 }
@@ -40,23 +36,10 @@ func initialModel() (model, error) {
 	}
 
 	t := terminal.New(terminal.NewANSI())
-
-	// Drain initial dialog (e.g. first quest activation greeting)
-	dialog := sess.Game.Manager.Dialog.Drain()
-	if len(dialog) > 0 {
-		t.SetDialog(dialog)
-	}
-
-	// Set initial keyboard state
-	valid := sess.Guide.Next()
-	sh := sess.Shell
-	hint := sess.Game.GetHint(sh.Hostname(), sh.CurrentDirectory(), sh.CurrentCommand())
-	t.SetKeyboard(valid, hint)
+	sess.InitTerminal(t)
 
 	return model{
-		game:     sess.Game,
-		guide:    sess.Guide,
-		shell:    sh,
+		sess:     sess,
 		terminal: t,
 	}, nil
 }
@@ -95,47 +78,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Write to shell through guide
-		_, err := m.guide.Stdin(process.Data{datum})
-		m.terminal.Hint(err)
-
-		// Drain stdout
-		for i := 0; i < 50; i++ {
-			out, eof, _ := m.guide.Stdout()
-			if eof {
-				m.quitting = true
-				return m, tea.Quit
-			}
-			if len(out) > 0 {
-				m.terminal.Write(out)
-			} else {
-				break
-			}
+		if m.sess.HandleKeystroke(datum, m.terminal) {
+			m.quitting = true
+			return m, tea.Quit
 		}
-
-		// Drain stderr
-		for i := 0; i < 10; i++ {
-			errOut, _, _ := m.guide.Stderr()
-			if len(errOut) > 0 {
-				m.terminal.Write(errOut)
-			} else {
-				break
-			}
-		}
-
-		// After Enter, check quest state and dialog
-		if _, ok := datum.(process.TermCode); ok && datum == process.TermEnter {
-			m.game.AfterCommand()
-			dialog := m.game.Manager.Dialog.Drain()
-			if len(dialog) > 0 {
-				m.terminal.SetDialog(dialog)
-			}
-		}
-
-		// Update keyboard display
-		valid := m.guide.Next()
-		hint := m.game.GetHint(m.shell.Hostname(), m.shell.CurrentDirectory(), m.shell.CurrentCommand())
-		m.terminal.SetKeyboard(valid, hint)
 	}
 
 	return m, nil
