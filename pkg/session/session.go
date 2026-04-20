@@ -68,12 +68,13 @@ func (s *Session) InitTerminal(t *terminal.T) {
 	if len(dialog) > 0 {
 		t.SetDialog(dialog)
 	}
-	s.updateKeyboard(t)
+	s.updateTerminal(t)
 }
 
 // HandleKeystroke processes a single input datum through the guide, drains
 // output, checks quest state, and updates the terminal. Returns true if EOF.
 func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
+	t.State.Prompt = "user@" + s.Shell.Hostname()
 	_, err := s.Guide.Stdin(process.Data{datum})
 	t.Hint(err)
 
@@ -109,11 +110,12 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 		}
 	}
 
-	s.updateKeyboard(t)
+	s.updateTerminal(t)
 	return false
 }
 
-func (s *Session) updateKeyboard(t *terminal.T) {
+func (s *Session) updateTerminal(t *terminal.T) {
+	t.State.Prompt = "user@" + s.Shell.Hostname()
 	valid := s.Guide.Next()
 	hint := s.Game.GetHint(s.Shell.Hostname(), s.Shell.CurrentDirectory(), s.Shell.CurrentCommand())
 	t.SetKeyboard(valid, hint)

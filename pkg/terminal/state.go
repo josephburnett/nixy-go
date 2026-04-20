@@ -11,6 +11,7 @@ import (
 type State struct {
 	Line      string
 	Lines     []string
+	Prompt    string // e.g. "user@nixy", updated by session on hostname changes
 	Hint      error
 	Dialog    []string
 	ValidKeys []process.Datum
@@ -40,7 +41,7 @@ func (s *State) Write(in process.Data) error {
 				s.Line = ""
 				s.Lines = []string{}
 			case process.TermEnter:
-				s.Lines = append(s.Lines, "> "+s.Line)
+				s.Lines = append(s.Lines, s.promptPrefix()+s.Line)
 				s.Line = ""
 			default:
 				return fmt.Errorf("unknown term code: %v", d)
@@ -50,4 +51,11 @@ func (s *State) Write(in process.Data) error {
 		}
 	}
 	return nil
+}
+
+func (s *State) promptPrefix() string {
+	if s.Prompt != "" {
+		return s.Prompt + "> "
+	}
+	return "> "
 }

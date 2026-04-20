@@ -87,7 +87,7 @@ func (t *T) Render() string {
 	}
 
 	displayLines := ReflowLines(t.State.Lines, contentWidth, termContentHeight)
-	prompt := "> " + t.State.Line
+	prompt := t.State.promptPrefix() + t.State.Line
 
 	f := Frame{
 		DisplayLines: displayLines,
