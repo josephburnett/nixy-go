@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -24,10 +26,13 @@ import (
 )
 
 type model struct {
-	sess     *session.Session
-	terminal *terminal.T
-	quitting bool
+	sess      *session.Session
+	terminal  *terminal.T
+	quitting  bool
+	lastCtrlC time.Time
 }
+
+const ctrlCWindow = 2 * time.Second
 
 func initialModel() (model, error) {
 	sess, err := session.New()
@@ -58,8 +63,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.Type {
 		case tea.KeyCtrlC:
-			m.quitting = true
-			return m, tea.Quit
+			if time.Since(m.lastCtrlC) < ctrlCWindow {
+				m.quitting = true
+				return m, tea.Quit
+			}
+			m.lastCtrlC = time.Now()
+			m.terminal.Hint(errors.New("Press Ctrl+C again to exit"))
+			return m, nil
 		case tea.KeyEnter:
 			datum = process.TermEnter
 		case tea.KeyBackspace:
