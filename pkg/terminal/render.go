@@ -6,7 +6,7 @@ import "github.com/josephburnett/nixy-go/pkg/process"
 type Frame struct {
 	DisplayLines []string
 	Prompt       string
-	Dialog       []string
+	Dialog       []DialogLine
 	DialogSpace  int // total lines allocated for dialog (pad with blank lines)
 	Hint         string
 	ValidKeys    []process.Datum

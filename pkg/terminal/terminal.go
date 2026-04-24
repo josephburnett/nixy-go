@@ -47,7 +47,14 @@ func (t *T) Hint(err error) {
 }
 
 func (t *T) SetDialog(lines []string) {
-	t.State.Dialog = append(t.State.Dialog, lines...)
+	if len(lines) == 0 {
+		return
+	}
+	idx := t.State.NextColorIdx
+	for _, l := range lines {
+		t.State.Dialog = append(t.State.Dialog, DialogLine{Text: l, ColorIdx: idx})
+	}
+	t.State.NextColorIdx++
 }
 
 func (t *T) SetKeyboard(valid []process.Datum, hint process.Datum) {
@@ -77,7 +84,7 @@ func (t *T) Render() string {
 	}
 
 	// Show the last dialogSpace lines of accumulated dialog
-	var dialogToShow []string
+	var dialogToShow []DialogLine
 	if dialogSpace > 0 && len(t.State.Dialog) > 0 {
 		start := len(t.State.Dialog) - dialogSpace
 		if start < 0 {

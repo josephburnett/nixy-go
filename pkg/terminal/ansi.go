@@ -13,8 +13,17 @@ const (
 	colorDim   = "\033[2m"    // dim grey
 	colorWhite = "\033[1;37m" // bold white
 	colorGreen = "\033[1;32m" // bold green
-	colorDialog = "\033[33m"  // yellow
 )
+
+// dialogColorsANSI cycles for each new dialog batch so the user can see when
+// a fresh message has arrived.
+var dialogColorsANSI = []string{
+	"\033[33m", // yellow
+	"\033[36m", // cyan
+	"\033[35m", // magenta
+	"\033[32m", // green
+	"\033[34m", // blue
+}
 
 // ANSIRenderer renders frames using ANSI escape codes and box-drawing characters.
 type ANSIRenderer struct{}
@@ -33,7 +42,8 @@ func (a *ANSIRenderer) Render(f Frame) string {
 		sb.WriteString("\n")
 	}
 	for _, line := range f.Dialog {
-		sb.WriteString(colorDialog + line + colorReset + "\n")
+		color := dialogColorsANSI[line.ColorIdx%len(dialogColorsANSI)]
+		sb.WriteString(color + line.Text + colorReset + "\n")
 	}
 
 	// Hint line — always occupies 1 line (blank if no hint)

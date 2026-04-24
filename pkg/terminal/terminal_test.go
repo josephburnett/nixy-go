@@ -178,6 +178,27 @@ func TestRenderDialogAccumulates(t *testing.T) {
 	}
 }
 
+func TestRenderDialogBatchesGetDistinctColors(t *testing.T) {
+	term := New(NewANSI())
+	term.SetDialog([]string{"first"})
+	term.SetDialog([]string{"second"})
+	out := term.Render()
+	// Each batch should be wrapped in a different color code.
+	firstIdx := strings.Index(out, "first")
+	secondIdx := strings.Index(out, "second")
+	if firstIdx < 0 || secondIdx < 0 {
+		t.Fatal("expected both messages in render")
+	}
+	// Find the ANSI color escape immediately preceding each text.
+	firstPrefix := out[:firstIdx]
+	secondPrefix := out[:secondIdx]
+	firstColor := firstPrefix[strings.LastIndex(firstPrefix, "\033["):]
+	secondColor := secondPrefix[strings.LastIndex(secondPrefix, "\033["):]
+	if firstColor == secondColor {
+		t.Fatalf("successive dialog batches should have different colors, both got %q", firstColor)
+	}
+}
+
 func TestRenderDialogAboveBox(t *testing.T) {
 	term := New(NewANSI())
 	term.SetDialog([]string{"Nixy: Hello!"})

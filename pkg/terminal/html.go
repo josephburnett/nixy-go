@@ -1,12 +1,16 @@
 package terminal
 
 import (
+	"fmt"
 	"html"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
+
+// dialogColorCount must match the number of dialog-N CSS classes in style.css.
+const dialogColorCount = 5
 
 // HTMLRenderer renders frames as HTML with CSS classes for styling.
 type HTMLRenderer struct{}
@@ -27,7 +31,8 @@ func (h *HTMLRenderer) Render(f Frame) string {
 		sb.WriteString("\n")
 	}
 	for _, line := range f.Dialog {
-		sb.WriteString(`<span class="dialog">` + html.EscapeString(line) + "</span>\n")
+		class := fmt.Sprintf("dialog dialog-%d", line.ColorIdx%dialogColorCount)
+		sb.WriteString(`<span class="` + class + `">` + html.EscapeString(line.Text) + "</span>\n")
 	}
 
 	// Hint line — always occupies 1 line (blank if no hint)

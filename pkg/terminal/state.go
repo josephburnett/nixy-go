@@ -7,15 +7,22 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
+// DialogLine is one line of dialog with its batch color index.
+type DialogLine struct {
+	Text     string
+	ColorIdx int
+}
+
 // State holds the content state of the terminal, independent of rendering.
 type State struct {
-	Line      string
-	Lines     []string
-	Prompt    string // e.g. "user@nixy", updated by session on hostname changes
-	Hint      error
-	Dialog    []string
-	ValidKeys []process.Datum
-	HintKey   process.Datum
+	Line         string
+	Lines        []string
+	Prompt       string // e.g. "user@nixy", updated by session on hostname changes
+	Hint         error
+	Dialog       []DialogLine
+	NextColorIdx int
+	ValidKeys    []process.Datum
+	HintKey      process.Datum
 }
 
 func (s *State) Write(in process.Data) error {
