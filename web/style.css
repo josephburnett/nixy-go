@@ -31,11 +31,11 @@ body {
 
 .box { color: #888; }
 .prompt { color: #fff; }
-.dialog-0 { color: #cc0; } /* yellow */
-.dialog-1 { color: #0cc; } /* cyan */
-.dialog-2 { color: #c0c; } /* magenta */
-.dialog-3 { color: #0c0; } /* green */
-.dialog-4 { color: #48c; } /* blue */
+.dialog-0 { color: #c33; } /* red */
+.dialog-1 { color: #cc0; } /* yellow */
+.dialog-2 { color: #0c0; } /* green */
+.dialog-3 { color: #48c; } /* blue */
+.dialog-4 { color: #c0c; } /* purple */
 .hint { color: #666; }
 .key-valid { color: #fff; font-weight: bold; }
 .key-hint { color: #0c0; font-weight: bold; }

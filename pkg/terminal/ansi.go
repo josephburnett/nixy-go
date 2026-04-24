@@ -18,11 +18,11 @@ const (
 // dialogColorsANSI cycles for each new dialog batch so the user can see when
 // a fresh message has arrived.
 var dialogColorsANSI = []string{
+	"\033[31m", // red
 	"\033[33m", // yellow
-	"\033[36m", // cyan
-	"\033[35m", // magenta
 	"\033[32m", // green
 	"\033[34m", // blue
+	"\033[35m", // purple
 }
 
 // ANSIRenderer renders frames using ANSI escape codes and box-drawing characters.
@@ -42,8 +42,7 @@ func (a *ANSIRenderer) Render(f Frame) string {
 		sb.WriteString("\n")
 	}
 	for _, line := range f.Dialog {
-		color := dialogColorsANSI[line.ColorIdx%len(dialogColorsANSI)]
-		sb.WriteString(color + line.Text + colorReset + "\n")
+		sb.WriteString(renderDialogLineANSI(line) + "\n")
 	}
 
 	// Hint line — always occupies 1 line (blank if no hint)
@@ -86,6 +85,22 @@ func (a *ANSIRenderer) Render(f Frame) string {
 	sb.WriteString("\n")
 	sb.WriteString(renderANSIKeyboard(f.ValidKeys, f.HintKey))
 
+	return sb.String()
+}
+
+// renderDialogLineANSI emits a dialog line with backtick-marked spans
+// highlighted in bold green (matching keyboard hints).
+func renderDialogLineANSI(line DialogLine) string {
+	baseColor := dialogColorsANSI[line.ColorIdx%len(dialogColorsANSI)]
+	parts := strings.Split(line.Text, "`")
+	var sb strings.Builder
+	for i, p := range parts {
+		if i%2 == 1 {
+			sb.WriteString(colorGreen + p + colorReset)
+		} else {
+			sb.WriteString(baseColor + p + colorReset)
+		}
+	}
 	return sb.String()
 }
 

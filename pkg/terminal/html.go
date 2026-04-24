@@ -31,8 +31,7 @@ func (h *HTMLRenderer) Render(f Frame) string {
 		sb.WriteString("\n")
 	}
 	for _, line := range f.Dialog {
-		class := fmt.Sprintf("dialog dialog-%d", line.ColorIdx%dialogColorCount)
-		sb.WriteString(`<span class="` + class + `">` + html.EscapeString(line.Text) + "</span>\n")
+		sb.WriteString(renderDialogLineHTML(line) + "\n")
 	}
 
 	// Hint line — always occupies 1 line (blank if no hint)
@@ -82,6 +81,22 @@ func (h *HTMLRenderer) Render(f Frame) string {
 	sb.WriteString(renderHTMLKeyboard(f.ValidKeys, f.HintKey))
 
 	sb.WriteString("</pre>")
+	return sb.String()
+}
+
+// renderDialogLineHTML emits a dialog line with backtick-marked spans
+// highlighted in bright green (matching keyboard hints).
+func renderDialogLineHTML(line DialogLine) string {
+	class := fmt.Sprintf("dialog dialog-%d", line.ColorIdx%dialogColorCount)
+	parts := strings.Split(line.Text, "`")
+	var sb strings.Builder
+	for i, p := range parts {
+		if i%2 == 1 {
+			sb.WriteString(`<span class="key-hint">` + html.EscapeString(p) + `</span>`)
+		} else {
+			sb.WriteString(`<span class="` + class + `">` + html.EscapeString(p) + `</span>`)
+		}
+	}
 	return sb.String()
 }
 

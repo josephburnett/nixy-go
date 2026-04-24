@@ -8,7 +8,7 @@ func AllDialog() []DialogEntry {
 			[]string{
 				"Nixy: Hey there! I'm Nixy.",
 				"Nixy: I could use some help, but first you need to connect to me.",
-				"Nixy: Try: ssh nixy",
+				"Nixy: Try: `ssh nixy`",
 			}},
 		{OnQuestComplete, "connect",
 			[]string{
@@ -19,7 +19,7 @@ func AllDialog() []DialogEntry {
 		{OnQuestActivate, "orientation",
 			[]string{
 				"Nixy: Great! Now let's look around.",
-				"Nixy: Try pwd to see where you are, ls to look around, and cd to move.",
+				"Nixy: Try `pwd` to see where you are, `ls` to look around, and `cd` to move.",
 			}},
 		{OnQuestComplete, "orientation",
 			[]string{
@@ -30,8 +30,8 @@ func AllDialog() []DialogEntry {
 		{OnQuestActivate, "inspection",
 			[]string{
 				"Nixy: I have some files that need attention.",
-				"Nixy: Use cat to read them and grep to search through logs.",
-				"Nixy: You might need to install grep first: apt install grep",
+				"Nixy: Use `cat` to read them and `grep` to search through logs.",
+				"Nixy: You might need to install grep first: `apt install grep`",
 			}},
 		{OnQuestComplete, "inspection",
 			[]string{
@@ -43,7 +43,7 @@ func AllDialog() []DialogEntry {
 			[]string{
 				"Nixy: Time to clean up. There's some junk in my home directory.",
 				"Nixy: Delete junk.txt and create important.txt.",
-				"Nixy: You'll need to install rm and touch first.",
+				"Nixy: You'll need to install `rm` and `touch` first.",
 			}},
 		{OnQuestComplete, "modification",
 			[]string{
@@ -53,8 +53,8 @@ func AllDialog() []DialogEntry {
 		// Composition quest
 		{OnQuestActivate, "composition",
 			[]string{
-				"Nixy: Here's something cool — you can chain commands with |",
-				"Nixy: Try using ls | grep to find a specific file in my projects folder.",
+				"Nixy: Here's something cool — you can chain commands with `|`",
+				"Nixy: Try using `ls | grep` to find a specific file in my projects folder.",
 			}},
 		{OnQuestComplete, "composition",
 			[]string{
@@ -66,7 +66,7 @@ func AllDialog() []DialogEntry {
 		{OnQuestActivate, "permissions",
 			[]string{
 				"Nixy: The server needs a config file in /etc, but it's locked down.",
-				"Nixy: You'll need sudo to create files there. Try: sudo touch /etc/config",
+				"Nixy: You'll need `sudo` to create files there. Try: `sudo touch /etc/config`",
 			}},
 		{OnQuestComplete, "permissions",
 			[]string{
