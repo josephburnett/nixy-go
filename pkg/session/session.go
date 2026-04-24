@@ -117,7 +117,15 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 	// After Enter, record the command, check quest state and dialog
 	if _, ok := datum.(process.TermCode); ok && datum == process.TermEnter {
 		if cmdLine != "" {
-			s.Game.Manager.Tracker.Record(cmdHost, cmdCwd, cmdLine)
+			// If the command stayed on the same host, record the post-
+			// execution cwd so `cd /home/nixy` counts as visiting
+			// /home/nixy. ssh/exit change host — keep the pre-command cwd
+			// so they're attributed to where they were typed.
+			cwd := cmdCwd
+			if s.Shell.Hostname() == cmdHost {
+				cwd = s.Shell.CurrentDirectory()
+			}
+			s.Game.Manager.Tracker.Record(cmdHost, cwd, cmdLine)
 		}
 		s.Game.AfterCommand()
 		dialog := s.Game.Manager.Dialog.Drain()

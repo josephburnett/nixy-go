@@ -83,10 +83,11 @@ func TestOrientationQuestCompletes(t *testing.T) {
 	typeLine(t, sess, term, "pwd")
 	typeLine(t, sess, term, "ls")
 	typeLine(t, sess, term, "cd /home/nixy")
-	typeLine(t, sess, term, "pwd") // record a command while at /home/nixy
 
+	// Orientation requires visiting /home/nixy. The cd itself should count —
+	// the user shouldn't have to type a second command after cd.
 	if state := sess.Game.Manager.GetQuestState("orientation"); state != game.QuestComplete {
-		t.Fatalf("orientation should be complete, got %v", state)
+		t.Fatalf("orientation should be complete after cd /home/nixy, got %v", state)
 	}
 	if state := sess.Game.Manager.GetQuestState("inspection"); state != game.QuestActive {
 		t.Fatalf("inspection should be active after orientation, got %v", state)
