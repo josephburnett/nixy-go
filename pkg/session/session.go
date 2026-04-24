@@ -1,6 +1,8 @@
 package session
 
 import (
+	"strings"
+
 	shellpkg "github.com/josephburnett/nixy-go/pkg/command/shell"
 	"github.com/josephburnett/nixy-go/pkg/game"
 	"github.com/josephburnett/nixy-go/pkg/game/quests"
@@ -75,6 +77,17 @@ func (s *Session) InitTerminal(t *terminal.T) {
 // output, checks quest state, and updates the terminal. Returns true if EOF.
 func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 	t.State.Prompt = "user@" + s.Shell.Hostname()
+
+	// Capture command + host before Enter dispatches — ssh nixy must be
+	// recorded against laptop, not the new nixy shell it spawns.
+	var cmdLine, cmdHost string
+	var cmdCwd []string
+	if datum == process.TermEnter {
+		cmdLine = strings.TrimSpace(t.State.Line)
+		cmdHost = s.Shell.Hostname()
+		cmdCwd = s.Shell.CurrentDirectory()
+	}
+
 	_, err := s.Guide.Stdin(process.Data{datum})
 	t.Hint(err)
 
@@ -101,8 +114,11 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 		}
 	}
 
-	// After Enter, check quest state and dialog
+	// After Enter, record the command, check quest state and dialog
 	if _, ok := datum.(process.TermCode); ok && datum == process.TermEnter {
+		if cmdLine != "" {
+			s.Game.Manager.Tracker.Record(cmdHost, cmdCwd, cmdLine)
+		}
 		s.Game.AfterCommand()
 		dialog := s.Game.Manager.Dialog.Drain()
 		if len(dialog) > 0 {
