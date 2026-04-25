@@ -90,10 +90,16 @@ func TestHTMLRenderHintAboveBox(t *testing.T) {
 	}
 }
 
+func renderHTMLForKeyboard(valid []process.Datum, hint process.Datum) string {
+	term := New(NewHTML())
+	term.SetKeyboard(valid, hint)
+	return term.Render()
+}
+
 func TestHTMLRenderKeyboardClasses(t *testing.T) {
 	valid := []process.Datum{process.Chars("s")}
 	hint := process.Chars("s")
-	out := renderHTMLKeyboard(valid, hint)
+	out := renderHTMLForKeyboard(valid, hint)
 	if !strings.Contains(out, `class="key-hint"`) {
 		t.Fatal("expected key-hint class for hint key")
 	}
@@ -104,7 +110,7 @@ func TestHTMLRenderKeyboardClasses(t *testing.T) {
 
 func TestHTMLRenderKeyboardValid(t *testing.T) {
 	valid := []process.Datum{process.Chars("l"), process.TermEnter}
-	out := renderHTMLKeyboard(valid, nil)
+	out := renderHTMLForKeyboard(valid, nil)
 	if !strings.Contains(out, `class="key-valid">l</span>`) {
 		t.Fatal("expected key-valid class for 'l'")
 	}
@@ -126,7 +132,7 @@ func TestHTMLRenderEscaping(t *testing.T) {
 }
 
 func TestHTMLRenderKeyboardAllLetters(t *testing.T) {
-	out := renderHTMLKeyboard(nil, nil)
+	out := renderHTMLForKeyboard(nil, nil)
 	for c := 'a'; c <= 'z'; c++ {
 		if !strings.Contains(out, string(c)) {
 			t.Fatalf("keyboard missing letter '%c'", c)

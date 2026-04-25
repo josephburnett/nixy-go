@@ -1,11 +1,6 @@
 package terminal
 
-import (
-	"strings"
-	"unicode/utf8"
-
-	"github.com/josephburnett/nixy-go/pkg/process"
-)
+import "strings"
 
 // ANSI color codes
 const (
@@ -29,184 +24,43 @@ var dialogColorsANSI = []string{
 // ANSIRenderer renders frames using ANSI escape codes and box-drawing characters.
 type ANSIRenderer struct{}
 
-func NewANSI() *ANSIRenderer {
-	return &ANSIRenderer{}
-}
+func NewANSI() *ANSIRenderer { return &ANSIRenderer{} }
 
 func (a *ANSIRenderer) Render(f Frame) string {
 	var sb strings.Builder
-	border := strings.Repeat("─", f.Width)
-
-	// Dialog area — padded to fixed height so terminal stays put
-	blankLines := f.DialogSpace - len(f.Dialog)
-	for i := 0; i < blankLines; i++ {
-		sb.WriteString("\n")
-	}
-	for _, line := range f.Dialog {
-		sb.WriteString(renderDialogLineANSI(line) + "\n")
-	}
-
-	// Hint line — always occupies 1 line (blank if no hint)
-	if f.Hint != "" {
-		sb.WriteString(colorDim + f.Hint + colorReset + "\n")
-	} else {
-		sb.WriteString("\n")
-	}
-
-	sb.WriteString("┌" + border + "┐\n")
-
-	// Display lines (bottom-aligned: blank lines at top, content above prompt)
-	blankCount := f.Height - len(f.DisplayLines)
-	for i := 0; i < blankCount; i++ {
-		sb.WriteString("│" + strings.Repeat(" ", f.Width) + "│\n")
-	}
-	for _, line := range f.DisplayLines {
-		prefixLen := utf8.RuneCountInString(line.Prefix)
-		textLen := utf8.RuneCountInString(line.Text)
-		total := prefixLen + textLen
-		if total > f.Width {
-			excess := total - f.Width
-			if textLen >= excess {
-				line.Text = string([]rune(line.Text)[:textLen-excess])
-				textLen -= excess
+	for _, line := range Layout(f) {
+		for _, seg := range line {
+			open := ansiOpen(seg.Style, seg.BatchIdx)
+			if open != "" {
+				sb.WriteString(open)
+				sb.WriteString(seg.Text)
+				sb.WriteString(colorReset)
 			} else {
-				line.Text = ""
-				textLen = 0
-				line.Prefix = string([]rune(line.Prefix)[:f.Width])
-				prefixLen = f.Width
+				sb.WriteString(seg.Text)
 			}
-			total = prefixLen + textLen
-		}
-		padding := f.Width - total
-		sb.WriteString("│")
-		if prefixLen > 0 {
-			sb.WriteString(colorPrompt + line.Prefix + colorReset)
-		}
-		sb.WriteString(line.Text)
-		sb.WriteString(strings.Repeat(" ", padding))
-		sb.WriteString("│\n")
-	}
-
-	// Prompt line — prefix (blue), on-path input (green), off-path input
-	// (white), then a block cursor at the typing position.
-	prefix := f.PromptPrefix
-	onPath := f.PromptInputOn
-	offPath := f.PromptInputOff
-	prefixLen := utf8.RuneCountInString(prefix)
-	onLen := utf8.RuneCountInString(onPath)
-	offLen := utf8.RuneCountInString(offPath)
-	const cursorWidth = 1
-	totalLen := prefixLen + onLen + offLen + cursorWidth
-	if totalLen > f.Width {
-		// Truncate from the right: off-path first, then on-path, then prefix.
-		excess := totalLen - f.Width
-		if offLen >= excess {
-			offPath = string([]rune(offPath)[:offLen-excess])
-			offLen -= excess
-		} else {
-			excess -= offLen
-			offPath = ""
-			offLen = 0
-			if onLen >= excess {
-				onPath = string([]rune(onPath)[:onLen-excess])
-				onLen -= excess
-			} else {
-				onPath = ""
-				onLen = 0
-				prefix = string([]rune(prefix)[:f.Width-cursorWidth])
-				prefixLen = f.Width - cursorWidth
-			}
-		}
-		totalLen = prefixLen + onLen + offLen + cursorWidth
-	}
-	padding := f.Width - totalLen
-	cursorColor := colorWhite
-	if f.CursorOnPath {
-		cursorColor = colorGreen
-	}
-	sb.WriteString("│")
-	sb.WriteString(colorPrompt + prefix + colorReset)
-	if onLen > 0 {
-		sb.WriteString(colorGreen + onPath + colorReset)
-	}
-	if offLen > 0 {
-		sb.WriteString(colorWhite + offPath + colorReset)
-	}
-	sb.WriteString(cursorColor + "█" + colorReset)
-	sb.WriteString(strings.Repeat(" ", padding))
-	sb.WriteString("│\n")
-
-	sb.WriteString("└" + border + "┘\n")
-
-	// Thought line below the box.
-	if f.Thought != "" {
-		sb.WriteString(colorDim + f.Thought + colorReset + "\n")
-	} else {
-		sb.WriteString("\n")
-	}
-
-	// Keyboard
-	sb.WriteString("\n")
-	sb.WriteString(renderANSIKeyboard(f.ValidKeys, f.HintKey))
-
-	return sb.String()
-}
-
-// renderDialogLineANSI emits a dialog line with backtick-marked spans
-// highlighted in bold green (matching keyboard hints).
-func renderDialogLineANSI(line DialogLine) string {
-	baseColor := dialogColorsANSI[line.ColorIdx%len(dialogColorsANSI)]
-	parts := strings.Split(line.Text, "`")
-	var sb strings.Builder
-	for i, p := range parts {
-		if i%2 == 1 {
-			sb.WriteString(colorGreen + p + colorReset)
-		} else {
-			sb.WriteString(baseColor + p + colorReset)
-		}
-	}
-	return sb.String()
-}
-
-func renderANSIKeyboard(valid []process.Datum, hint process.Datum) string {
-	validSet := buildDatumSet(valid)
-
-	var sb strings.Builder
-
-	// Letter rows
-	indents := []string{" ", "  ", "   "}
-	for row, keys := range keyboardRows {
-		sb.WriteString(indents[row])
-		for i, key := range keys {
-			if i > 0 {
-				sb.WriteString(" ")
-			}
-			datum := process.Chars(key)
-			sb.WriteString(colorKeyANSI(key, datum, validSet, hint))
 		}
 		sb.WriteString("\n")
 	}
-
-	// Special keys row
-	sb.WriteString(" ")
-	for i, sk := range specialKeys {
-		if i > 0 {
-			sb.WriteString(" ")
-		}
-		label := "[" + sk.label + "]"
-		sb.WriteString(colorKeyANSI(label, sk.datum, validSet, hint))
-	}
-	sb.WriteString("\n")
-
 	return sb.String()
 }
 
-func colorKeyANSI(label string, datum process.Datum, validSet datumSet, hint process.Datum) string {
-	if hint != nil && datumEqual(datum, hint) {
-		return colorGreen + label + colorReset
+// ansiOpen returns the ANSI escape that opens a span of the given style.
+// Empty string means "no styling" — the renderer omits the escape and the
+// trailing reset entirely.
+func ansiOpen(style Style, batchIdx int) string {
+	switch style {
+	case StyleBox, StyleDim:
+		return colorDim
+	case StylePrompt:
+		return colorPrompt
+	case StylePromptOff, StyleCursorOff, StyleKeyValid:
+		return colorWhite
+	case StyleOnPath, StyleCursorOn:
+		return colorGreen
+	case StyleDialog:
+		return dialogColorsANSI[batchIdx%len(dialogColorsANSI)]
+	case StyleKeyDim:
+		return colorDim
 	}
-	if validSet.contains(datum) {
-		return colorWhite + label + colorReset
-	}
-	return colorDim + label + colorReset
+	return ""
 }

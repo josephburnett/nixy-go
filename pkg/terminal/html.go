@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"html"
 	"strings"
-	"unicode/utf8"
-
-	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
 // dialogColorCount must match the number of dialog-N CSS classes in style.css.
@@ -15,185 +12,55 @@ const dialogColorCount = 4
 // HTMLRenderer renders frames as HTML with CSS classes for styling.
 type HTMLRenderer struct{}
 
-func NewHTML() *HTMLRenderer {
-	return &HTMLRenderer{}
-}
+func NewHTML() *HTMLRenderer { return &HTMLRenderer{} }
 
 func (h *HTMLRenderer) Render(f Frame) string {
 	var sb strings.Builder
-	border := strings.Repeat("─", f.Width)
-
 	sb.WriteString("<pre>")
-
-	// Dialog area — padded to fixed height so terminal stays put
-	blankLines := f.DialogSpace - len(f.Dialog)
-	for i := 0; i < blankLines; i++ {
-		sb.WriteString("\n")
-	}
-	for _, line := range f.Dialog {
-		sb.WriteString(renderDialogLineHTML(line) + "\n")
-	}
-
-	// Hint line — always occupies 1 line (blank if no hint)
-	if f.Hint != "" {
-		sb.WriteString(`<span class="hint">` + html.EscapeString(f.Hint) + "</span>\n")
-	} else {
-		sb.WriteString("\n")
-	}
-
-	// Box top
-	sb.WriteString(`<span class="box">┌` + border + "┐</span>\n")
-
-	// Display lines (bottom-aligned: blank lines at top, content above prompt)
-	blankCount := f.Height - len(f.DisplayLines)
-	for i := 0; i < blankCount; i++ {
-		sb.WriteString(`<span class="box">│</span>` + strings.Repeat(" ", f.Width) + `<span class="box">│</span>` + "\n")
-	}
-	for _, line := range f.DisplayLines {
-		prefixLen := utf8.RuneCountInString(line.Prefix)
-		textLen := utf8.RuneCountInString(line.Text)
-		total := prefixLen + textLen
-		if total > f.Width {
-			excess := total - f.Width
-			if textLen >= excess {
-				line.Text = string([]rune(line.Text)[:textLen-excess])
-				textLen -= excess
+	for _, line := range Layout(f) {
+		for _, seg := range line {
+			class := htmlClass(seg.Style, seg.BatchIdx)
+			text := html.EscapeString(seg.Text)
+			if class != "" {
+				sb.WriteString(`<span class="`)
+				sb.WriteString(class)
+				sb.WriteString(`">`)
+				sb.WriteString(text)
+				sb.WriteString(`</span>`)
 			} else {
-				line.Text = ""
-				textLen = 0
-				line.Prefix = string([]rune(line.Prefix)[:f.Width])
-				prefixLen = f.Width
-			}
-			total = prefixLen + textLen
-		}
-		padding := f.Width - total
-		sb.WriteString(`<span class="box">│</span>`)
-		if prefixLen > 0 {
-			sb.WriteString(`<span class="prompt">` + html.EscapeString(line.Prefix) + "</span>")
-		}
-		sb.WriteString(html.EscapeString(line.Text))
-		sb.WriteString(strings.Repeat(" ", padding))
-		sb.WriteString(`<span class="box">│</span>` + "\n")
-	}
-
-	// Prompt line — prefix (blue), on-path input (green), off-path input
-	// (white), then a block cursor at the typing position.
-	prefix := f.PromptPrefix
-	onPath := f.PromptInputOn
-	offPath := f.PromptInputOff
-	prefixLen := utf8.RuneCountInString(prefix)
-	onLen := utf8.RuneCountInString(onPath)
-	offLen := utf8.RuneCountInString(offPath)
-	const cursorWidth = 1
-	totalLen := prefixLen + onLen + offLen + cursorWidth
-	if totalLen > f.Width {
-		excess := totalLen - f.Width
-		if offLen >= excess {
-			offPath = string([]rune(offPath)[:offLen-excess])
-			offLen -= excess
-		} else {
-			excess -= offLen
-			offPath = ""
-			offLen = 0
-			if onLen >= excess {
-				onPath = string([]rune(onPath)[:onLen-excess])
-				onLen -= excess
-			} else {
-				onPath = ""
-				onLen = 0
-				prefix = string([]rune(prefix)[:f.Width-cursorWidth])
-				prefixLen = f.Width - cursorWidth
+				sb.WriteString(text)
 			}
 		}
-		totalLen = prefixLen + onLen + offLen + cursorWidth
-	}
-	padding := f.Width - totalLen
-	cursorClass := "cursor-off"
-	if f.CursorOnPath {
-		cursorClass = "cursor-on"
-	}
-	sb.WriteString(`<span class="box">│</span>`)
-	sb.WriteString(`<span class="prompt">` + html.EscapeString(prefix) + "</span>")
-	if onLen > 0 {
-		sb.WriteString(`<span class="key-hint">` + html.EscapeString(onPath) + "</span>")
-	}
-	if offLen > 0 {
-		sb.WriteString(`<span class="prompt-off">` + html.EscapeString(offPath) + "</span>")
-	}
-	sb.WriteString(`<span class="` + cursorClass + `">█</span>`)
-	sb.WriteString(strings.Repeat(" ", padding))
-	sb.WriteString(`<span class="box">│</span>` + "\n")
-
-	// Box bottom
-	sb.WriteString(`<span class="box">└` + border + "┘</span>\n")
-
-	// Thought line below the box.
-	if f.Thought != "" {
-		sb.WriteString(`<span class="hint">` + html.EscapeString(f.Thought) + "</span>\n")
-	} else {
 		sb.WriteString("\n")
 	}
-
-	// Keyboard
-	sb.WriteString("\n")
-	sb.WriteString(renderHTMLKeyboard(f.ValidKeys, f.HintKey))
-
 	sb.WriteString("</pre>")
 	return sb.String()
 }
 
-// renderDialogLineHTML emits a dialog line with backtick-marked spans
-// highlighted in bright green (matching keyboard hints).
-func renderDialogLineHTML(line DialogLine) string {
-	class := fmt.Sprintf("dialog dialog-%d", line.ColorIdx%dialogColorCount)
-	parts := strings.Split(line.Text, "`")
-	var sb strings.Builder
-	for i, p := range parts {
-		if i%2 == 1 {
-			sb.WriteString(`<span class="key-hint">` + html.EscapeString(p) + `</span>`)
-		} else {
-			sb.WriteString(`<span class="` + class + `">` + html.EscapeString(p) + `</span>`)
-		}
+// htmlClass returns the CSS class name for a span of the given style.
+// Empty string means "emit raw text without a span wrapper."
+func htmlClass(style Style, batchIdx int) string {
+	switch style {
+	case StyleBox:
+		return "box"
+	case StylePrompt:
+		return "prompt"
+	case StylePromptOff:
+		return "prompt-off"
+	case StyleOnPath:
+		return "key-hint"
+	case StyleDim:
+		return "hint"
+	case StyleCursorOn:
+		return "cursor-on"
+	case StyleCursorOff:
+		return "cursor-off"
+	case StyleKeyValid:
+		return "key-valid"
+	case StyleKeyDim:
+		return "key-dim"
+	case StyleDialog:
+		return fmt.Sprintf("dialog dialog-%d", batchIdx%dialogColorCount)
 	}
-	return sb.String()
-}
-
-func renderHTMLKeyboard(valid []process.Datum, hint process.Datum) string {
-	validSet := buildDatumSet(valid)
-	var sb strings.Builder
-
-	indents := []string{" ", "  ", "   "}
-	for row, keys := range keyboardRows {
-		sb.WriteString(indents[row])
-		for i, key := range keys {
-			if i > 0 {
-				sb.WriteString(" ")
-			}
-			datum := process.Chars(key)
-			sb.WriteString(colorKeyHTML(key, datum, validSet, hint))
-		}
-		sb.WriteString("\n")
-	}
-
-	sb.WriteString(" ")
-	for i, sk := range specialKeys {
-		if i > 0 {
-			sb.WriteString(" ")
-		}
-		label := "[" + sk.label + "]"
-		sb.WriteString(colorKeyHTML(label, sk.datum, validSet, hint))
-	}
-	sb.WriteString("\n")
-
-	return sb.String()
-}
-
-func colorKeyHTML(label string, datum process.Datum, validSet datumSet, hint process.Datum) string {
-	class := "key-dim"
-	if hint != nil && datumEqual(datum, hint) {
-		class = "key-hint"
-	} else if validSet.contains(datum) {
-		class = "key-valid"
-	}
-	return `<span class="` + class + `">` + html.EscapeString(label) + "</span>"
+	return ""
 }

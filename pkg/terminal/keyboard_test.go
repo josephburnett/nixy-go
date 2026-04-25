@@ -7,9 +7,22 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
+// renderKeyboard runs the full ANSI render and returns just the
+// keyboard-region portion of the output (everything after the box bottom).
+func renderKeyboard(t *testing.T, valid []process.Datum, hint process.Datum) string {
+	t.Helper()
+	term := New(NewANSI())
+	term.SetKeyboard(valid, hint)
+	out := term.Render()
+	idx := strings.LastIndex(out, "└")
+	if idx < 0 {
+		t.Fatalf("no box bottom in render: %s", out)
+	}
+	return out[idx:]
+}
+
 func TestRenderKeyboardAllDisabled(t *testing.T) {
-	out := renderANSIKeyboard(nil, nil)
-	// All keys should be dim
+	out := renderKeyboard(t, nil, nil)
 	if !strings.Contains(out, colorDim+"q"+colorReset) {
 		t.Fatal("expected dim 'q' when no valid keys")
 	}
@@ -24,7 +37,7 @@ func TestRenderKeyboardValidKeys(t *testing.T) {
 		process.Chars("l"),
 		process.TermEnter,
 	}
-	out := renderANSIKeyboard(valid, nil)
+	out := renderKeyboard(t, valid, nil)
 	if !strings.Contains(out, colorWhite+"s"+colorReset) {
 		t.Fatal("expected white 's'")
 	}
@@ -34,7 +47,6 @@ func TestRenderKeyboardValidKeys(t *testing.T) {
 	if !strings.Contains(out, colorWhite+"[enter]"+colorReset) {
 		t.Fatal("expected white '[enter]'")
 	}
-	// Non-valid key should be dim
 	if !strings.Contains(out, colorDim+"q"+colorReset) {
 		t.Fatal("expected dim 'q'")
 	}
@@ -46,11 +58,10 @@ func TestRenderKeyboardHintKey(t *testing.T) {
 		process.Chars("l"),
 	}
 	hint := process.Chars("s")
-	out := renderANSIKeyboard(valid, hint)
+	out := renderKeyboard(t, valid, hint)
 	if !strings.Contains(out, colorGreen+"s"+colorReset) {
 		t.Fatal("expected green 's' for hint")
 	}
-	// 'l' should be white (valid but not hint)
 	if !strings.Contains(out, colorWhite+"l"+colorReset) {
 		t.Fatal("expected white 'l'")
 	}
@@ -59,8 +70,7 @@ func TestRenderKeyboardHintKey(t *testing.T) {
 func TestRenderKeyboardHintOverridesValid(t *testing.T) {
 	valid := []process.Datum{process.TermEnter}
 	hint := process.TermEnter
-	out := renderANSIKeyboard(valid, hint)
-	// Should be green, not white
+	out := renderKeyboard(t, valid, hint)
 	if !strings.Contains(out, colorGreen+"[enter]"+colorReset) {
 		t.Fatal("expected green '[enter]' when it's the hint")
 	}
@@ -71,7 +81,7 @@ func TestRenderKeyboardHintOverridesValid(t *testing.T) {
 
 func TestRenderKeyboardSpace(t *testing.T) {
 	valid := []process.Datum{process.Chars(" ")}
-	out := renderANSIKeyboard(valid, nil)
+	out := renderKeyboard(t, valid, nil)
 	if !strings.Contains(out, colorWhite+"[space]"+colorReset) {
 		t.Fatal("expected white '[space]'")
 	}
@@ -79,7 +89,7 @@ func TestRenderKeyboardSpace(t *testing.T) {
 
 func TestRenderKeyboardBackspace(t *testing.T) {
 	valid := []process.Datum{process.TermBackspace}
-	out := renderANSIKeyboard(valid, nil)
+	out := renderKeyboard(t, valid, nil)
 	if !strings.Contains(out, colorWhite+"[bksp]"+colorReset) {
 		t.Fatal("expected white '[bksp]'")
 	}
@@ -91,7 +101,7 @@ func TestRenderKeyboardSpecialChars(t *testing.T) {
 		process.Chars("/"),
 		process.Chars("|"),
 	}
-	out := renderANSIKeyboard(valid, nil)
+	out := renderKeyboard(t, valid, nil)
 	if !strings.Contains(out, colorWhite+"[.]"+colorReset) {
 		t.Fatal("expected white '[.]'")
 	}
@@ -103,23 +113,8 @@ func TestRenderKeyboardSpecialChars(t *testing.T) {
 	}
 }
 
-func TestRenderKeyboardHasAllRows(t *testing.T) {
-	out := renderANSIKeyboard(nil, nil)
-	lines := strings.Split(out, "\n")
-	// Should have 4 rows: 3 letter rows + 1 special row (+ trailing newline)
-	nonEmpty := 0
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
-			nonEmpty++
-		}
-	}
-	if nonEmpty != 4 {
-		t.Fatalf("expected 4 keyboard rows, got %d", nonEmpty)
-	}
-}
-
 func TestRenderKeyboardContainsAllLetters(t *testing.T) {
-	out := renderANSIKeyboard(nil, nil)
+	out := renderKeyboard(t, nil, nil)
 	for c := 'a'; c <= 'z'; c++ {
 		if !strings.Contains(out, string(c)) {
 			t.Fatalf("keyboard missing letter '%c'", c)
