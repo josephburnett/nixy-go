@@ -112,6 +112,101 @@ func TestReflowLinesEmpty(t *testing.T) {
 	}
 }
 
+func TestWrapWordsBasic(t *testing.T) {
+	got := WrapWords("foo bar baz", 8)
+	want := []string{"foo bar", "baz"}
+	if !equalStrings(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestWrapWordsEmpty(t *testing.T) {
+	got := WrapWords("", 10)
+	if len(got) != 0 {
+		t.Fatalf("expected empty slice, got %v", got)
+	}
+}
+
+func TestWrapWordsZeroWidth(t *testing.T) {
+	got := WrapWords("hello world", 0)
+	if len(got) != 1 || got[0] != "hello world" {
+		t.Fatalf("expected single passthrough, got %v", got)
+	}
+}
+
+func TestWrapWordsBacktickAtomic(t *testing.T) {
+	// `ssh nixy` should never be split between sub-lines.
+	got := WrapWords("try `ssh nixy` here", 12)
+	for _, line := range got {
+		// A balanced line has even number of backticks.
+		count := strings.Count(line, "`")
+		if count%2 != 0 {
+			t.Fatalf("backtick span split across lines: %v (line %q has %d backticks)",
+				got, line, count)
+		}
+	}
+}
+
+func TestWrapWordsOversizeToken(t *testing.T) {
+	// A single token wider than the width must fall back to char wrap.
+	got := WrapWords("abcdefghij", 4)
+	want := []string{"abcd", "efgh", "ij"}
+	if !equalStrings(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestTokenizeWords(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"a b c", []string{"a", "b", "c"}},
+		{"a `b c` d", []string{"a", "`b c`", "d"}},
+		{"  spaced  ", []string{"spaced"}},
+		{"", nil},
+	}
+	for _, c := range cases {
+		got := tokenizeWords(c.in)
+		if !equalStrings(got, c.want) {
+			t.Errorf("tokenizeWords(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestTruncateRunes(t *testing.T) {
+	cases := []struct {
+		in    string
+		width int
+		want  string
+	}{
+		{"hello", 10, "hello"},
+		{"hello", 5, "hello"},
+		{"hello", 3, "hel"},
+		{"", 5, ""},
+		{"abc", 0, ""},
+		{"日本語", 2, "日本"},
+	}
+	for _, c := range cases {
+		got := TruncateRunes(c.in, c.width)
+		if got != c.want {
+			t.Errorf("TruncateRunes(%q, %d) = %q, want %q", c.in, c.width, got, c.want)
+		}
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestRenderReflowOnResize(t *testing.T) {
 	// Verify that resizing the terminal reflows content
 	// Default screen is 57 wide (55 content + 2 borders)

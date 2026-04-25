@@ -277,6 +277,191 @@ func TestRenderScrolling(t *testing.T) {
 	}
 }
 
+// TestRenderLayoutHeightInvariant pins the "stable layout" property: for a
+// given ScreenHeight, the rendered line count is constant regardless of
+// frame content (dialog density, hint, thought, typed input). The terminal
+// box must not bump around when dialog accumulates or hints appear.
+func TestRenderLayoutHeightInvariant(t *testing.T) {
+	const w, h = 80, 24
+	configs := []struct {
+		name string
+		fill func(*T)
+	}{
+		{"empty", func(*T) {}},
+		{"dialog heavy", func(t *T) {
+			for i := 0; i < 10; i++ {
+				t.SetDialog([]string{"line " + string(rune('a'+i))})
+			}
+		}},
+		{"with hint and thought", func(t *T) {
+			t.Hint(errInvalid("oops"))
+			t.SetThought("doing something")
+		}},
+		{"with input and history", func(t *T) {
+			t.Write(process.Data{process.Chars("output\n")})
+			t.Write(process.Data{process.Chars("typing")})
+		}},
+	}
+	var baseline int
+	for i, c := range configs {
+		t.Run(c.name, func(t *testing.T) {
+			term := New(NewANSI())
+			term.Resize(w, h)
+			c.fill(term)
+			out := term.Render()
+			gotLines := strings.Count(out, "\n")
+			if i == 0 {
+				baseline = gotLines
+				return
+			}
+			if gotLines != baseline {
+				t.Fatalf("layout shifted: %q rendered %d lines, baseline %d",
+					c.name, gotLines, baseline)
+			}
+		})
+	}
+}
+
+// TestRenderPromptCursorAndPath pins the cursor + on/off-path coloring so
+// the upcoming layout refactor doesn't lose them.
+func TestRenderPromptCursorAndPath(t *testing.T) {
+	tests := []struct {
+		name        string
+		setup       func(*T)
+		wantCursor  string // "green" or "white"
+		wantOnGreen string // substring expected to be wrapped in green
+		wantOffWhite string
+	}{
+		{
+			name: "empty input white cursor",
+			setup: func(t *T) {
+				t.State.HintKey = nil
+			},
+			wantCursor: "white",
+		},
+		{
+			name: "on path cursor green when hint is char",
+			setup: func(t *T) {
+				t.State.Line = "p"
+				t.State.PromptTarget = "pwd"
+				t.State.HintKey = process.Chars("w")
+			},
+			wantCursor:  "green",
+			wantOnGreen: "p",
+		},
+		{
+			name: "off path turns later input white",
+			setup: func(t *T) {
+				t.State.Line = "px"
+				t.State.PromptTarget = "pwd"
+				t.State.HintKey = process.TermBackspace
+			},
+			wantCursor:   "white",
+			wantOnGreen:  "p",
+			wantOffWhite: "x",
+		},
+		{
+			name: "no hint cursor white",
+			setup: func(t *T) {
+				t.State.Line = "anything"
+				t.State.HintKey = nil
+			},
+			wantCursor:   "white",
+			wantOffWhite: "anything",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			term := New(NewANSI())
+			term.Resize(80, 24)
+			tc.setup(term)
+			out := term.Render()
+
+			// Find the cursor block and inspect the color escape preceding it.
+			cursorIdx := strings.Index(out, "█")
+			if cursorIdx < 0 {
+				t.Fatalf("expected cursor in output, got:\n%s", out)
+			}
+			before := out[:cursorIdx]
+			lastEsc := strings.LastIndex(before, "\033[")
+			if lastEsc < 0 {
+				t.Fatalf("expected color escape before cursor, got:\n%s", out)
+			}
+			cursorPrefix := before[lastEsc:]
+			switch tc.wantCursor {
+			case "green":
+				if !strings.HasPrefix(cursorPrefix, colorGreen) {
+					t.Errorf("expected green cursor, got escape %q", cursorPrefix)
+				}
+			case "white":
+				if !strings.HasPrefix(cursorPrefix, colorWhite) {
+					t.Errorf("expected white cursor, got escape %q", cursorPrefix)
+				}
+			}
+
+			if tc.wantOnGreen != "" {
+				want := colorGreen + tc.wantOnGreen + colorReset
+				if !strings.Contains(out, want) {
+					t.Errorf("expected on-path span %q in output", want)
+				}
+			}
+			if tc.wantOffWhite != "" {
+				want := colorWhite + tc.wantOffWhite + colorReset
+				if !strings.Contains(out, want) {
+					t.Errorf("expected off-path span %q in output", want)
+				}
+			}
+		})
+	}
+}
+
+// TestRenderActivePromptPrefixBlue pins the active prompt prefix color.
+func TestRenderActivePromptPrefixBlue(t *testing.T) {
+	term := New(NewANSI())
+	term.Resize(80, 24)
+	term.State.Prompt = "user@nixy:/"
+	out := term.Render()
+	want := colorPrompt + "user@nixy:/> " + colorReset
+	if !strings.Contains(out, want) {
+		t.Fatalf("expected blue active prompt %q in output", want)
+	}
+}
+
+// TestRenderHistoryPromptBlue pins the historical prompt prefix color so
+// old commands stay distinguishable from output.
+func TestRenderHistoryPromptBlue(t *testing.T) {
+	term := New(NewANSI())
+	term.Resize(80, 24)
+	term.State.Prompt = "user@nixy:/"
+	term.Write(process.Data{process.Chars("ls")})
+	term.Write(process.Data{process.TermEnter})
+	out := term.Render()
+	// History line should have the prefix in blue, then "ls" in plain.
+	want := colorPrompt + "user@nixy:/> " + colorReset
+	if !strings.Contains(out, want) {
+		t.Fatalf("expected blue history prompt prefix in output, got:\n%s", out)
+	}
+}
+
+// TestRenderThoughtBelowBox pins the thought line position between the
+// terminal box and the keyboard.
+func TestRenderThoughtBelowBox(t *testing.T) {
+	term := New(NewANSI())
+	term.Resize(80, 24)
+	term.SetThought("here is a thought")
+	out := term.Render()
+	thoughtIdx := strings.Index(out, "here is a thought")
+	boxBottomIdx := strings.Index(out, "└")
+	keyboardIdx := strings.Index(out, "[space]")
+	if thoughtIdx < 0 || boxBottomIdx < 0 || keyboardIdx < 0 {
+		t.Fatalf("expected thought, box bottom, and keyboard in output, got:\n%s", out)
+	}
+	if !(boxBottomIdx < thoughtIdx && thoughtIdx < keyboardIdx) {
+		t.Fatalf("thought should sit between box bottom (%d) and keyboard (%d), got at %d",
+			boxBottomIdx, keyboardIdx, thoughtIdx)
+	}
+}
+
 func TestRenderLineTruncation(t *testing.T) {
 	term := New(NewANSI())
 	long := strings.Repeat("x", 100)
