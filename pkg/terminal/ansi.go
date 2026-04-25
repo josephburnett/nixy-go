@@ -16,11 +16,11 @@ const (
 )
 
 // dialogColorsANSI cycles for each new dialog batch so the user can see when
-// a fresh message has arrived.
+// a fresh message has arrived. Green is intentionally absent — it would
+// clash with the bold-green highlight used for backtick command spans.
 var dialogColorsANSI = []string{
 	"\033[31m", // red
 	"\033[33m", // yellow
-	"\033[32m", // green
 	"\033[34m", // blue
 	"\033[35m", // purple
 }

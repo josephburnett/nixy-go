@@ -19,6 +19,7 @@ type State struct {
 	Lines        []string
 	Prompt       string // e.g. "user@nixy", updated by session on hostname changes
 	Hint         error
+	Thought      string // shown in the hint slot when Hint is nil
 	Dialog       []DialogLine
 	NextColorIdx int
 	ValidKeys    []process.Datum

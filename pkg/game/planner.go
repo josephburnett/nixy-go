@@ -1,6 +1,9 @@
 package game
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
@@ -46,4 +49,53 @@ func PlanHint(
 	}
 
 	return nil
+}
+
+// PlanThought returns the player's "internal monologue" describing what
+// the next planned command will accomplish. Bridges the gap between Nixy's
+// dialog and the keyboard hint.
+func PlanThought(target string) string {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return ""
+	}
+	if strings.Contains(target, "|") {
+		return "I need to chain some commands together"
+	}
+	fields := strings.Fields(target)
+	switch fields[0] {
+	case "ssh":
+		if len(fields) > 1 {
+			return fmt.Sprintf("I need to connect to %s", fields[1])
+		}
+	case "exit":
+		return "I need to disconnect from this machine"
+	case "pwd":
+		return "I need to print the current working directory"
+	case "ls":
+		return "I need to list files here"
+	case "cd":
+		if len(fields) > 1 {
+			return fmt.Sprintf("I need to change into %s", fields[1])
+		}
+	case "cat":
+		return "I need to read this file"
+	case "grep":
+		return "I need to search for a pattern"
+	case "apt":
+		if len(fields) >= 3 && fields[1] == "install" {
+			return fmt.Sprintf("I need to install %s", fields[2])
+		}
+	case "rm":
+		return "I need to delete a file"
+	case "touch":
+		return "I need to create a file"
+	case "mv":
+		return "I need to move a file"
+	case "sudo":
+		if len(fields) > 1 {
+			return fmt.Sprintf("I need elevated permissions to run %s", fields[1])
+		}
+	}
+	return ""
 }

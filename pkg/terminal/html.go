@@ -10,7 +10,7 @@ import (
 )
 
 // dialogColorCount must match the number of dialog-N CSS classes in style.css.
-const dialogColorCount = 5
+const dialogColorCount = 4
 
 // HTMLRenderer renders frames as HTML with CSS classes for styling.
 type HTMLRenderer struct{}

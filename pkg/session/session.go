@@ -143,4 +143,5 @@ func (s *Session) updateTerminal(t *terminal.T) {
 	valid := s.Guide.Next()
 	hint := s.Game.GetHint(s.Shell.Hostname(), s.Shell.CurrentDirectory(), s.Shell.CurrentCommand())
 	t.SetKeyboard(valid, hint)
+	t.SetThought(s.Game.GetThought(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 }

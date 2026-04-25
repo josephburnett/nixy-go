@@ -46,6 +46,10 @@ func (t *T) Hint(err error) {
 	t.State.Hint = err
 }
 
+func (t *T) SetThought(s string) {
+	t.State.Thought = s
+}
+
 func (t *T) SetDialog(lines []string) {
 	if len(lines) == 0 {
 		return
@@ -72,9 +76,13 @@ func (t *T) Render() string {
 	}
 	termContentHeight := termBoxHeight - boxBorders
 
+	// Hint slot: errors take priority, otherwise show the player's current
+	// thought (a natural-language hint bridging dialog and the keyboard).
 	hintStr := ""
 	if t.State.Hint != nil {
 		hintStr = t.State.Hint.Error()
+	} else if t.State.Thought != "" {
+		hintStr = "(" + t.State.Thought + "...)"
 	}
 
 	// Dialog fills remaining space above the hint + terminal box
