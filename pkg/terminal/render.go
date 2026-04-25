@@ -11,7 +11,7 @@ type Frame struct {
 	CursorOnPath   bool   // green block cursor when true, white otherwise
 	Dialog         []DialogLine
 	DialogSpace    int // total lines allocated for dialog (pad with blank lines)
-	Hint           string
+	Notice         string // shown on the line above the terminal box
 	Thought        string // shown on its own line below the terminal box
 	ValidKeys      []process.Datum
 	HintKey        process.Datum

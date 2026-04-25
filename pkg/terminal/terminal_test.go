@@ -168,21 +168,21 @@ func TestRenderDialog(t *testing.T) {
 	}
 }
 
-func TestRenderHintNil(t *testing.T) {
+func TestRenderNoticeEmpty(t *testing.T) {
 	term := New(NewANSI())
-	term.Hint(nil)
+	term.Notify("")
 	out := term.Render()
 	if strings.Contains(out, "invalid") {
-		t.Fatal("should not show hint when nil")
+		t.Fatal("should not show notice when empty")
 	}
 }
 
-func TestRenderHintWithError(t *testing.T) {
+func TestRenderNoticeWithMessage(t *testing.T) {
 	term := New(NewANSI())
-	term.Hint(errInvalid("invalid input"))
+	term.Notify("invalid input")
 	out := term.Render()
 	if !strings.Contains(out, "invalid input") {
-		t.Fatalf("expected hint in render, got:\n%s", out)
+		t.Fatalf("expected notice in render, got:\n%s", out)
 	}
 }
 
@@ -241,23 +241,19 @@ func TestRenderDialogAboveBox(t *testing.T) {
 	}
 }
 
-func TestRenderHintAboveBox(t *testing.T) {
+func TestRenderNoticeAboveBox(t *testing.T) {
 	term := New(NewANSI())
-	term.Hint(errInvalid("oops"))
+	term.Notify("oops")
 	out := term.Render()
-	hintIdx := strings.Index(out, "oops")
+	noticeIdx := strings.Index(out, "oops")
 	boxIdx := strings.Index(out, "┌")
-	if hintIdx < 0 || boxIdx < 0 {
-		t.Fatalf("expected hint and box in output, got:\n%s", out)
+	if noticeIdx < 0 || boxIdx < 0 {
+		t.Fatalf("expected notice and box in output, got:\n%s", out)
 	}
-	if hintIdx > boxIdx {
-		t.Fatal("hint should appear above the terminal box")
+	if noticeIdx > boxIdx {
+		t.Fatal("notice should appear above the terminal box")
 	}
 }
-
-type errInvalid string
-
-func (e errInvalid) Error() string { return string(e) }
 
 func TestRenderScrolling(t *testing.T) {
 	term := New(NewANSI())
@@ -293,8 +289,8 @@ func TestRenderLayoutHeightInvariant(t *testing.T) {
 				t.SetDialog([]string{"line " + string(rune('a'+i))})
 			}
 		}},
-		{"with hint and thought", func(t *T) {
-			t.Hint(errInvalid("oops"))
+		{"with notice and thought", func(t *T) {
+			t.Notify("oops")
 			t.SetThought("doing something")
 		}},
 		{"with input and history", func(t *T) {

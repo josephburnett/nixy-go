@@ -28,7 +28,7 @@ type State struct {
 	Lines        []HistoryLine
 	Prompt       string // e.g. "user@nixy:/home/nixy", updated by session
 	PromptTarget string // full planned command, used to highlight on-path typing
-	Hint         error
+	Notice       string // shown above the box (errors, Ctrl+C confirmations)
 	Thought      string // natural-language hint shown below the terminal
 	Dialog       []DialogLine
 	NextColorIdx int

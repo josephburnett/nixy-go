@@ -22,9 +22,9 @@ func Layout(f Frame) []RenderedLine {
 		lines = append(lines, layoutDialogLine(dl))
 	}
 
-	// Hint slot above the box (errors, Ctrl+C confirmations).
-	if f.Hint != "" {
-		lines = append(lines, RenderedLine{{Text: f.Hint, Style: StyleDim}})
+	// Notice slot above the box (errors, Ctrl+C confirmations).
+	if f.Notice != "" {
+		lines = append(lines, RenderedLine{{Text: f.Notice, Style: StyleDim}})
 	} else {
 		lines = append(lines, nil)
 	}

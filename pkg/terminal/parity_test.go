@@ -38,14 +38,10 @@ func loadedTerm(r Renderer) *T {
 	// Two dialog batches; second has a backtick command span
 	t.SetDialog([]string{"first batch line"})
 	t.SetDialog([]string{"second batch with `pwd` highlight"})
-	t.State.Hint = errInvalidParity("a notice")
+	t.Notify("a notice")
 	t.State.Thought = "I need to print the current working directory"
 	return t
 }
-
-type errInvalidParity string
-
-func (e errInvalidParity) Error() string { return string(e) }
 
 // TestRenderersProduceParallelStructure feeds an identical Frame to ANSI
 // and HTML and asserts the visible text is structurally equivalent.

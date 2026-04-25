@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -68,7 +67,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			m.lastCtrlC = time.Now()
-			m.terminal.Hint(errors.New("Press Ctrl+C again to exit"))
+			m.terminal.Notify("Press Ctrl+C again to exit")
 			return m, nil
 		case tea.KeyEnter:
 			datum = process.TermEnter

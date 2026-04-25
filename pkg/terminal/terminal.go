@@ -43,12 +43,22 @@ func (t *T) Write(in process.Data) error {
 	return t.State.Write(in)
 }
 
-func (t *T) Hint(err error) {
-	t.State.Hint = err
+// Notify sets the line shown above the terminal box. Empty string clears it.
+// Used for errors (e.g. Ctrl+C confirmation), not for ongoing planner hints.
+func (t *T) Notify(msg string) {
+	t.State.Notice = msg
 }
 
 func (t *T) SetThought(s string) {
 	t.State.Thought = s
+}
+
+func (t *T) SetPrompt(s string) {
+	t.State.Prompt = s
+}
+
+func (t *T) SetPromptTarget(s string) {
+	t.State.PromptTarget = s
 }
 
 func (t *T) SetDialog(lines []string) {
@@ -77,11 +87,11 @@ func (t *T) Render() string {
 	}
 	termContentHeight := termBoxHeight - boxBorders
 
-	// Hint and thought are single-line slots — truncate to fit so wrapping
+	// Notice and thought are single-line slots — truncate to fit so wrapping
 	// doesn't push the rest of the layout around.
-	hintStr := ""
-	if t.State.Hint != nil {
-		hintStr = TruncateRunes(t.State.Hint.Error(), contentWidth)
+	noticeStr := ""
+	if t.State.Notice != "" {
+		noticeStr = TruncateRunes(t.State.Notice, contentWidth)
 	}
 	thoughtStr := ""
 	if t.State.Thought != "" {
@@ -128,7 +138,7 @@ func (t *T) Render() string {
 		CursorOnPath:   cursorOnPath,
 		Dialog:         dialogToShow,
 		DialogSpace:    dialogSpace,
-		Hint:           hintStr,
+		Notice:         noticeStr,
 		Thought:        thoughtStr,
 		ValidKeys:      t.State.ValidKeys,
 		HintKey:        t.State.HintKey,
