@@ -22,13 +22,6 @@ func Layout(f Frame) []RenderedLine {
 		lines = append(lines, layoutDialogLine(dl))
 	}
 
-	// Notice slot above the box (errors, Ctrl+C confirmations).
-	if f.Notice != "" {
-		lines = append(lines, RenderedLine{{Text: f.Notice, Style: StyleDim}})
-	} else {
-		lines = append(lines, nil)
-	}
-
 	// Box top border.
 	lines = append(lines, RenderedLine{{Text: "┌" + strings.Repeat("─", f.Width) + "┐", Style: StyleBox}})
 
@@ -49,9 +42,13 @@ func Layout(f Frame) []RenderedLine {
 	// Box bottom.
 	lines = append(lines, RenderedLine{{Text: "└" + strings.Repeat("─", f.Width) + "┘", Style: StyleBox}})
 
-	// Thought slot below the box.
-	if f.Thought != "" {
-		lines = append(lines, RenderedLine{{Text: f.Thought, Style: StyleDim}})
+	// Status slot below the box: notice if set, otherwise thought.
+	if f.Status != "" {
+		style := StyleDim
+		if f.StatusIsNotice {
+			style = StyleNotice
+		}
+		lines = append(lines, RenderedLine{{Text: f.Status, Style: style}})
 	} else {
 		lines = append(lines, nil)
 	}

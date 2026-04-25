@@ -49,8 +49,10 @@ func (a *ANSIRenderer) Render(f Frame) string {
 // trailing reset entirely.
 func ansiOpen(style Style, batchIdx int) string {
 	switch style {
-	case StyleBox, StyleDim:
+	case StyleBox, StyleDim, StyleKeyDim:
 		return colorDim
+	case StyleNotice:
+		return colorWhite
 	case StylePrompt:
 		return colorPrompt
 	case StylePromptOff, StyleCursorOff, StyleKeyValid:
@@ -59,8 +61,6 @@ func ansiOpen(style Style, batchIdx int) string {
 		return colorGreen
 	case StyleDialog:
 		return dialogColorsANSI[batchIdx%len(dialogColorsANSI)]
-	case StyleKeyDim:
-		return colorDim
 	}
 	return ""
 }

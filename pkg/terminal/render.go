@@ -11,8 +11,8 @@ type Frame struct {
 	CursorOnPath   bool   // green block cursor when true, white otherwise
 	Dialog         []DialogLine
 	DialogSpace    int // total lines allocated for dialog (pad with blank lines)
-	Notice         string // shown on the line above the terminal box
-	Thought        string // shown on its own line below the terminal box
+	Status         string // single status line below the box
+	StatusIsNotice bool   // true: notice (errors/Ctrl+C); false: thought
 	ValidKeys      []process.Datum
 	HintKey        process.Datum
 	Width          int
@@ -35,7 +35,8 @@ const (
 	StylePromptOff      // white off-path input
 	StyleOnPath         // bold green: on-path input, hint key, command markers
 	StyleDialog         // dialog batch color (uses BatchIdx)
-	StyleDim            // hint, thought
+	StyleDim            // thought (faded grey)
+	StyleNotice         // notice line (errors, Ctrl+C) — slightly more prominent
 	StyleCursorOn       // green cursor block
 	StyleCursorOff      // white cursor block
 	StyleKeyValid       // bold white keyboard key

@@ -33,6 +33,10 @@ type model struct {
 
 const ctrlCWindow = 2 * time.Second
 
+// noticeExpireMsg is dispatched by a tea.Tick after a Ctrl+C so the
+// "Press Ctrl+C again" notice clears once the window has elapsed.
+type noticeExpireMsg struct{ at time.Time }
+
 func initialModel() (model, error) {
 	sess, err := session.New()
 	if err != nil {
@@ -57,6 +61,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.terminal.Resize(msg.Width, msg.Height)
 
+	case noticeExpireMsg:
+		// Clear only if no later Ctrl+C reset the window after this tick
+		// was scheduled.
+		if !msg.at.Before(m.lastCtrlC.Add(ctrlCWindow)) {
+			m.terminal.Notify("")
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		var datum process.Datum
 
@@ -68,7 +80,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.lastCtrlC = time.Now()
 			m.terminal.Notify("Press Ctrl+C again to exit")
-			return m, nil
+			return m, tea.Tick(ctrlCWindow, func(t time.Time) tea.Msg {
+				return noticeExpireMsg{at: t}
+			})
 		case tea.KeyEnter:
 			datum = process.TermEnter
 		case tea.KeyBackspace:

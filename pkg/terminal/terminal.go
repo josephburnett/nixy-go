@@ -7,8 +7,7 @@ import (
 const (
 	// Fixed layout constants
 	boxBorders    = 3 // top border + bottom border + prompt line
-	hintLine      = 1 // always reserved, even when empty
-	thoughtLine   = 1 // always reserved, below the terminal box
+	statusLine    = 1 // below the box: notice (errors etc) or thought
 	keyboardLines = 6 // 3 letter rows + 1 special row + 1 blank + 1 trailing
 )
 
@@ -87,19 +86,22 @@ func (t *T) Render() string {
 	}
 	termContentHeight := termBoxHeight - boxBorders
 
-	// Notice and thought are single-line slots — truncate to fit so wrapping
-	// doesn't push the rest of the layout around.
-	noticeStr := ""
-	if t.State.Notice != "" {
-		noticeStr = TruncateRunes(t.State.Notice, contentWidth)
-	}
-	thoughtStr := ""
-	if t.State.Thought != "" {
-		thoughtStr = TruncateRunes("("+t.State.Thought+"...)", contentWidth)
+	// Single status slot below the box: notice takes priority over thought.
+	// Both truncate to width so wrapping never pushes the rest of the
+	// layout around.
+	statusStr := ""
+	statusIsNotice := false
+	switch {
+	case t.State.Notice != "":
+		statusStr = TruncateRunes(t.State.Notice, contentWidth)
+		statusIsNotice = true
+	case t.State.Thought != "":
+		statusStr = TruncateRunes("("+t.State.Thought+"...)", contentWidth)
 	}
 
-	// Dialog fills remaining space above the hint + terminal box + thought
-	dialogSpace := t.ScreenHeight - termBoxHeight - hintLine - thoughtLine - keyboardLines
+	// Dialog fills remaining space above the terminal box and below the
+	// status line + keyboard.
+	dialogSpace := t.ScreenHeight - termBoxHeight - statusLine - keyboardLines
 	if dialogSpace < 0 {
 		dialogSpace = 0
 	}
@@ -138,8 +140,8 @@ func (t *T) Render() string {
 		CursorOnPath:   cursorOnPath,
 		Dialog:         dialogToShow,
 		DialogSpace:    dialogSpace,
-		Notice:         noticeStr,
-		Thought:        thoughtStr,
+		Status:         statusStr,
+		StatusIsNotice: statusIsNotice,
 		ValidKeys:      t.State.ValidKeys,
 		HintKey:        t.State.HintKey,
 		Width:          contentWidth,

@@ -38,7 +38,7 @@ func loadedTerm(r Renderer) *T {
 	// Two dialog batches; second has a backtick command span
 	t.SetDialog([]string{"first batch line"})
 	t.SetDialog([]string{"second batch with `pwd` highlight"})
-	t.Notify("a notice")
+	// Only set thought (no notice) so both surfaces show the same status line.
 	t.State.Thought = "I need to print the current working directory"
 	return t
 }
@@ -78,8 +78,7 @@ func TestRenderersBothShowKeyContent(t *testing.T) {
 		"first batch line",
 		"second batch with",
 		"pwd",                      // the highlighted command
-		"a notice",                 // hint slot
-		"current working directory", // thought
+		"current working directory", // thought (status slot)
 		"user@nixy:/home/nixy>",    // active prompt
 		"ssh nixy",                 // history input
 		"Last login: Sat Jan 1",    // history output

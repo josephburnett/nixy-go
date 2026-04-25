@@ -241,17 +241,32 @@ func TestRenderDialogAboveBox(t *testing.T) {
 	}
 }
 
-func TestRenderNoticeAboveBox(t *testing.T) {
+func TestRenderNoticeBelowBox(t *testing.T) {
 	term := New(NewANSI())
 	term.Notify("oops")
 	out := term.Render()
 	noticeIdx := strings.Index(out, "oops")
-	boxIdx := strings.Index(out, "┌")
-	if noticeIdx < 0 || boxIdx < 0 {
-		t.Fatalf("expected notice and box in output, got:\n%s", out)
+	boxBottomIdx := strings.Index(out, "└")
+	if noticeIdx < 0 || boxBottomIdx < 0 {
+		t.Fatalf("expected notice and box bottom in output, got:\n%s", out)
 	}
-	if noticeIdx > boxIdx {
-		t.Fatal("notice should appear above the terminal box")
+	if noticeIdx < boxBottomIdx {
+		t.Fatal("notice should appear below the terminal box")
+	}
+}
+
+// TestRenderNoticeReplacesThought confirms the status slot prefers notice
+// over thought when both are set.
+func TestRenderNoticeReplacesThought(t *testing.T) {
+	term := New(NewANSI())
+	term.SetThought("doing something")
+	term.Notify("oops")
+	out := term.Render()
+	if !strings.Contains(out, "oops") {
+		t.Fatal("expected notice in render")
+	}
+	if strings.Contains(out, "doing something") {
+		t.Fatal("thought should be hidden when notice is set")
 	}
 }
 

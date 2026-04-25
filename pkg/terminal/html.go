@@ -51,6 +51,8 @@ func htmlClass(style Style, batchIdx int) string {
 		return "key-hint"
 	case StyleDim:
 		return "hint"
+	case StyleNotice:
+		return "notice"
 	case StyleCursorOn:
 		return "cursor-on"
 	case StyleCursorOff:

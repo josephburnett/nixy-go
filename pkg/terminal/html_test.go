@@ -54,8 +54,8 @@ func TestHTMLRenderNotice(t *testing.T) {
 	term := New(NewHTML())
 	term.Notify("bad input")
 	out := term.Render()
-	if !strings.Contains(out, `class="hint"`) {
-		t.Fatal("expected hint class")
+	if !strings.Contains(out, `class="notice"`) {
+		t.Fatal("expected notice class")
 	}
 	if !strings.Contains(out, "bad input") {
 		t.Fatal("expected notice content")
@@ -76,17 +76,17 @@ func TestHTMLRenderDialogAboveBox(t *testing.T) {
 	}
 }
 
-func TestHTMLRenderNoticeAboveBox(t *testing.T) {
+func TestHTMLRenderNoticeBelowBox(t *testing.T) {
 	term := New(NewHTML())
 	term.Notify("oops")
 	out := term.Render()
 	noticeIdx := strings.Index(out, "oops")
-	boxIdx := strings.Index(out, "┌")
-	if noticeIdx < 0 || boxIdx < 0 {
-		t.Fatalf("expected notice and box in output, got:\n%s", out)
+	boxBottomIdx := strings.Index(out, "└")
+	if noticeIdx < 0 || boxBottomIdx < 0 {
+		t.Fatalf("expected notice and box bottom in output, got:\n%s", out)
 	}
-	if noticeIdx > boxIdx {
-		t.Fatal("notice should appear above the terminal box")
+	if noticeIdx < boxBottomIdx {
+		t.Fatal("notice should appear below the terminal box")
 	}
 }
 

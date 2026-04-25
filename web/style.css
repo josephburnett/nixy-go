@@ -30,6 +30,7 @@ body {
 }
 
 .box { color: #888; }
+.notice { color: #fff; }
 .prompt { color: #6af; font-weight: bold; }
 .prompt-off { color: #fff; }
 .cursor-on { color: #0c0; }
