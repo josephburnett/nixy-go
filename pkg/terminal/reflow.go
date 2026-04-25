@@ -32,13 +32,55 @@ func WrapLine(line string, width int) []string {
 func ReflowLines(lines []string, width, height int) []string {
 	var display []string
 	for _, line := range lines {
-		wrapped := WrapLine(line, width)
-		display = append(display, wrapped...)
+		display = append(display, WrapLine(line, width)...)
 	}
 	if len(display) > height {
 		display = display[len(display)-height:]
 	}
 	return display
+}
+
+// DisplayLine is one rendered line in the terminal box. Prefix (if set)
+// renders in the prompt color and only appears on the first line of a
+// wrapped block; continuation lines have an empty Prefix.
+type DisplayLine struct {
+	Prefix string
+	Text   string
+}
+
+// ReflowHistory wraps each history entry to the given width and returns the
+// last height display lines. The prompt prefix (if any) appears only on the
+// first wrapped sub-line of each entry.
+func ReflowHistory(lines []HistoryLine, width, height int) []DisplayLine {
+	var display []DisplayLine
+	for _, hl := range lines {
+		display = append(display, wrapHistoryLine(hl, width)...)
+	}
+	if len(display) > height {
+		display = display[len(display)-height:]
+	}
+	return display
+}
+
+func wrapHistoryLine(hl HistoryLine, width int) []DisplayLine {
+	if width <= 0 {
+		return []DisplayLine{{Prefix: hl.Prefix, Text: hl.Input}}
+	}
+	prefixLen := utf8.RuneCountInString(hl.Prefix)
+	if prefixLen >= width {
+		// Prefix alone overflows — truncate and skip wrapping the input.
+		return []DisplayLine{{Prefix: string([]rune(hl.Prefix)[:width])}}
+	}
+	first := width - prefixLen
+	inputRunes := []rune(hl.Input)
+	if len(inputRunes) <= first {
+		return []DisplayLine{{Prefix: hl.Prefix, Text: hl.Input}}
+	}
+	out := []DisplayLine{{Prefix: hl.Prefix, Text: string(inputRunes[:first])}}
+	for _, w := range WrapLine(string(inputRunes[first:]), width) {
+		out = append(out, DisplayLine{Text: w})
+	}
+	return out
 }
 
 // WrapWords wraps a line at word boundaries (spaces), keeping backtick-

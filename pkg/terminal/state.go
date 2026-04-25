@@ -13,10 +13,19 @@ type DialogLine struct {
 	ColorIdx int
 }
 
+// HistoryLine is a single line in the terminal scrollback. Prefix (when set)
+// is the prompt prefix snapshot at the moment the user pressed Enter — it
+// renders in the prompt color so old prompts stay visually distinct from
+// command output.
+type HistoryLine struct {
+	Prefix string // e.g. "user@nixy:/home/nixy> ", or "" for command output
+	Input  string // typed command, or output text
+}
+
 // State holds the content state of the terminal, independent of rendering.
 type State struct {
 	Line         string
-	Lines        []string
+	Lines        []HistoryLine
 	Prompt       string // e.g. "user@nixy:/home/nixy", updated by session
 	PromptTarget string // full planned command, used to highlight on-path typing
 	Hint         error
@@ -33,7 +42,7 @@ func (s *State) Write(in process.Data) error {
 		case process.Chars:
 			for _, c := range string(d) {
 				if c == '\n' {
-					s.Lines = append(s.Lines, s.Line)
+					s.Lines = append(s.Lines, HistoryLine{Input: s.Line})
 					s.Line = ""
 				} else {
 					s.Line += string(c)
@@ -48,9 +57,9 @@ func (s *State) Write(in process.Data) error {
 				}
 			case process.TermClear:
 				s.Line = ""
-				s.Lines = []string{}
+				s.Lines = nil
 			case process.TermEnter:
-				s.Lines = append(s.Lines, s.promptPrefix()+s.Line)
+				s.Lines = append(s.Lines, HistoryLine{Prefix: s.promptPrefix(), Input: s.Line})
 				s.Line = ""
 			default:
 				return fmt.Errorf("unknown term code: %v", d)

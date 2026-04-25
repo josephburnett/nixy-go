@@ -29,7 +29,7 @@ func TestWriteCharsWithNewlines(t *testing.T) {
 	if len(term.State.Lines) != 3 {
 		t.Fatalf("expected 3 lines, got %d: %v", len(term.State.Lines), term.State.Lines)
 	}
-	if term.State.Lines[0] != "bin" || term.State.Lines[1] != "etc" || term.State.Lines[2] != "home" {
+	if term.State.Lines[0].Input != "bin" || term.State.Lines[1].Input != "etc" || term.State.Lines[2].Input != "home" {
 		t.Fatalf("expected [bin etc home], got %v", term.State.Lines)
 	}
 	if term.State.Line != "" {
@@ -40,7 +40,7 @@ func TestWriteCharsWithNewlines(t *testing.T) {
 func TestWriteCharsPartialNewline(t *testing.T) {
 	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("hello\nworld")})
-	if len(term.State.Lines) != 1 || term.State.Lines[0] != "hello" {
+	if len(term.State.Lines) != 1 || term.State.Lines[0].Input != "hello" {
 		t.Fatalf("expected lines=['hello'], got %v", term.State.Lines)
 	}
 	if term.State.Line != "world" {
@@ -52,8 +52,8 @@ func TestWriteEnter(t *testing.T) {
 	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("cmd")})
 	term.Write(process.Data{process.TermEnter})
-	if len(term.State.Lines) != 1 || term.State.Lines[0] != "> cmd" {
-		t.Fatalf("expected lines=['> cmd'], got %v", term.State.Lines)
+	if len(term.State.Lines) != 1 || term.State.Lines[0].Prefix != "> " || term.State.Lines[0].Input != "cmd" {
+		t.Fatalf("expected lines=[{Prefix:'> ', Input:'cmd'}], got %v", term.State.Lines)
 	}
 	if term.State.Line != "" {
 		t.Fatalf("expected empty line after enter, got %q", term.State.Line)
@@ -99,8 +99,8 @@ func TestWriteMultipleDatums(t *testing.T) {
 		process.TermEnter,
 		process.Chars("bye"),
 	})
-	if len(term.State.Lines) != 1 || term.State.Lines[0] != "> hi" {
-		t.Fatalf("expected lines=['> hi'], got %v", term.State.Lines)
+	if len(term.State.Lines) != 1 || term.State.Lines[0].Prefix != "> " || term.State.Lines[0].Input != "hi" {
+		t.Fatalf("expected lines=[{Prefix:'> ', Input:'hi'}], got %v", term.State.Lines)
 	}
 	if term.State.Line != "bye" {
 		t.Fatalf("expected 'bye', got %q", term.State.Line)

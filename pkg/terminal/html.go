@@ -50,25 +50,42 @@ func (h *HTMLRenderer) Render(f Frame) string {
 		sb.WriteString(`<span class="box">│</span>` + strings.Repeat(" ", f.Width) + `<span class="box">│</span>` + "\n")
 	}
 	for _, line := range f.DisplayLines {
-		sb.WriteString(`<span class="box">│</span>`)
-		runeLen := utf8.RuneCountInString(line)
-		if runeLen > f.Width {
-			line = string([]rune(line)[:f.Width])
-			runeLen = f.Width
+		prefixLen := utf8.RuneCountInString(line.Prefix)
+		textLen := utf8.RuneCountInString(line.Text)
+		total := prefixLen + textLen
+		if total > f.Width {
+			excess := total - f.Width
+			if textLen >= excess {
+				line.Text = string([]rune(line.Text)[:textLen-excess])
+				textLen -= excess
+			} else {
+				line.Text = ""
+				textLen = 0
+				line.Prefix = string([]rune(line.Prefix)[:f.Width])
+				prefixLen = f.Width
+			}
+			total = prefixLen + textLen
 		}
-		padding := f.Width - runeLen
-		sb.WriteString(html.EscapeString(line) + strings.Repeat(" ", padding))
+		padding := f.Width - total
+		sb.WriteString(`<span class="box">│</span>`)
+		if prefixLen > 0 {
+			sb.WriteString(`<span class="prompt">` + html.EscapeString(line.Prefix) + "</span>")
+		}
+		sb.WriteString(html.EscapeString(line.Text))
+		sb.WriteString(strings.Repeat(" ", padding))
 		sb.WriteString(`<span class="box">│</span>` + "\n")
 	}
 
-	// Prompt line — prefix (blue), on-path input (green), off-path input (white).
+	// Prompt line — prefix (blue), on-path input (green), off-path input
+	// (white), then a block cursor at the typing position.
 	prefix := f.PromptPrefix
 	onPath := f.PromptInputOn
 	offPath := f.PromptInputOff
 	prefixLen := utf8.RuneCountInString(prefix)
 	onLen := utf8.RuneCountInString(onPath)
 	offLen := utf8.RuneCountInString(offPath)
-	totalLen := prefixLen + onLen + offLen
+	const cursorWidth = 1
+	totalLen := prefixLen + onLen + offLen + cursorWidth
 	if totalLen > f.Width {
 		excess := totalLen - f.Width
 		if offLen >= excess {
@@ -84,13 +101,17 @@ func (h *HTMLRenderer) Render(f Frame) string {
 			} else {
 				onPath = ""
 				onLen = 0
-				prefix = string([]rune(prefix)[:f.Width])
-				prefixLen = f.Width
+				prefix = string([]rune(prefix)[:f.Width-cursorWidth])
+				prefixLen = f.Width - cursorWidth
 			}
 		}
-		totalLen = prefixLen + onLen + offLen
+		totalLen = prefixLen + onLen + offLen + cursorWidth
 	}
 	padding := f.Width - totalLen
+	cursorClass := "cursor-off"
+	if f.CursorOnPath {
+		cursorClass = "cursor-on"
+	}
 	sb.WriteString(`<span class="box">│</span>`)
 	sb.WriteString(`<span class="prompt">` + html.EscapeString(prefix) + "</span>")
 	if onLen > 0 {
@@ -99,6 +120,7 @@ func (h *HTMLRenderer) Render(f Frame) string {
 	if offLen > 0 {
 		sb.WriteString(`<span class="prompt-off">` + html.EscapeString(offPath) + "</span>")
 	}
+	sb.WriteString(`<span class="` + cursorClass + `">█</span>`)
 	sb.WriteString(strings.Repeat(" ", padding))
 	sb.WriteString(`<span class="box">│</span>` + "\n")
 

@@ -61,23 +61,42 @@ func (a *ANSIRenderer) Render(f Frame) string {
 		sb.WriteString("│" + strings.Repeat(" ", f.Width) + "│\n")
 	}
 	for _, line := range f.DisplayLines {
-		runeLen := utf8.RuneCountInString(line)
-		if runeLen > f.Width {
-			line = string([]rune(line)[:f.Width])
-			runeLen = f.Width
+		prefixLen := utf8.RuneCountInString(line.Prefix)
+		textLen := utf8.RuneCountInString(line.Text)
+		total := prefixLen + textLen
+		if total > f.Width {
+			excess := total - f.Width
+			if textLen >= excess {
+				line.Text = string([]rune(line.Text)[:textLen-excess])
+				textLen -= excess
+			} else {
+				line.Text = ""
+				textLen = 0
+				line.Prefix = string([]rune(line.Prefix)[:f.Width])
+				prefixLen = f.Width
+			}
+			total = prefixLen + textLen
 		}
-		padding := f.Width - runeLen
-		sb.WriteString("│" + line + strings.Repeat(" ", padding) + "│\n")
+		padding := f.Width - total
+		sb.WriteString("│")
+		if prefixLen > 0 {
+			sb.WriteString(colorPrompt + line.Prefix + colorReset)
+		}
+		sb.WriteString(line.Text)
+		sb.WriteString(strings.Repeat(" ", padding))
+		sb.WriteString("│\n")
 	}
 
-	// Prompt line — prefix (blue), on-path input (green), off-path input (white).
+	// Prompt line — prefix (blue), on-path input (green), off-path input
+	// (white), then a block cursor at the typing position.
 	prefix := f.PromptPrefix
 	onPath := f.PromptInputOn
 	offPath := f.PromptInputOff
 	prefixLen := utf8.RuneCountInString(prefix)
 	onLen := utf8.RuneCountInString(onPath)
 	offLen := utf8.RuneCountInString(offPath)
-	totalLen := prefixLen + onLen + offLen
+	const cursorWidth = 1
+	totalLen := prefixLen + onLen + offLen + cursorWidth
 	if totalLen > f.Width {
 		// Truncate from the right: off-path first, then on-path, then prefix.
 		excess := totalLen - f.Width
@@ -94,13 +113,17 @@ func (a *ANSIRenderer) Render(f Frame) string {
 			} else {
 				onPath = ""
 				onLen = 0
-				prefix = string([]rune(prefix)[:f.Width])
-				prefixLen = f.Width
+				prefix = string([]rune(prefix)[:f.Width-cursorWidth])
+				prefixLen = f.Width - cursorWidth
 			}
 		}
-		totalLen = prefixLen + onLen + offLen
+		totalLen = prefixLen + onLen + offLen + cursorWidth
 	}
 	padding := f.Width - totalLen
+	cursorColor := colorWhite
+	if f.CursorOnPath {
+		cursorColor = colorGreen
+	}
 	sb.WriteString("│")
 	sb.WriteString(colorPrompt + prefix + colorReset)
 	if onLen > 0 {
@@ -109,6 +132,7 @@ func (a *ANSIRenderer) Render(f Frame) string {
 	if offLen > 0 {
 		sb.WriteString(colorWhite + offPath + colorReset)
 	}
+	sb.WriteString(cursorColor + "█" + colorReset)
 	sb.WriteString(strings.Repeat(" ", padding))
 	sb.WriteString("│\n")
 

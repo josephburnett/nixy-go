@@ -112,14 +112,20 @@ func (t *T) Render() string {
 		dialogToShow = wrappedDialog[start:]
 	}
 
-	displayLines := ReflowLines(t.State.Lines, contentWidth, termContentHeight)
+	displayLines := ReflowHistory(t.State.Lines, contentWidth, termContentHeight)
 	onPath, offPath := splitOnPath(t.State.Line, t.State.PromptTarget)
+
+	// Cursor follows the on-path/off-path semantics of the keyboard hint:
+	// green when the planner suggests typing forward (a char or Enter),
+	// white when it suggests backspace or has no suggestion.
+	cursorOnPath := t.State.HintKey != nil && t.State.HintKey != process.TermBackspace
 
 	f := Frame{
 		DisplayLines:   displayLines,
 		PromptPrefix:   t.State.promptPrefix(),
 		PromptInputOn:  onPath,
 		PromptInputOff: offPath,
+		CursorOnPath:   cursorOnPath,
 		Dialog:         dialogToShow,
 		DialogSpace:    dialogSpace,
 		Hint:           hintStr,
