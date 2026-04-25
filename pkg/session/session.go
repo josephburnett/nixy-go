@@ -19,17 +19,158 @@ type ShellInfo interface {
 	CurrentCommand() string
 }
 
-// Session holds the initialized game, guide, and shell.
+// Mode is the session's current phase.
+type Mode int
+
+const (
+	ModeLogin   Mode = iota // user is choosing their username
+	ModePlaying             // game is live; shell/guide/game are populated
+)
+
+// Session holds session-wide state. In ModeLogin, only Username is being
+// built; Game/Guide/Shell are nil. In ModePlaying they are all set.
 type Session struct {
+	Mode     Mode
+	Username string
 	Game     *game.Game
 	Guide    *guide.G
 	Shell    ShellInfo
-	Username string // chosen at login; "" until login completes
 }
 
-// New creates a new game session with all quests and machines initialized.
-// Callers must import command packages (via blank imports) before calling this.
+const (
+	loginMaxLen = 8
+	loginPrompt = "login: "
+)
+
+// New creates a new session in ModeLogin. The game is not initialized
+// until login completes — we don't want quest dialog firing before the
+// player has a name.
 func New() (*Session, error) {
+	return &Session{Mode: ModeLogin}, nil
+}
+
+// InitTerminal sets up the terminal for whatever mode the session is in.
+func (s *Session) InitTerminal(t *terminal.T) {
+	switch s.Mode {
+	case ModeLogin:
+		s.updateLoginTerminal(t)
+	case ModePlaying:
+		dialog := s.Game.Manager.Dialog.Drain()
+		if len(dialog) > 0 {
+			t.SetDialog(dialog)
+		}
+		s.updatePlayingTerminal(t)
+	}
+}
+
+// HandleKeystroke routes the keystroke based on session mode.
+func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
+	if s.Mode == ModeLogin {
+		return s.handleLoginKeystroke(datum, t)
+	}
+	return s.handlePlayingKeystroke(datum, t)
+}
+
+// --- login mode ---------------------------------------------------------
+
+// handleLoginKeystroke validates the keystroke against the login rules
+// (lowercase a-z, length 1-8, Backspace when non-empty, Enter when valid)
+// and bootstraps the game on a successful Enter.
+func (s *Session) handleLoginKeystroke(datum process.Datum, t *terminal.T) bool {
+	t.Notify("")
+	switch d := datum.(type) {
+	case process.Chars:
+		if len(d) == 1 && isLoginChar(rune(d[0])) && len(t.State.Line) < loginMaxLen {
+			t.State.Line += string(d)
+		}
+	case process.TermCode:
+		switch d {
+		case process.TermBackspace:
+			if len(t.State.Line) > 0 {
+				t.State.Line = t.State.Line[:len(t.State.Line)-1]
+			}
+		case process.TermEnter:
+			if isValidUsername(t.State.Line) {
+				s.Username = t.State.Line
+				t.State.Line = ""
+				if err := s.bootstrapGame(t); err != nil {
+					t.Notify("login error: " + err.Error())
+					return false
+				}
+				return false
+			}
+		}
+	}
+	s.updateLoginTerminal(t)
+	return false
+}
+
+func (s *Session) updateLoginTerminal(t *terminal.T) {
+	t.SetPrompt(terminal.PromptInfo{Raw: loginPrompt})
+	t.SetPromptTarget("") // no specific target during login
+	t.SetKeyboard(loginValidKeys(t.State.Line), loginHintKey(t.State.Line))
+	t.SetThought(loginThought(t.State.Line))
+}
+
+func isLoginChar(r rune) bool { return r >= 'a' && r <= 'z' }
+
+func isValidUsername(s string) bool {
+	if len(s) < 1 || len(s) > loginMaxLen {
+		return false
+	}
+	for _, r := range s {
+		if !isLoginChar(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// loginValidKeys returns the keys the player may press right now during
+// login, given the current buffer.
+func loginValidKeys(buf string) []process.Datum {
+	var valid []process.Datum
+	if len(buf) < loginMaxLen {
+		for r := 'a'; r <= 'z'; r++ {
+			valid = append(valid, process.Chars(string(r)))
+		}
+	}
+	if len(buf) > 0 {
+		valid = append(valid, process.TermBackspace)
+	}
+	if isValidUsername(buf) {
+		valid = append(valid, process.TermEnter)
+	}
+	return valid
+}
+
+// loginHintKey suggests the next keystroke. Once a valid username exists
+// we hint Enter; if the buffer is full but invalid (shouldn't happen),
+// we'd hint Backspace. With an empty buffer we have no specific hint.
+func loginHintKey(buf string) process.Datum {
+	switch {
+	case isValidUsername(buf):
+		return process.TermEnter
+	case len(buf) >= loginMaxLen:
+		return process.TermBackspace
+	default:
+		return nil
+	}
+}
+
+func loginThought(buf string) string {
+	if isValidUsername(buf) {
+		return "I can press enter to log in"
+	}
+	if len(buf) == 0 {
+		return "I need to pick a username (lowercase letters, up to 8)"
+	}
+	return "I can keep typing or press enter when ready"
+}
+
+// bootstrapGame initializes the game world after a successful login and
+// switches the session to ModePlaying.
+func (s *Session) bootstrapGame(t *terminal.T) error {
 	allQuests := []game.Quest{
 		&quests.Connect{},
 		&quests.Orientation{},
@@ -43,40 +184,32 @@ func New() (*Session, error) {
 		{Hostname: "nixy", Filesystem: worlds.Nixy},
 		{Hostname: "server", Filesystem: worlds.Server, UnlockedBy: "server-unlocked"},
 	}
-
 	g, err := game.NewGame(allQuests, machines)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
 	shellpkg.DefaultNxHandler = g
-
-	proc, err := g.Sim.Launch("laptop", "user", "shell", nil, []string{})
+	proc, err := g.Sim.Launch("laptop", s.Username, "shell", nil, []string{})
 	if err != nil {
-		return nil, err
+		return err
 	}
+	s.Game = g
+	s.Guide = guide.New(proc)
+	s.Shell = proc.(ShellInfo)
+	s.Mode = ModePlaying
 
-	gd := guide.New(proc)
-
-	return &Session{
-		Game:  g,
-		Guide: gd,
-		Shell: proc.(ShellInfo),
-	}, nil
-}
-
-// InitTerminal drains initial quest dialog and sets keyboard state.
-func (s *Session) InitTerminal(t *terminal.T) {
-	dialog := s.Game.Manager.Dialog.Drain()
+	// Drain initial dialog (e.g. first quest activation greeting).
+	dialog := g.Manager.Dialog.Drain()
 	if len(dialog) > 0 {
 		t.SetDialog(dialog)
 	}
-	s.updateTerminal(t)
+	s.updatePlayingTerminal(t)
+	return nil
 }
 
-// HandleKeystroke processes a single input datum through the guide, drains
-// output, checks quest state, and updates the terminal. Returns true if EOF.
-func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
+// --- playing mode -------------------------------------------------------
+
+func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) bool {
 	t.SetPrompt(s.promptFor(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 
 	// Capture command + host before Enter dispatches — ssh nixy must be
@@ -90,12 +223,10 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 	}
 
 	// Invalid keystrokes return an error from the guide; we silently swallow
-	// it so the user gets no negative feedback. The keyboard already shows
-	// which keys are valid; pressing anything else just does nothing.
+	// it so the user gets no negative feedback.
 	_, _ = s.Guide.Stdin(process.Data{datum})
 	t.Notify("")
 
-	// Drain stdout
 	for range 50 {
 		out, eof, _ := s.Guide.Stdout()
 		if eof {
@@ -108,7 +239,6 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 		}
 	}
 
-	// Drain stderr
 	for range 10 {
 		errOut, _, _ := s.Guide.Stderr()
 		if len(errOut) > 0 {
@@ -118,13 +248,10 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 		}
 	}
 
-	// After Enter, record the command, check quest state and dialog
 	if _, ok := datum.(process.TermCode); ok && datum == process.TermEnter {
 		if cmdLine != "" {
-			// If the command stayed on the same host, record the post-
-			// execution cwd so `cd /home/nixy` counts as visiting
-			// /home/nixy. ssh/exit change host — keep the pre-command cwd
-			// so they're attributed to where they were typed.
+			// Same host? use post-execution cwd (so cd counts as a visit).
+			// Different host? keep pre-command cwd (ssh/exit attribution).
 			cwd := cmdCwd
 			if s.Shell.Hostname() == cmdHost {
 				cwd = s.Shell.CurrentDirectory()
@@ -138,11 +265,11 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 		}
 	}
 
-	s.updateTerminal(t)
+	s.updatePlayingTerminal(t)
 	return false
 }
 
-func (s *Session) updateTerminal(t *terminal.T) {
+func (s *Session) updatePlayingTerminal(t *terminal.T) {
 	t.SetPrompt(s.promptFor(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 	t.SetPromptTarget(s.Game.GetPlannedCommand(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 	valid := s.Guide.Next()
@@ -151,18 +278,10 @@ func (s *Session) updateTerminal(t *terminal.T) {
 	t.SetThought(s.Game.GetThought(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 }
 
-// Username is the name the player is playing as. Set during login; defaults
-// to "user" while we're in the login phase.
-const fallbackUser = "user"
-
 func (s *Session) promptFor(hostname string, cwd []string) terminal.PromptInfo {
 	path := "/"
 	if len(cwd) > 0 {
 		path = "/" + strings.Join(cwd, "/")
 	}
-	user := s.Username
-	if user == "" {
-		user = fallbackUser
-	}
-	return terminal.PromptInfo{User: user, Host: hostname, Path: path}
+	return terminal.PromptInfo{User: s.Username, Host: hostname, Path: path}
 }
