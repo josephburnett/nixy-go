@@ -1,13 +1,9 @@
 package terminal
 
 import (
-	"fmt"
 	"html"
 	"strings"
 )
-
-// dialogColorCount must match the number of dialog-N CSS classes in style.css.
-const dialogColorCount = 4
 
 // HTMLRenderer renders frames as HTML with CSS classes for styling.
 type HTMLRenderer struct{}
@@ -64,7 +60,7 @@ func htmlClass(seg Segment) string {
 	case StyleKeyDim:
 		return "key-dim"
 	case StyleDialog:
-		return fmt.Sprintf("dialog dialog-%d", seg.BatchIdx%dialogColorCount)
+		return "dialog"
 	}
 	return ""
 }

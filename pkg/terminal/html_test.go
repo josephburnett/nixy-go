@@ -37,8 +37,8 @@ func TestHTMLRenderDialog(t *testing.T) {
 	term := New(NewHTML())
 	term.SetDialog([]string{"Nixy says hi"})
 	out := term.Render()
-	if !strings.Contains(out, `class="dialog dialog-0"`) {
-		t.Fatal("expected dialog dialog-0 class")
+	if !strings.Contains(out, `class="dialog"`) {
+		t.Fatal("expected dialog class")
 	}
 	if !strings.Contains(out, "Nixy says hi") {
 		t.Fatal("expected dialog content")

@@ -70,15 +70,19 @@ func layoutBoxBlank(width int) RenderedLine {
 }
 
 // layoutDialogLine emits a dialog line with backtick-marked spans
-// highlighted in the on-path color.
+// highlighted in the on-path color. Empty Text yields nil (a blank
+// paragraph-separator line).
 func layoutDialogLine(dl DialogLine) RenderedLine {
+	if dl.Text == "" {
+		return nil
+	}
 	var line RenderedLine
 	parts := strings.Split(dl.Text, "`")
 	for i, p := range parts {
 		if i%2 == 1 {
 			line = append(line, Segment{Text: p, Style: StyleOnPath})
 		} else {
-			line = append(line, Segment{Text: p, Style: StyleDialog, BatchIdx: dl.ColorIdx})
+			line = append(line, Segment{Text: p, Style: StyleDialog})
 		}
 	}
 	return line

@@ -7,10 +7,10 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-// DialogLine is one line of dialog with its batch color index.
+// DialogLine is one line of dialog. An empty Text marks a paragraph
+// separator (blank line) between batches.
 type DialogLine struct {
-	Text     string
-	ColorIdx int
+	Text string
 }
 
 // PromptInfo describes a shell prompt's components so the renderer can
@@ -47,7 +47,6 @@ type State struct {
 	Notice       string     // shown above the box (errors, Ctrl+C confirmations)
 	Thought      string     // natural-language hint shown below the terminal
 	Dialog       []DialogLine
-	NextColorIdx int
 	ValidKeys    []process.Datum
 	HintKey      process.Datum
 }

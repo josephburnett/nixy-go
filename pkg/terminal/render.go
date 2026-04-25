@@ -46,10 +46,9 @@ const (
 
 // Segment is one styled span of text within a rendered line.
 type Segment struct {
-	Text     string
-	Style    Style
-	BatchIdx int    // for StyleDialog: legacy palette index (currently unused)
-	Host     string // for StyleHost: which host's color to use
+	Text  string
+	Style Style
+	Host  string // for StyleHost: which host's color to use
 }
 
 // RenderedLine is one output line composed of styled segments. Renderers

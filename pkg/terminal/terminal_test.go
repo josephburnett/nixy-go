@@ -206,6 +206,25 @@ func TestRenderDialogAccumulates(t *testing.T) {
 	}
 }
 
+func TestRenderDialogBatchesSeparatedByBlankLine(t *testing.T) {
+	term := New(NewANSI())
+	term.SetDialog([]string{"first"})
+	term.SetDialog([]string{"second"})
+	out := stripANSI(term.Render())
+	idx1 := strings.Index(out, "first")
+	idx2 := strings.Index(out, "second")
+	if idx1 < 0 || idx2 < 0 {
+		t.Fatalf("expected both batches in render, got:\n%s", out)
+	}
+	// The slice between the end of "first" and the start of "second"
+	// should contain a blank line (i.e. two newlines in a row, since the
+	// text-end of "first" is followed by \n, blank \n, then "second").
+	between := out[idx1+len("first") : idx2]
+	if !strings.Contains(between, "\n\n") {
+		t.Fatalf("expected blank line between batches, got %q", between)
+	}
+}
+
 func TestRenderDialogAboveBox(t *testing.T) {
 	term := New(NewANSI())
 	term.SetDialog([]string{"Nixy: Hello!"})

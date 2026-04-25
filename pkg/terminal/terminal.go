@@ -60,15 +60,18 @@ func (t *T) SetPromptTarget(s string) {
 	t.State.PromptTarget = s
 }
 
+// SetDialog appends a batch of dialog lines. Successive calls are
+// separated by a blank line so paragraphs are visually distinct.
 func (t *T) SetDialog(lines []string) {
 	if len(lines) == 0 {
 		return
 	}
-	idx := t.State.NextColorIdx
-	for _, l := range lines {
-		t.State.Dialog = append(t.State.Dialog, DialogLine{Text: l, ColorIdx: idx})
+	if len(t.State.Dialog) > 0 {
+		t.State.Dialog = append(t.State.Dialog, DialogLine{}) // paragraph separator
 	}
-	t.State.NextColorIdx++
+	for _, l := range lines {
+		t.State.Dialog = append(t.State.Dialog, DialogLine{Text: l})
+	}
 }
 
 func (t *T) SetKeyboard(valid []process.Datum, hint process.Datum) {
@@ -106,13 +109,16 @@ func (t *T) Render() string {
 		dialogSpace = 0
 	}
 
-	// Wrap each accumulated dialog line to the screen width, preserving
-	// the batch color across wrapped fragments. Then take the last
-	// dialogSpace lines to fit the slot.
+	// Wrap each accumulated dialog line to the screen width. Empty entries
+	// are paragraph separators — preserve them as-is.
 	var wrappedDialog []DialogLine
 	for _, dl := range t.State.Dialog {
+		if dl.Text == "" {
+			wrappedDialog = append(wrappedDialog, DialogLine{})
+			continue
+		}
 		for _, w := range WrapWords(dl.Text, t.ScreenWidth) {
-			wrappedDialog = append(wrappedDialog, DialogLine{Text: w, ColorIdx: dl.ColorIdx})
+			wrappedDialog = append(wrappedDialog, DialogLine{Text: w})
 		}
 	}
 	var dialogToShow []DialogLine

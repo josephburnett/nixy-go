@@ -11,12 +11,9 @@ const (
 	colorPrompt = "\033[1;34m" // bold blue (active prompt only)
 )
 
-// dialogColorsANSI cycles for each new dialog batch so the user can see when
-// a fresh message has arrived. Currently a single salmon used for all of
-// Nixy's dialog (kept as a slice in case multi-color cycling returns).
-var dialogColorsANSI = []string{
-	"\033[38;5;209m", // salmon
-}
+// colorDialog is the single color used for all Nixy dialog (matches the
+// nixy host color so it's clear when Nixy is speaking).
+const colorDialog = "\033[38;5;209m" // salmon
 
 // hostColorsANSI maps host names to their prompt color. Hosts not listed
 // fall back to colorPrompt (laptop is the user's home — same color as the
@@ -71,7 +68,7 @@ func ansiOpen(seg Segment) string {
 	case StyleOnPath, StyleCursorOn:
 		return colorGreen
 	case StyleDialog:
-		return dialogColorsANSI[seg.BatchIdx%len(dialogColorsANSI)]
+		return colorDialog
 	}
 	return ""
 }
