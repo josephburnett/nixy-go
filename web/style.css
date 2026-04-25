@@ -32,6 +32,10 @@ body {
 .box { color: #888; }
 .notice { color: #fff; }
 .prompt { color: #6af; font-weight: bold; }
+.host { font-weight: bold; }
+.host-laptop { color: #6af; }
+.host-nixy { color: #fa8072; }
+.host-server { color: #5fa8a8; }
 .prompt-off { color: #fff; }
 .cursor-on { color: #0c0; }
 .cursor-off { color: #fff; }

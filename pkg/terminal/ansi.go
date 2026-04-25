@@ -12,13 +12,19 @@ const (
 )
 
 // dialogColorsANSI cycles for each new dialog batch so the user can see when
-// a fresh message has arrived. Green is intentionally absent — it would
-// clash with the bold-green highlight used for backtick command spans.
+// a fresh message has arrived. Currently a single salmon used for all of
+// Nixy's dialog (kept as a slice in case multi-color cycling returns).
 var dialogColorsANSI = []string{
-	"\033[31m", // red
-	"\033[33m", // yellow
-	"\033[34m", // blue
-	"\033[35m", // purple
+	"\033[38;5;209m", // salmon
+}
+
+// hostColorsANSI maps host names to their prompt color. Hosts not listed
+// fall back to colorPrompt (laptop is the user's home — same color as the
+// prompt frame).
+var hostColorsANSI = map[string]string{
+	"laptop": colorPrompt,        // bold blue
+	"nixy":   "\033[38;5;209m",   // salmon
+	"server": "\033[38;5;73m",    // teal / cadet
 }
 
 // ANSIRenderer renders frames using ANSI escape codes and box-drawing characters.
@@ -30,7 +36,7 @@ func (a *ANSIRenderer) Render(f Frame) string {
 	var sb strings.Builder
 	for _, line := range Layout(f) {
 		for _, seg := range line {
-			open := ansiOpen(seg.Style, seg.BatchIdx)
+			open := ansiOpen(seg)
 			if open != "" {
 				sb.WriteString(open)
 				sb.WriteString(seg.Text)
@@ -47,20 +53,25 @@ func (a *ANSIRenderer) Render(f Frame) string {
 // ansiOpen returns the ANSI escape that opens a span of the given style.
 // Empty string means "no styling" — the renderer omits the escape and the
 // trailing reset entirely.
-func ansiOpen(style Style, batchIdx int) string {
-	switch style {
+func ansiOpen(seg Segment) string {
+	switch seg.Style {
 	case StyleBox, StyleDim, StyleKeyDim:
 		return colorDim
 	case StyleNotice:
 		return colorWhite
 	case StylePrompt:
 		return colorPrompt
+	case StyleHost:
+		if c, ok := hostColorsANSI[seg.Host]; ok {
+			return c
+		}
+		return colorPrompt
 	case StylePromptOff, StyleCursorOff, StyleKeyValid:
 		return colorWhite
 	case StyleOnPath, StyleCursorOn:
 		return colorGreen
 	case StyleDialog:
-		return dialogColorsANSI[batchIdx%len(dialogColorsANSI)]
+		return dialogColorsANSI[seg.BatchIdx%len(dialogColorsANSI)]
 	}
 	return ""
 }

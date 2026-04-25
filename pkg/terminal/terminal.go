@@ -52,8 +52,8 @@ func (t *T) SetThought(s string) {
 	t.State.Thought = s
 }
 
-func (t *T) SetPrompt(s string) {
-	t.State.Prompt = s
+func (t *T) SetPrompt(p PromptInfo) {
+	t.State.Prompt = p
 }
 
 func (t *T) SetPromptTarget(s string) {
@@ -134,7 +134,7 @@ func (t *T) Render() string {
 
 	f := Frame{
 		DisplayLines:   displayLines,
-		PromptPrefix:   t.State.promptPrefix(),
+		Prompt:         t.State.Prompt,
 		PromptInputOn:  onPath,
 		PromptInputOff: offPath,
 		CursorOnPath:   cursorOnPath,

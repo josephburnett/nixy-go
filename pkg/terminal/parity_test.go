@@ -24,11 +24,11 @@ func stripHTML(s string) string {
 func loadedTerm(r Renderer) *T {
 	t := New(r)
 	t.Resize(80, 24)
-	t.State.Prompt = "user@nixy:/home/nixy"
+	t.State.Prompt = PromptInfo{User: "user", Host: "nixy", Path: "/home/nixy"}
 	t.State.PromptTarget = "pwd"
 	// History: one prompted command, one output line
 	t.State.Lines = []HistoryLine{
-		{Prefix: "user@laptop:/> ", Input: "ssh nixy"},
+		{Prompt: PromptInfo{User: "user", Host: "laptop", Path: "/"}, Input: "ssh nixy"},
 		{Input: "Last login: Sat Jan 1"},
 	}
 	// Active typed input — partial on-path with one off-path char

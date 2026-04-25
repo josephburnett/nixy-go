@@ -13,23 +13,39 @@ type DialogLine struct {
 	ColorIdx int
 }
 
-// HistoryLine is a single line in the terminal scrollback. Prefix (when set)
-// is the prompt prefix snapshot at the moment the user pressed Enter — it
-// renders in the prompt color so old prompts stay visually distinct from
-// command output.
+// PromptInfo describes a shell prompt's components so the renderer can
+// color the host (and only the host) per-host. When Raw is set it's used
+// verbatim — used for special prompts like "login: " that don't follow
+// the user@host:path shape.
+type PromptInfo struct {
+	User string // e.g. "alice"
+	Host string // e.g. "nixy"
+	Path string // e.g. "/home/nixy"
+	Raw  string // when set, used as-is and User/Host/Path are ignored
+}
+
+// IsZero reports whether this PromptInfo has no content (used by
+// HistoryLine to mark output rows vs. entered commands).
+func (p PromptInfo) IsZero() bool {
+	return p.User == "" && p.Host == "" && p.Path == "" && p.Raw == ""
+}
+
+// HistoryLine is a single line in the terminal scrollback. When Prompt is
+// non-zero, the line represents an entered command and the prompt is
+// rendered in its colors; otherwise it's command output.
 type HistoryLine struct {
-	Prefix string // e.g. "user@nixy:/home/nixy> ", or "" for command output
-	Input  string // typed command, or output text
+	Prompt PromptInfo
+	Input  string
 }
 
 // State holds the content state of the terminal, independent of rendering.
 type State struct {
 	Line         string
 	Lines        []HistoryLine
-	Prompt       string // e.g. "user@nixy:/home/nixy", updated by session
-	PromptTarget string // full planned command, used to highlight on-path typing
-	Notice       string // shown above the box (errors, Ctrl+C confirmations)
-	Thought      string // natural-language hint shown below the terminal
+	Prompt       PromptInfo // structured: user, host, path (or Raw for special prompts)
+	PromptTarget string     // full planned command, used to highlight on-path typing
+	Notice       string     // shown above the box (errors, Ctrl+C confirmations)
+	Thought      string     // natural-language hint shown below the terminal
 	Dialog       []DialogLine
 	NextColorIdx int
 	ValidKeys    []process.Datum
@@ -59,7 +75,7 @@ func (s *State) Write(in process.Data) error {
 				s.Line = ""
 				s.Lines = nil
 			case process.TermEnter:
-				s.Lines = append(s.Lines, HistoryLine{Prefix: s.promptPrefix(), Input: s.Line})
+				s.Lines = append(s.Lines, HistoryLine{Prompt: s.Prompt, Input: s.Line})
 				s.Line = ""
 			default:
 				return fmt.Errorf("unknown term code: %v", d)
@@ -71,9 +87,15 @@ func (s *State) Write(in process.Data) error {
 	return nil
 }
 
-func (s *State) promptPrefix() string {
-	if s.Prompt != "" {
-		return s.Prompt + "> "
+// promptPrefixText returns the prompt as a single string, used for
+// width/truncation arithmetic. The renderer still emits the structured
+// PromptInfo as multi-style segments — this is just the length-equivalent.
+func (p PromptInfo) promptPrefixText() string {
+	if p.Raw != "" {
+		return p.Raw
 	}
-	return "> "
+	if p.IsZero() {
+		return "> "
+	}
+	return p.User + "@" + p.Host + ":" + p.Path + "> "
 }

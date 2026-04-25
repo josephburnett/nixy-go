@@ -40,11 +40,11 @@ func ReflowLines(lines []string, width, height int) []string {
 	return display
 }
 
-// DisplayLine is one rendered line in the terminal box. Prefix (if set)
-// renders in the prompt color and only appears on the first line of a
-// wrapped block; continuation lines have an empty Prefix.
+// DisplayLine is one rendered line in the terminal box. Prompt (if set)
+// renders in the prompt-color spans (per-host) and only appears on the
+// first line of a wrapped block; continuation lines have a zero Prompt.
 type DisplayLine struct {
-	Prefix string
+	Prompt PromptInfo
 	Text   string
 }
 
@@ -63,20 +63,25 @@ func ReflowHistory(lines []HistoryLine, width, height int) []DisplayLine {
 }
 
 func wrapHistoryLine(hl HistoryLine, width int) []DisplayLine {
-	if width <= 0 {
-		return []DisplayLine{{Prefix: hl.Prefix, Text: hl.Input}}
+	prefixText := hl.Prompt.promptPrefixText()
+	if hl.Prompt.IsZero() {
+		// Output line — no prompt prefix.
+		prefixText = ""
 	}
-	prefixLen := utf8.RuneCountInString(hl.Prefix)
+	if width <= 0 {
+		return []DisplayLine{{Prompt: hl.Prompt, Text: hl.Input}}
+	}
+	prefixLen := utf8.RuneCountInString(prefixText)
 	if prefixLen >= width {
-		// Prefix alone overflows — truncate and skip wrapping the input.
-		return []DisplayLine{{Prefix: string([]rune(hl.Prefix)[:width])}}
+		// Prefix alone overflows — show the prompt only and skip the input.
+		return []DisplayLine{{Prompt: hl.Prompt}}
 	}
 	first := width - prefixLen
 	inputRunes := []rune(hl.Input)
 	if len(inputRunes) <= first {
-		return []DisplayLine{{Prefix: hl.Prefix, Text: hl.Input}}
+		return []DisplayLine{{Prompt: hl.Prompt, Text: hl.Input}}
 	}
-	out := []DisplayLine{{Prefix: hl.Prefix, Text: string(inputRunes[:first])}}
+	out := []DisplayLine{{Prompt: hl.Prompt, Text: string(inputRunes[:first])}}
 	for _, w := range WrapLine(string(inputRunes[first:]), width) {
 		out = append(out, DisplayLine{Text: w})
 	}

@@ -5,14 +5,14 @@ import "github.com/josephburnett/nixy-go/pkg/process"
 // Frame holds all data needed to render one screen.
 type Frame struct {
 	DisplayLines   []DisplayLine
-	PromptPrefix   string // colored portion (e.g. "user@nixy:/home/nixy> ")
-	PromptInputOn  string // typed input that matches the planner's path
-	PromptInputOff string // typed input that has gone off-path
-	CursorOnPath   bool   // green block cursor when true, white otherwise
+	Prompt         PromptInfo // active prompt (host-colored)
+	PromptInputOn  string     // typed input that matches the planner's path
+	PromptInputOff string     // typed input that has gone off-path
+	CursorOnPath   bool       // green block cursor when true, white otherwise
 	Dialog         []DialogLine
-	DialogSpace    int // total lines allocated for dialog (pad with blank lines)
-	Status         string // single status line below the box
-	StatusIsNotice bool   // true: notice (errors/Ctrl+C); false: thought
+	DialogSpace    int        // total lines allocated for dialog (pad with blank lines)
+	Status         string     // single status line below the box
+	StatusIsNotice bool       // true: notice (errors/Ctrl+C); false: thought
 	ValidKeys      []process.Datum
 	HintKey        process.Datum
 	Width          int
@@ -31,12 +31,13 @@ type Style int
 const (
 	StyleDefault Style = iota
 	StyleBox            // box-drawing borders
-	StylePrompt         // bold blue prompt prefix
+	StylePrompt         // bold blue prompt frame ("user@", ":", path, "> ")
+	StyleHost           // host name (color depends on which host)
 	StylePromptOff      // white off-path input
 	StyleOnPath         // bold green: on-path input, hint key, command markers
-	StyleDialog         // dialog batch color (uses BatchIdx)
+	StyleDialog         // Nixy dialog (single color)
 	StyleDim            // thought (faded grey)
-	StyleNotice         // notice line (errors, Ctrl+C) — slightly more prominent
+	StyleNotice         // notice line (errors, Ctrl+C)
 	StyleCursorOn       // green cursor block
 	StyleCursorOff      // white cursor block
 	StyleKeyValid       // bold white keyboard key
@@ -47,7 +48,8 @@ const (
 type Segment struct {
 	Text     string
 	Style    Style
-	BatchIdx int // for StyleDialog: selects palette index
+	BatchIdx int    // for StyleDialog: legacy palette index (currently unused)
+	Host     string // for StyleHost: which host's color to use
 }
 
 // RenderedLine is one output line composed of styled segments. Renderers

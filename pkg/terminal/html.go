@@ -19,7 +19,7 @@ func (h *HTMLRenderer) Render(f Frame) string {
 	sb.WriteString("<pre>")
 	for _, line := range Layout(f) {
 		for _, seg := range line {
-			class := htmlClass(seg.Style, seg.BatchIdx)
+			class := htmlClass(seg)
 			text := html.EscapeString(seg.Text)
 			if class != "" {
 				sb.WriteString(`<span class="`)
@@ -39,12 +39,14 @@ func (h *HTMLRenderer) Render(f Frame) string {
 
 // htmlClass returns the CSS class name for a span of the given style.
 // Empty string means "emit raw text without a span wrapper."
-func htmlClass(style Style, batchIdx int) string {
-	switch style {
+func htmlClass(seg Segment) string {
+	switch seg.Style {
 	case StyleBox:
 		return "box"
 	case StylePrompt:
 		return "prompt"
+	case StyleHost:
+		return "host host-" + seg.Host
 	case StylePromptOff:
 		return "prompt-off"
 	case StyleOnPath:
@@ -62,7 +64,7 @@ func htmlClass(style Style, batchIdx int) string {
 	case StyleKeyDim:
 		return "key-dim"
 	case StyleDialog:
-		return fmt.Sprintf("dialog dialog-%d", batchIdx%dialogColorCount)
+		return fmt.Sprintf("dialog dialog-%d", seg.BatchIdx%dialogColorCount)
 	}
 	return ""
 }

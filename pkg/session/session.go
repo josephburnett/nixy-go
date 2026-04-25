@@ -21,9 +21,10 @@ type ShellInfo interface {
 
 // Session holds the initialized game, guide, and shell.
 type Session struct {
-	Game  *game.Game
-	Guide *guide.G
-	Shell ShellInfo
+	Game     *game.Game
+	Guide    *guide.G
+	Shell    ShellInfo
+	Username string // chosen at login; "" until login completes
 }
 
 // New creates a new game session with all quests and machines initialized.
@@ -150,10 +151,18 @@ func (s *Session) updateTerminal(t *terminal.T) {
 	t.SetThought(s.Game.GetThought(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 }
 
-func (s *Session) promptFor(hostname string, cwd []string) string {
+// Username is the name the player is playing as. Set during login; defaults
+// to "user" while we're in the login phase.
+const fallbackUser = "user"
+
+func (s *Session) promptFor(hostname string, cwd []string) terminal.PromptInfo {
 	path := "/"
 	if len(cwd) > 0 {
 		path = "/" + strings.Join(cwd, "/")
 	}
-	return "user@" + hostname + ":" + path
+	user := s.Username
+	if user == "" {
+		user = fallbackUser
+	}
+	return terminal.PromptInfo{User: user, Host: hostname, Path: path}
 }

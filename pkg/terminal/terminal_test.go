@@ -52,8 +52,8 @@ func TestWriteEnter(t *testing.T) {
 	term := New(NewANSI())
 	term.Write(process.Data{process.Chars("cmd")})
 	term.Write(process.Data{process.TermEnter})
-	if len(term.State.Lines) != 1 || term.State.Lines[0].Prefix != "> " || term.State.Lines[0].Input != "cmd" {
-		t.Fatalf("expected lines=[{Prefix:'> ', Input:'cmd'}], got %v", term.State.Lines)
+	if len(term.State.Lines) != 1 || !term.State.Lines[0].Prompt.IsZero() || term.State.Lines[0].Input != "cmd" {
+		t.Fatalf("expected lines=[{Prompt:zero, Input:'cmd'}], got %v", term.State.Lines)
 	}
 	if term.State.Line != "" {
 		t.Fatalf("expected empty line after enter, got %q", term.State.Line)
@@ -99,8 +99,8 @@ func TestWriteMultipleDatums(t *testing.T) {
 		process.TermEnter,
 		process.Chars("bye"),
 	})
-	if len(term.State.Lines) != 1 || term.State.Lines[0].Prefix != "> " || term.State.Lines[0].Input != "hi" {
-		t.Fatalf("expected lines=[{Prefix:'> ', Input:'hi'}], got %v", term.State.Lines)
+	if len(term.State.Lines) != 1 || !term.State.Lines[0].Prompt.IsZero() || term.State.Lines[0].Input != "hi" {
+		t.Fatalf("expected lines=[{Prompt:zero, Input:'hi'}], got %v", term.State.Lines)
 	}
 	if term.State.Line != "bye" {
 		t.Fatalf("expected 'bye', got %q", term.State.Line)
@@ -203,27 +203,6 @@ func TestRenderDialogAccumulates(t *testing.T) {
 	idx2 := strings.Index(out, "Second message")
 	if idx1 > idx2 {
 		t.Fatal("older dialog should appear above newer dialog")
-	}
-}
-
-func TestRenderDialogBatchesGetDistinctColors(t *testing.T) {
-	term := New(NewANSI())
-	term.SetDialog([]string{"first"})
-	term.SetDialog([]string{"second"})
-	out := term.Render()
-	// Each batch should be wrapped in a different color code.
-	firstIdx := strings.Index(out, "first")
-	secondIdx := strings.Index(out, "second")
-	if firstIdx < 0 || secondIdx < 0 {
-		t.Fatal("expected both messages in render")
-	}
-	// Find the ANSI color escape immediately preceding each text.
-	firstPrefix := out[:firstIdx]
-	secondPrefix := out[:secondIdx]
-	firstColor := firstPrefix[strings.LastIndex(firstPrefix, "\033["):]
-	secondColor := secondPrefix[strings.LastIndex(secondPrefix, "\033["):]
-	if firstColor == secondColor {
-		t.Fatalf("successive dialog batches should have different colors, both got %q", firstColor)
 	}
 }
 
@@ -426,31 +405,33 @@ func TestRenderPromptCursorAndPath(t *testing.T) {
 	}
 }
 
-// TestRenderActivePromptPrefixBlue pins the active prompt prefix color.
-func TestRenderActivePromptPrefixBlue(t *testing.T) {
+// TestRenderActivePromptPrefixColored pins that the prompt frame renders
+// in blue and the host name carries its own host color.
+func TestRenderActivePromptPrefixColored(t *testing.T) {
 	term := New(NewANSI())
 	term.Resize(80, 24)
-	term.State.Prompt = "user@nixy:/"
+	term.SetPrompt(PromptInfo{User: "alice", Host: "nixy", Path: "/"})
 	out := term.Render()
-	want := colorPrompt + "user@nixy:/> " + colorReset
-	if !strings.Contains(out, want) {
-		t.Fatalf("expected blue active prompt %q in output", want)
+	if !strings.Contains(out, colorPrompt+"alice@"+colorReset) {
+		t.Fatalf("expected blue 'alice@' segment, got:\n%s", out)
+	}
+	nixyColor := hostColorsANSI["nixy"]
+	if !strings.Contains(out, nixyColor+"nixy"+colorReset) {
+		t.Fatalf("expected nixy in salmon, got:\n%s", out)
 	}
 }
 
-// TestRenderHistoryPromptBlue pins the historical prompt prefix color so
-// old commands stay distinguishable from output.
-func TestRenderHistoryPromptBlue(t *testing.T) {
+// TestRenderHistoryPromptColored pins the historical prompt color so old
+// commands stay visually distinct from output.
+func TestRenderHistoryPromptColored(t *testing.T) {
 	term := New(NewANSI())
 	term.Resize(80, 24)
-	term.State.Prompt = "user@nixy:/"
+	term.SetPrompt(PromptInfo{User: "alice", Host: "nixy", Path: "/"})
 	term.Write(process.Data{process.Chars("ls")})
 	term.Write(process.Data{process.TermEnter})
 	out := term.Render()
-	// History line should have the prefix in blue, then "ls" in plain.
-	want := colorPrompt + "user@nixy:/> " + colorReset
-	if !strings.Contains(out, want) {
-		t.Fatalf("expected blue history prompt prefix in output, got:\n%s", out)
+	if !strings.Contains(out, colorPrompt+"alice@"+colorReset) {
+		t.Fatalf("expected blue history prompt segment, got:\n%s", out)
 	}
 }
 

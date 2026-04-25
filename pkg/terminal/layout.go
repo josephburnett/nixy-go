@@ -36,7 +36,7 @@ func Layout(f Frame) []RenderedLine {
 
 	// Active prompt with cursor.
 	lines = append(lines, layoutPromptLine(
-		f.PromptPrefix, f.PromptInputOn, f.PromptInputOff, f.CursorOnPath, f.Width,
+		f.Prompt, f.PromptInputOn, f.PromptInputOff, f.CursorOnPath, f.Width,
 	))
 
 	// Box bottom.
@@ -85,11 +85,15 @@ func layoutDialogLine(dl DialogLine) RenderedLine {
 }
 
 // layoutHistoryLine emits a single history row inside the box, with the
-// prompt prefix (if any) styled and any padding to fill the row.
+// prompt prefix (if any) styled per-host and any padding to fill the row.
 func layoutHistoryLine(dl DisplayLine, width int) RenderedLine {
-	prefix := dl.Prefix
+	var promptSegs []Segment
+	// Zero PromptInfo means "this is command output, not an entered command".
+	if !dl.Prompt.IsZero() {
+		promptSegs = promptSegments(dl.Prompt)
+	}
+	prefixLen := segmentsLen(promptSegs)
 	text := dl.Text
-	prefixLen := utf8.RuneCountInString(prefix)
 	textLen := utf8.RuneCountInString(text)
 	total := prefixLen + textLen
 	if total > width {
@@ -98,17 +102,17 @@ func layoutHistoryLine(dl DisplayLine, width int) RenderedLine {
 			text = string([]rune(text)[:textLen-excess])
 			textLen -= excess
 		} else {
+			// Prompt alone overflows — drop the input and truncate the prompt
+			// segments collectively.
 			text = ""
 			textLen = 0
-			prefix = string([]rune(prefix)[:width])
-			prefixLen = width
+			promptSegs = truncateSegments(promptSegs, width)
+			prefixLen = segmentsLen(promptSegs)
 		}
 		total = prefixLen + textLen
 	}
 	line := RenderedLine{{Text: "│", Style: StyleBox}}
-	if prefixLen > 0 {
-		line = append(line, Segment{Text: prefix, Style: StylePrompt})
-	}
+	line = append(line, promptSegs...)
 	if textLen > 0 {
 		line = append(line, Segment{Text: text})
 	}
@@ -117,12 +121,13 @@ func layoutHistoryLine(dl DisplayLine, width int) RenderedLine {
 	return line
 }
 
-// layoutPromptLine emits the active prompt: blue prefix, green on-path
-// input, white off-path input, then a colored cursor block. The total
-// width is truncated from the right (off-path first, then on-path, then
-// prefix) so it fits in the box.
-func layoutPromptLine(prefix, onPath, offPath string, cursorOnPath bool, width int) RenderedLine {
-	prefixLen := utf8.RuneCountInString(prefix)
+// layoutPromptLine emits the active prompt: host-colored prompt frame,
+// green on-path input, white off-path input, then a colored cursor block.
+// Truncates from the right (off-path first, then on-path, then prompt) to
+// fit within width.
+func layoutPromptLine(p PromptInfo, onPath, offPath string, cursorOnPath bool, width int) RenderedLine {
+	promptSegs := promptSegments(p)
+	prefixLen := segmentsLen(promptSegs)
 	onLen := utf8.RuneCountInString(onPath)
 	offLen := utf8.RuneCountInString(offPath)
 	const cursorWidth = 1
@@ -142,8 +147,8 @@ func layoutPromptLine(prefix, onPath, offPath string, cursorOnPath bool, width i
 			} else {
 				onPath = ""
 				onLen = 0
-				prefix = string([]rune(prefix)[:width-cursorWidth])
-				prefixLen = width - cursorWidth
+				promptSegs = truncateSegments(promptSegs, width-cursorWidth)
+				prefixLen = segmentsLen(promptSegs)
 			}
 		}
 		total = prefixLen + onLen + offLen + cursorWidth
@@ -153,9 +158,7 @@ func layoutPromptLine(prefix, onPath, offPath string, cursorOnPath bool, width i
 		cursorStyle = StyleCursorOn
 	}
 	line := RenderedLine{{Text: "│", Style: StyleBox}}
-	if prefixLen > 0 {
-		line = append(line, Segment{Text: prefix, Style: StylePrompt})
-	}
+	line = append(line, promptSegs...)
 	if onLen > 0 {
 		line = append(line, Segment{Text: onPath, Style: StyleOnPath})
 	}
@@ -166,6 +169,59 @@ func layoutPromptLine(prefix, onPath, offPath string, cursorOnPath bool, width i
 	line = append(line, Segment{Text: strings.Repeat(" ", width-total)})
 	line = append(line, Segment{Text: "│", Style: StyleBox})
 	return line
+}
+
+// promptSegments turns a PromptInfo into styled segments. The host name
+// gets StyleHost (per-host color); everything else gets StylePrompt.
+// For Raw prompts (e.g. "login: ") the whole thing is StylePrompt.
+// A zero PromptInfo yields a minimal "> " default.
+func promptSegments(p PromptInfo) []Segment {
+	if p.IsZero() {
+		return []Segment{{Text: "> ", Style: StylePrompt}}
+	}
+	if p.Raw != "" {
+		return []Segment{{Text: p.Raw, Style: StylePrompt}}
+	}
+	return []Segment{
+		{Text: p.User + "@", Style: StylePrompt},
+		{Text: p.Host, Style: StyleHost, Host: p.Host},
+		{Text: ":" + p.Path + "> ", Style: StylePrompt},
+	}
+}
+
+// segmentsLen returns the visible rune count across a slice of segments.
+func segmentsLen(segs []Segment) int {
+	n := 0
+	for _, s := range segs {
+		n += utf8.RuneCountInString(s.Text)
+	}
+	return n
+}
+
+// truncateSegments cuts a slice of segments to at most width display
+// columns, dropping or truncating from the right.
+func truncateSegments(segs []Segment, width int) []Segment {
+	if width <= 0 {
+		return nil
+	}
+	out := make([]Segment, 0, len(segs))
+	used := 0
+	for _, s := range segs {
+		segLen := utf8.RuneCountInString(s.Text)
+		if used+segLen <= width {
+			out = append(out, s)
+			used += segLen
+			continue
+		}
+		// Take only as much as fits.
+		remaining := width - used
+		if remaining > 0 {
+			s.Text = string([]rune(s.Text)[:remaining])
+			out = append(out, s)
+		}
+		break
+	}
+	return out
 }
 
 // layoutKeyboard emits the four-row keyboard: three letter rows then a
