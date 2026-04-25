@@ -107,6 +107,26 @@ func TestWriteMultipleDatums(t *testing.T) {
 	}
 }
 
+func TestSplitOnPath(t *testing.T) {
+	cases := []struct {
+		input, target, on, off string
+	}{
+		{"", "pwd", "", ""},
+		{"p", "pwd", "p", ""},
+		{"pw", "pwd", "pw", ""},
+		{"pwd", "pwd", "pwd", ""},
+		{"px", "pwd", "p", "x"},
+		{"hello", "", "", "hello"},
+	}
+	for _, c := range cases {
+		on, off := splitOnPath(c.input, c.target)
+		if on != c.on || off != c.off {
+			t.Errorf("splitOnPath(%q, %q) = (%q, %q), want (%q, %q)",
+				c.input, c.target, on, off, c.on, c.off)
+		}
+	}
+}
+
 func TestRenderEmptyTerminal(t *testing.T) {
 	term := New(NewANSI())
 	out := term.Render()

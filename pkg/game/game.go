@@ -48,11 +48,17 @@ func (g *Game) GetHint(hostname string, cwd []string, partialLine string) proces
 // GetThought returns a natural-language description of the next planned
 // command, bridging dialog and hints.
 func (g *Game) GetThought(hostname string, cwd []string) string {
+	return PlanThought(g.GetPlannedCommand(hostname, cwd))
+}
+
+// GetPlannedCommand returns the literal next command the planner suggests,
+// or "" if no quest is active.
+func (g *Game) GetPlannedCommand(hostname string, cwd []string) string {
 	active := g.Manager.ActiveQuest()
 	if active == nil {
 		return ""
 	}
-	return PlanThought(active.PlanNextCommand(g.Sim, g.Manager.Tracker, hostname, cwd))
+	return active.PlanNextCommand(g.Sim, g.Manager.Tracker, hostname, cwd)
 }
 
 // NxQuest returns the current quest description.

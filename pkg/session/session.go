@@ -143,6 +143,7 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 
 func (s *Session) updateTerminal(t *terminal.T) {
 	t.State.Prompt = s.promptFor(s.Shell.Hostname(), s.Shell.CurrentDirectory())
+	t.State.PromptTarget = s.Game.GetPlannedCommand(s.Shell.Hostname(), s.Shell.CurrentDirectory())
 	valid := s.Guide.Next()
 	hint := s.Game.GetHint(s.Shell.Hostname(), s.Shell.CurrentDirectory(), s.Shell.CurrentCommand())
 	t.SetKeyboard(valid, hint)

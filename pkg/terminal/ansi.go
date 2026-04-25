@@ -70,28 +70,47 @@ func (a *ANSIRenderer) Render(f Frame) string {
 		sb.WriteString("│" + line + strings.Repeat(" ", padding) + "│\n")
 	}
 
-	// Prompt line — prefix in blue, typed input in default color
+	// Prompt line — prefix (blue), on-path input (green), off-path input (white).
 	prefix := f.PromptPrefix
-	input := f.PromptInput
+	onPath := f.PromptInputOn
+	offPath := f.PromptInputOff
 	prefixLen := utf8.RuneCountInString(prefix)
-	inputLen := utf8.RuneCountInString(input)
-	totalLen := prefixLen + inputLen
+	onLen := utf8.RuneCountInString(onPath)
+	offLen := utf8.RuneCountInString(offPath)
+	totalLen := prefixLen + onLen + offLen
 	if totalLen > f.Width {
-		// Truncate input first, then prefix if still too long.
+		// Truncate from the right: off-path first, then on-path, then prefix.
 		excess := totalLen - f.Width
-		if inputLen >= excess {
-			input = string([]rune(input)[:inputLen-excess])
-			inputLen -= excess
+		if offLen >= excess {
+			offPath = string([]rune(offPath)[:offLen-excess])
+			offLen -= excess
 		} else {
-			input = ""
-			inputLen = 0
-			prefix = string([]rune(prefix)[:f.Width])
-			prefixLen = f.Width
+			excess -= offLen
+			offPath = ""
+			offLen = 0
+			if onLen >= excess {
+				onPath = string([]rune(onPath)[:onLen-excess])
+				onLen -= excess
+			} else {
+				onPath = ""
+				onLen = 0
+				prefix = string([]rune(prefix)[:f.Width])
+				prefixLen = f.Width
+			}
 		}
-		totalLen = prefixLen + inputLen
+		totalLen = prefixLen + onLen + offLen
 	}
 	padding := f.Width - totalLen
-	sb.WriteString("│" + colorPrompt + prefix + colorReset + input + strings.Repeat(" ", padding) + "│\n")
+	sb.WriteString("│")
+	sb.WriteString(colorPrompt + prefix + colorReset)
+	if onLen > 0 {
+		sb.WriteString(colorGreen + onPath + colorReset)
+	}
+	if offLen > 0 {
+		sb.WriteString(colorWhite + offPath + colorReset)
+	}
+	sb.WriteString(strings.Repeat(" ", padding))
+	sb.WriteString("│\n")
 
 	sb.WriteString("└" + border + "┘\n")
 

@@ -61,29 +61,44 @@ func (h *HTMLRenderer) Render(f Frame) string {
 		sb.WriteString(`<span class="box">│</span>` + "\n")
 	}
 
-	// Prompt line — prefix in blue, typed input in default color
+	// Prompt line — prefix (blue), on-path input (green), off-path input (white).
 	prefix := f.PromptPrefix
-	input := f.PromptInput
+	onPath := f.PromptInputOn
+	offPath := f.PromptInputOff
 	prefixLen := utf8.RuneCountInString(prefix)
-	inputLen := utf8.RuneCountInString(input)
-	totalLen := prefixLen + inputLen
+	onLen := utf8.RuneCountInString(onPath)
+	offLen := utf8.RuneCountInString(offPath)
+	totalLen := prefixLen + onLen + offLen
 	if totalLen > f.Width {
 		excess := totalLen - f.Width
-		if inputLen >= excess {
-			input = string([]rune(input)[:inputLen-excess])
-			inputLen -= excess
+		if offLen >= excess {
+			offPath = string([]rune(offPath)[:offLen-excess])
+			offLen -= excess
 		} else {
-			input = ""
-			inputLen = 0
-			prefix = string([]rune(prefix)[:f.Width])
-			prefixLen = f.Width
+			excess -= offLen
+			offPath = ""
+			offLen = 0
+			if onLen >= excess {
+				onPath = string([]rune(onPath)[:onLen-excess])
+				onLen -= excess
+			} else {
+				onPath = ""
+				onLen = 0
+				prefix = string([]rune(prefix)[:f.Width])
+				prefixLen = f.Width
+			}
 		}
-		totalLen = prefixLen + inputLen
+		totalLen = prefixLen + onLen + offLen
 	}
 	padding := f.Width - totalLen
 	sb.WriteString(`<span class="box">│</span>`)
 	sb.WriteString(`<span class="prompt">` + html.EscapeString(prefix) + "</span>")
-	sb.WriteString(html.EscapeString(input))
+	if onLen > 0 {
+		sb.WriteString(`<span class="key-hint">` + html.EscapeString(onPath) + "</span>")
+	}
+	if offLen > 0 {
+		sb.WriteString(`<span class="prompt-off">` + html.EscapeString(offPath) + "</span>")
+	}
 	sb.WriteString(strings.Repeat(" ", padding))
 	sb.WriteString(`<span class="box">│</span>` + "\n")
 

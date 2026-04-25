@@ -77,16 +77,15 @@ func (t *T) Render() string {
 	}
 	termContentHeight := termBoxHeight - boxBorders
 
-	// Hint slot above the box is reserved for errors / Ctrl+C confirmations.
+	// Hint and thought are single-line slots — truncate to fit so wrapping
+	// doesn't push the rest of the layout around.
 	hintStr := ""
 	if t.State.Hint != nil {
-		hintStr = t.State.Hint.Error()
+		hintStr = TruncateRunes(t.State.Hint.Error(), contentWidth)
 	}
-
-	// Thought slot below the box.
 	thoughtStr := ""
 	if t.State.Thought != "" {
-		thoughtStr = "(" + t.State.Thought + "...)"
+		thoughtStr = TruncateRunes("("+t.State.Thought+"...)", contentWidth)
 	}
 
 	// Dialog fills remaining space above the hint + terminal box + thought
@@ -95,30 +94,53 @@ func (t *T) Render() string {
 		dialogSpace = 0
 	}
 
-	// Show the last dialogSpace lines of accumulated dialog
+	// Wrap each accumulated dialog line to the screen width, preserving
+	// the batch color across wrapped fragments. Then take the last
+	// dialogSpace lines to fit the slot.
+	var wrappedDialog []DialogLine
+	for _, dl := range t.State.Dialog {
+		for _, w := range WrapWords(dl.Text, t.ScreenWidth) {
+			wrappedDialog = append(wrappedDialog, DialogLine{Text: w, ColorIdx: dl.ColorIdx})
+		}
+	}
 	var dialogToShow []DialogLine
-	if dialogSpace > 0 && len(t.State.Dialog) > 0 {
-		start := len(t.State.Dialog) - dialogSpace
+	if dialogSpace > 0 && len(wrappedDialog) > 0 {
+		start := len(wrappedDialog) - dialogSpace
 		if start < 0 {
 			start = 0
 		}
-		dialogToShow = t.State.Dialog[start:]
+		dialogToShow = wrappedDialog[start:]
 	}
 
 	displayLines := ReflowLines(t.State.Lines, contentWidth, termContentHeight)
+	onPath, offPath := splitOnPath(t.State.Line, t.State.PromptTarget)
 
 	f := Frame{
-		DisplayLines: displayLines,
-		PromptPrefix: t.State.promptPrefix(),
-		PromptInput:  t.State.Line,
-		Dialog:       dialogToShow,
-		DialogSpace:  dialogSpace,
-		Hint:         hintStr,
-		Thought:      thoughtStr,
-		ValidKeys:    t.State.ValidKeys,
-		HintKey:      t.State.HintKey,
-		Width:        contentWidth,
-		Height:       termContentHeight,
+		DisplayLines:   displayLines,
+		PromptPrefix:   t.State.promptPrefix(),
+		PromptInputOn:  onPath,
+		PromptInputOff: offPath,
+		Dialog:         dialogToShow,
+		DialogSpace:    dialogSpace,
+		Hint:           hintStr,
+		Thought:        thoughtStr,
+		ValidKeys:      t.State.ValidKeys,
+		HintKey:        t.State.HintKey,
+		Width:          contentWidth,
+		Height:         termContentHeight,
 	}
 	return t.renderer.Render(f)
+}
+
+// splitOnPath returns the longest prefix of input that matches target,
+// followed by whatever the user has typed beyond that prefix. Once the
+// user diverges from target, everything after stays on the off-path side.
+func splitOnPath(input, target string) (onPath, offPath string) {
+	ir := []rune(input)
+	tr := []rune(target)
+	n := 0
+	for n < len(ir) && n < len(tr) && ir[n] == tr[n] {
+		n++
+	}
+	return string(ir[:n]), string(ir[n:])
 }
