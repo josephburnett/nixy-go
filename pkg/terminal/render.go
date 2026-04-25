@@ -5,10 +5,12 @@ import "github.com/josephburnett/nixy-go/pkg/process"
 // Frame holds all data needed to render one screen.
 type Frame struct {
 	DisplayLines []string
-	Prompt       string
+	PromptPrefix string // colored portion (e.g. "user@nixy:/home/nixy> ")
+	PromptInput  string // the user's typed line, rendered in default color
 	Dialog       []DialogLine
 	DialogSpace  int // total lines allocated for dialog (pad with blank lines)
 	Hint         string
+	Thought      string // shown on its own line below the terminal box
 	ValidKeys    []process.Datum
 	HintKey      process.Datum
 	Width        int

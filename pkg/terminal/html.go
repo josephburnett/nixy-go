@@ -61,20 +61,41 @@ func (h *HTMLRenderer) Render(f Frame) string {
 		sb.WriteString(`<span class="box">│</span>` + "\n")
 	}
 
-	// Prompt line
-	sb.WriteString(`<span class="box">│</span>`)
-	prompt := f.Prompt
-	runeLen := utf8.RuneCountInString(prompt)
-	if runeLen > f.Width {
-		prompt = string([]rune(prompt)[:f.Width])
-		runeLen = f.Width
+	// Prompt line — prefix in blue, typed input in default color
+	prefix := f.PromptPrefix
+	input := f.PromptInput
+	prefixLen := utf8.RuneCountInString(prefix)
+	inputLen := utf8.RuneCountInString(input)
+	totalLen := prefixLen + inputLen
+	if totalLen > f.Width {
+		excess := totalLen - f.Width
+		if inputLen >= excess {
+			input = string([]rune(input)[:inputLen-excess])
+			inputLen -= excess
+		} else {
+			input = ""
+			inputLen = 0
+			prefix = string([]rune(prefix)[:f.Width])
+			prefixLen = f.Width
+		}
+		totalLen = prefixLen + inputLen
 	}
-	padding := f.Width - runeLen
-	sb.WriteString(`<span class="prompt">` + html.EscapeString(prompt) + "</span>" + strings.Repeat(" ", padding))
+	padding := f.Width - totalLen
+	sb.WriteString(`<span class="box">│</span>`)
+	sb.WriteString(`<span class="prompt">` + html.EscapeString(prefix) + "</span>")
+	sb.WriteString(html.EscapeString(input))
+	sb.WriteString(strings.Repeat(" ", padding))
 	sb.WriteString(`<span class="box">│</span>` + "\n")
 
 	// Box bottom
 	sb.WriteString(`<span class="box">└` + border + "┘</span>\n")
+
+	// Thought line below the box.
+	if f.Thought != "" {
+		sb.WriteString(`<span class="hint">` + html.EscapeString(f.Thought) + "</span>\n")
+	} else {
+		sb.WriteString("\n")
+	}
 
 	// Keyboard
 	sb.WriteString("\n")

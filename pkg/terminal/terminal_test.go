@@ -1,11 +1,19 @@
 package terminal
 
 import (
+	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
+
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripANSI(s string) string {
+	return ansiEscape.ReplaceAllString(s, "")
+}
 
 func TestWriteChars(t *testing.T) {
 	term := New(NewANSI())
@@ -118,7 +126,7 @@ func TestRenderWithContent(t *testing.T) {
 	if !strings.Contains(out, "output line") {
 		t.Fatalf("expected 'output line' in render, got:\n%s", out)
 	}
-	if !strings.Contains(out, "> typing") {
+	if !strings.Contains(stripANSI(out), "> typing") {
 		t.Fatalf("expected '> typing' in render, got:\n%s", out)
 	}
 }
@@ -258,10 +266,10 @@ func TestRenderLineTruncation(t *testing.T) {
 	lines := strings.Split(out, "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "│") && strings.HasSuffix(line, "│") {
-			content := line[len("│") : len(line)-len("│")]
+			content := stripANSI(line[len("│") : len(line)-len("│")])
 			contentWidth := term.ScreenWidth - 2
-			if len(content) > contentWidth {
-				t.Fatalf("line exceeds terminal width: %d > %d", len(content), contentWidth)
+			if utf8.RuneCountInString(content) > contentWidth {
+				t.Fatalf("line exceeds terminal width: %d > %d", utf8.RuneCountInString(content), contentWidth)
 			}
 		}
 	}

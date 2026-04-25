@@ -9,10 +9,11 @@ import (
 
 // ANSI color codes
 const (
-	colorReset = "\033[0m"
-	colorDim   = "\033[2m"    // dim grey
-	colorWhite = "\033[1;37m" // bold white
-	colorGreen = "\033[1;32m" // bold green
+	colorReset  = "\033[0m"
+	colorDim    = "\033[2m"    // dim grey
+	colorWhite  = "\033[1;37m" // bold white
+	colorGreen  = "\033[1;32m" // bold green
+	colorPrompt = "\033[1;34m" // bold blue (active prompt only)
 )
 
 // dialogColorsANSI cycles for each new dialog batch so the user can see when
@@ -69,17 +70,37 @@ func (a *ANSIRenderer) Render(f Frame) string {
 		sb.WriteString("│" + line + strings.Repeat(" ", padding) + "│\n")
 	}
 
-	// Prompt line
-	prompt := f.Prompt
-	runeLen := utf8.RuneCountInString(prompt)
-	if runeLen > f.Width {
-		prompt = string([]rune(prompt)[:f.Width])
-		runeLen = f.Width
+	// Prompt line — prefix in blue, typed input in default color
+	prefix := f.PromptPrefix
+	input := f.PromptInput
+	prefixLen := utf8.RuneCountInString(prefix)
+	inputLen := utf8.RuneCountInString(input)
+	totalLen := prefixLen + inputLen
+	if totalLen > f.Width {
+		// Truncate input first, then prefix if still too long.
+		excess := totalLen - f.Width
+		if inputLen >= excess {
+			input = string([]rune(input)[:inputLen-excess])
+			inputLen -= excess
+		} else {
+			input = ""
+			inputLen = 0
+			prefix = string([]rune(prefix)[:f.Width])
+			prefixLen = f.Width
+		}
+		totalLen = prefixLen + inputLen
 	}
-	padding := f.Width - runeLen
-	sb.WriteString("│" + prompt + strings.Repeat(" ", padding) + "│\n")
+	padding := f.Width - totalLen
+	sb.WriteString("│" + colorPrompt + prefix + colorReset + input + strings.Repeat(" ", padding) + "│\n")
 
 	sb.WriteString("└" + border + "┘\n")
+
+	// Thought line below the box.
+	if f.Thought != "" {
+		sb.WriteString(colorDim + f.Thought + colorReset + "\n")
+	} else {
+		sb.WriteString("\n")
+	}
 
 	// Keyboard
 	sb.WriteString("\n")

@@ -30,7 +30,7 @@ body {
 }
 
 .box { color: #888; }
-.prompt { color: #fff; }
+.prompt { color: #6af; font-weight: bold; }
 .dialog-0 { color: #c33; } /* red */
 .dialog-1 { color: #cc0; } /* yellow */
 .dialog-2 { color: #48c; } /* blue */

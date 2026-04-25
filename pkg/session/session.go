@@ -76,7 +76,7 @@ func (s *Session) InitTerminal(t *terminal.T) {
 // HandleKeystroke processes a single input datum through the guide, drains
 // output, checks quest state, and updates the terminal. Returns true if EOF.
 func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
-	t.State.Prompt = "user@" + s.Shell.Hostname()
+	t.State.Prompt = s.promptFor(s.Shell.Hostname(), s.Shell.CurrentDirectory())
 
 	// Capture command + host before Enter dispatches — ssh nixy must be
 	// recorded against laptop, not the new nixy shell it spawns.
@@ -88,8 +88,11 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 		cmdCwd = s.Shell.CurrentDirectory()
 	}
 
-	_, err := s.Guide.Stdin(process.Data{datum})
-	t.Hint(err)
+	// Invalid keystrokes return an error from the guide; we silently swallow
+	// it so the user gets no negative feedback. The keyboard already shows
+	// which keys are valid; pressing anything else just does nothing.
+	_, _ = s.Guide.Stdin(process.Data{datum})
+	t.Hint(nil)
 
 	// Drain stdout
 	for range 50 {
@@ -139,9 +142,17 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 }
 
 func (s *Session) updateTerminal(t *terminal.T) {
-	t.State.Prompt = "user@" + s.Shell.Hostname()
+	t.State.Prompt = s.promptFor(s.Shell.Hostname(), s.Shell.CurrentDirectory())
 	valid := s.Guide.Next()
 	hint := s.Game.GetHint(s.Shell.Hostname(), s.Shell.CurrentDirectory(), s.Shell.CurrentCommand())
 	t.SetKeyboard(valid, hint)
 	t.SetThought(s.Game.GetThought(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
+}
+
+func (s *Session) promptFor(hostname string, cwd []string) string {
+	path := "/"
+	if len(cwd) > 0 {
+		path = "/" + strings.Join(cwd, "/")
+	}
+	return "user@" + hostname + ":" + path
 }

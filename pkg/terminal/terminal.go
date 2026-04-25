@@ -8,6 +8,7 @@ const (
 	// Fixed layout constants
 	boxBorders    = 3 // top border + bottom border + prompt line
 	hintLine      = 1 // always reserved, even when empty
+	thoughtLine   = 1 // always reserved, below the terminal box
 	keyboardLines = 6 // 3 letter rows + 1 special row + 1 blank + 1 trailing
 )
 
@@ -76,17 +77,20 @@ func (t *T) Render() string {
 	}
 	termContentHeight := termBoxHeight - boxBorders
 
-	// Hint slot: errors take priority, otherwise show the player's current
-	// thought (a natural-language hint bridging dialog and the keyboard).
+	// Hint slot above the box is reserved for errors / Ctrl+C confirmations.
 	hintStr := ""
 	if t.State.Hint != nil {
 		hintStr = t.State.Hint.Error()
-	} else if t.State.Thought != "" {
-		hintStr = "(" + t.State.Thought + "...)"
 	}
 
-	// Dialog fills remaining space above the hint + terminal box
-	dialogSpace := t.ScreenHeight - termBoxHeight - hintLine - keyboardLines
+	// Thought slot below the box.
+	thoughtStr := ""
+	if t.State.Thought != "" {
+		thoughtStr = "(" + t.State.Thought + "...)"
+	}
+
+	// Dialog fills remaining space above the hint + terminal box + thought
+	dialogSpace := t.ScreenHeight - termBoxHeight - hintLine - thoughtLine - keyboardLines
 	if dialogSpace < 0 {
 		dialogSpace = 0
 	}
@@ -102,14 +106,15 @@ func (t *T) Render() string {
 	}
 
 	displayLines := ReflowLines(t.State.Lines, contentWidth, termContentHeight)
-	prompt := t.State.promptPrefix() + t.State.Line
 
 	f := Frame{
 		DisplayLines: displayLines,
-		Prompt:       prompt,
+		PromptPrefix: t.State.promptPrefix(),
+		PromptInput:  t.State.Line,
 		Dialog:       dialogToShow,
 		DialogSpace:  dialogSpace,
 		Hint:         hintStr,
+		Thought:      thoughtStr,
 		ValidKeys:    t.State.ValidKeys,
 		HintKey:      t.State.HintKey,
 		Width:        contentWidth,

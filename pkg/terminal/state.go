@@ -17,9 +17,9 @@ type DialogLine struct {
 type State struct {
 	Line         string
 	Lines        []string
-	Prompt       string // e.g. "user@nixy", updated by session on hostname changes
+	Prompt       string // e.g. "user@nixy:/home/nixy", updated by session
 	Hint         error
-	Thought      string // shown in the hint slot when Hint is nil
+	Thought      string // natural-language hint shown below the terminal
 	Dialog       []DialogLine
 	NextColorIdx int
 	ValidKeys    []process.Datum
