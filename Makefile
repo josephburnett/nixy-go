@@ -31,6 +31,7 @@ test-v :
 
 fuzz :
 	go test -p 1 -count=10 ./pkg/game/quests/ -run TestFuzz
+	go test -p 1 -count=10 ./pkg/session/ -run TestFuzzE2E
 
 # Quality
 check :
