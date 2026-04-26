@@ -40,6 +40,20 @@
 
             // Handle keyboard input
             document.addEventListener("keydown", e => {
+                // Ctrl+\ dumps the snapshot ring to a downloadable file.
+                if (e.ctrlKey && (e.key === "\\" || e.code === "Backslash")) {
+                    const dump = nixyDumpState();
+                    const blob = new Blob([dump], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+                    a.download = `nixy-debug-${ts}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    e.preventDefault();
+                    return;
+                }
                 // Ignore modifier-only keys and key combos (except shift for uppercase)
                 if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") {
                     return;

@@ -24,6 +24,13 @@ func (t *CommandTracker) Record(hostname string, cwd []string, command string) {
 	})
 }
 
+// Records returns a copy of all recorded commands, oldest first.
+func (t *CommandTracker) Records() []CommandRecord {
+	out := make([]CommandRecord, len(t.commands))
+	copy(out, t.commands)
+	return out
+}
+
 // HasCommandOnHost checks if any command was run on the given hostname.
 func (t *CommandTracker) HasCommandOnHost(hostname string) bool {
 	for _, r := range t.commands {

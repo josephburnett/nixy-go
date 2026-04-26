@@ -17,14 +17,18 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
 
+	"github.com/josephburnett/nixy-go/pkg/debug"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/session"
 	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
 
+const debugRing = 10
+
 var (
-	sess *session.Session
-	term *terminal.T
+	sess     *session.Session
+	term     *terminal.T
+	recorder *debug.Recorder
 )
 
 func main() {
@@ -38,9 +42,13 @@ func main() {
 	term = terminal.New(terminal.NewHTML())
 	sess.InitTerminal(term)
 
+	recorder = debug.NewRecorder(debugRing)
+	recorder.Push(sess, term, nil)
+
 	js.Global().Set("nixyInit", js.FuncOf(handleInit))
 	js.Global().Set("nixyKeystroke", js.FuncOf(handleKeystroke))
 	js.Global().Set("nixyResize", js.FuncOf(handleResize))
+	js.Global().Set("nixyDumpState", js.FuncOf(handleDump))
 
 	// Block forever — WASM must not return from main.
 	select {}
@@ -74,7 +82,12 @@ func handleKeystroke(_ js.Value, args []js.Value) any {
 	}
 
 	sess.HandleKeystroke(datum, term)
+	recorder.Push(sess, term, datum)
 	return term.Render()
+}
+
+func handleDump(_ js.Value, _ []js.Value) any {
+	return recorder.Dump()
 }
 
 func handleResize(_ js.Value, args []js.Value) any {
