@@ -9,9 +9,11 @@ import (
 )
 
 // PlanHint returns the next Datum the player should type to advance toward
-// quest completion. If the player has typed something off-plan, returns
-// TermBackspace. If the player's partial line matches the plan, returns
-// the next character of the target command. Returns nil if no hint is available.
+// quest completion. If the player's partial line matches the plan, returns
+// the next character (or Enter at exact match). If the player has gone
+// off-plan, returns nil — let them run whatever command they want; the
+// planner re-engages on the next empty prompt. Returns nil if no plan
+// applies.
 func PlanHint(
 	quest Quest,
 	sim *simulation.S,
@@ -38,9 +40,11 @@ func PlanHint(
 		return process.Chars(string(target[len(partialLine)]))
 	}
 
-	// Player is off-plan, suggest backspace
+	// Player is off-plan. Don't shove them toward Backspace — they may be
+	// running a perfectly valid command (e.g. `ls`) before getting back to
+	// the plan. The plan re-engages naturally once the line is empty again.
 	if len(partialLine) > 0 {
-		return process.TermBackspace
+		return nil
 	}
 
 	// Empty line, return first char of target

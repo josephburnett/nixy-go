@@ -37,11 +37,16 @@ func TestPlanHintEnter(t *testing.T) {
 	}
 }
 
-func TestPlanHintBackspace(t *testing.T) {
+// TestPlanHintNoNagWhenOffPlan: when the player runs a different valid
+// command (e.g. `ls` while plan is `cd /home`), the planner should NOT
+// suggest Backspace. Returning nil keeps the keyboard quiet and lets
+// the player finish their command; the plan re-engages on the next
+// empty prompt.
+func TestPlanHintNoNagWhenOffPlan(t *testing.T) {
 	q := newPlannerQuest("cd /home", false)
 	hint := PlanHint(q, nil, nil, "", nil, "ls")
-	if tc, ok := hint.(process.TermCode); !ok || tc != process.TermBackspace {
-		t.Fatalf("expected TermBackspace, got %v", hint)
+	if hint != nil {
+		t.Fatalf("expected nil hint when off-plan, got %v", hint)
 	}
 }
 
@@ -68,10 +73,13 @@ func TestPlanHintPartialMatch(t *testing.T) {
 	}
 }
 
-func TestPlanHintBackspaceOnDivergence(t *testing.T) {
+// TestPlanHintNoNagOnDivergence: same principle as the no-nag test, but
+// for a partial divergence (typed prefix of plan then went off — e.g.
+// `cd /etc` instead of `cd /home`). Still no Backspace nag.
+func TestPlanHintNoNagOnDivergence(t *testing.T) {
 	q := newPlannerQuest("cd /home", false)
 	hint := PlanHint(q, nil, nil, "", nil, "cd /etc")
-	if tc, ok := hint.(process.TermCode); !ok || tc != process.TermBackspace {
-		t.Fatalf("expected TermBackspace, got %v", hint)
+	if hint != nil {
+		t.Fatalf("expected nil hint on divergence, got %v", hint)
 	}
 }
