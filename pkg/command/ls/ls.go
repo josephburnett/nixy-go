@@ -33,10 +33,7 @@ func launch(
 
 	target := cwd
 	if len(args) > 0 {
-		target, err = resolvePath(cwd, args[0])
-		if err != nil {
-			return nil, err
-		}
+		target = file.Resolve(cwd, args[0])
 	}
 
 	f, err := c.Filesystem.Navigate(target)
@@ -47,9 +44,12 @@ func launch(
 		return command.NewErrorProcess(owner, "ls: permission denied\n"), nil
 	}
 	if f.Type != file.Folder {
-		// ls on a file just shows the file name
-		parts := strings.Split(args[0], "/")
-		return command.NewSingleValueProcess(owner, parts[len(parts)-1]+"\n"), nil
+		// ls on a file shows the file name (basename of the resolved path).
+		name := ""
+		if len(target) > 0 {
+			name = target[len(target)-1]
+		}
+		return command.NewSingleValueProcess(owner, name+"\n"), nil
 	}
 
 	var names []string
@@ -63,32 +63,4 @@ func launch(
 		output += "\n"
 	}
 	return command.NewSingleValueProcess(owner, output), nil
-}
-
-func resolvePath(cwd []string, path string) ([]string, error) {
-	if strings.HasPrefix(path, "/") {
-		parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-		return filterEmpty(parts), nil
-	}
-	result := append([]string{}, cwd...)
-	for _, p := range strings.Split(path, "/") {
-		if p == ".." {
-			if len(result) > 0 {
-				result = result[:len(result)-1]
-			}
-		} else if p != "" && p != "." {
-			result = append(result, p)
-		}
-	}
-	return result, nil
-}
-
-func filterEmpty(ss []string) []string {
-	var out []string
-	for _, s := range ss {
-		if s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }

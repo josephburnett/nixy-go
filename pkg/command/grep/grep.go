@@ -67,8 +67,7 @@ func launch(
 		if err != nil {
 			return nil, err
 		}
-		path := resolvePath(cwd, args[1])
-		f, err := c.Filesystem.Navigate(path)
+		f, err := c.Filesystem.Navigate(file.Resolve(cwd, args[1]))
 		if err != nil {
 			return command.NewErrorProcess(owner, fmt.Sprintf("grep: %v\n", err)), nil
 		}
@@ -97,30 +96,6 @@ func filterLines(data, pattern string) string {
 		return ""
 	}
 	return strings.Join(matches, "\n") + "\n"
-}
-
-func resolvePath(cwd []string, path string) []string {
-	if strings.HasPrefix(path, "/") {
-		parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-		var out []string
-		for _, p := range parts {
-			if p != "" {
-				out = append(out, p)
-			}
-		}
-		return out
-	}
-	result := append([]string{}, cwd...)
-	for _, p := range strings.Split(path, "/") {
-		if p == ".." {
-			if len(result) > 0 {
-				result = result[:len(result)-1]
-			}
-		} else if p != "" && p != "." {
-			result = append(result, p)
-		}
-	}
-	return result
 }
 
 type stdinGrep struct {

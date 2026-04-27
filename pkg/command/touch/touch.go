@@ -2,7 +2,6 @@ package touch
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
 	"github.com/josephburnett/nixy-go/pkg/file"
@@ -36,7 +35,7 @@ func launch(
 	}
 
 	for _, arg := range args {
-		path := resolvePath(cwd, arg)
+		path := file.Resolve(cwd, arg)
 		if len(path) == 0 {
 			return command.NewErrorProcess(owner, "touch: cannot touch '/'\n"), nil
 		}
@@ -66,28 +65,4 @@ func launch(
 	}
 
 	return command.NewSingleValueProcess(owner, ""), nil
-}
-
-func resolvePath(cwd []string, path string) []string {
-	if strings.HasPrefix(path, "/") {
-		parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-		var out []string
-		for _, p := range parts {
-			if p != "" {
-				out = append(out, p)
-			}
-		}
-		return out
-	}
-	result := append([]string{}, cwd...)
-	for _, p := range strings.Split(path, "/") {
-		if p == ".." {
-			if len(result) > 0 {
-				result = result[:len(result)-1]
-			}
-		} else if p != "" && p != "." {
-			result = append(result, p)
-		}
-	}
-	return result
 }

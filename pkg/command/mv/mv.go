@@ -2,9 +2,9 @@ package mv
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
+	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
@@ -32,8 +32,8 @@ func launch(
 		return nil, err
 	}
 
-	srcPath := resolvePath(cwd, args[0])
-	dstPath := resolvePath(cwd, args[1])
+	srcPath := file.Resolve(cwd, args[0])
+	dstPath := file.Resolve(cwd, args[1])
 
 	if len(srcPath) == 0 {
 		return command.NewErrorProcess(owner, "mv: cannot move '/'\n"), nil
@@ -71,28 +71,4 @@ func launch(
 	delete(srcParent.Files, srcName)
 
 	return command.NewSingleValueProcess(owner, ""), nil
-}
-
-func resolvePath(cwd []string, path string) []string {
-	if strings.HasPrefix(path, "/") {
-		parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-		var out []string
-		for _, p := range parts {
-			if p != "" {
-				out = append(out, p)
-			}
-		}
-		return out
-	}
-	result := append([]string{}, cwd...)
-	for _, p := range strings.Split(path, "/") {
-		if p == ".." {
-			if len(result) > 0 {
-				result = result[:len(result)-1]
-			}
-		} else if p != "" && p != "." {
-			result = append(result, p)
-		}
-	}
-	return result
 }
