@@ -405,35 +405,35 @@ func (s *shell) Next() []process.Datum {
 
 	if last.HasArgs {
 		// Args mode for the current segment.
+		canSubmit := false
 		argValidator := s.getArgValidator(last.Name)
 		if argValidator != nil {
-			argValid := argValidator(s.simulation, s.hostname, s.currentDirectory, last.PartialArgs)
-			valid = append(valid, argValid...)
-			// `|` is shell-level — it's valid wherever Enter would be (i.e.
-			// when the validator considers the arg complete).
-			if datumsContainEnter(argValid) {
-				valid = append(valid, process.Chars("|"))
+			sug := argValidator(s.simulation, s.hostname, s.currentDirectory, last.PartialArgs)
+			for _, r := range sug.Chars {
+				valid = append(valid, process.Chars(string(r)))
 			}
-			// Commands with optional args (ls, pwd) can run as-is when
-			// the partial arg is empty — allow Enter and `|` here too.
-			if last.PartialArgs == "" && commandOptionalArgs(last.Name) {
-				valid = append(valid, process.TermEnter)
-				valid = append(valid, process.Chars("|"))
-			}
-			// Pipe-receiver position: command reads from upstream pipe, so
-			// fewer args are needed. e.g. `ls | grep target<Enter>` runs
-			// stdinGrep on ls's output.
-			if inPipe && commandReadyInPipe(last.Name, last.PartialArgs) {
-				valid = append(valid, process.TermEnter)
-				valid = append(valid, process.Chars("|"))
-			}
+			canSubmit = sug.Complete
 		} else {
-			// No validator: any printable + Enter + |
+			// No validator: any printable is allowed and the arg is always
+			// considered complete (we have no way to know otherwise).
 			for c := byte(32); c < 127; c++ {
 				valid = append(valid, process.Chars(string(c)))
 			}
-			valid = append(valid, process.TermEnter)
-			valid = append(valid, process.Chars("|"))
+			canSubmit = true
+		}
+		// Commands with optional args (ls, pwd) can run as-is when the
+		// partial arg is empty.
+		if last.PartialArgs == "" && commandOptionalArgs(last.Name) {
+			canSubmit = true
+		}
+		// Pipe-receiver position: command reads from upstream pipe, so
+		// fewer args are needed. e.g. `ls | grep target<Enter>` runs
+		// stdinGrep on ls's output.
+		if inPipe && commandReadyInPipe(last.Name, last.PartialArgs) {
+			canSubmit = true
+		}
+		if canSubmit {
+			valid = append(valid, process.TermEnter, process.Chars("|"))
 		}
 		return valid
 	}
@@ -462,12 +462,8 @@ func (s *shell) Next() []process.Datum {
 		//   runs as stdinCat reading ls's output).
 		// Otherwise the binary itself would reject zero args ("missing
 		// operand"), violating the "no mistakes" invariant.
-		if commandOptionalArgs(last.Name) {
-			valid = append(valid, process.TermEnter)
-			valid = append(valid, process.Chars("|"))
-		} else if inPipe && commandReadyInPipe(last.Name, "") {
-			valid = append(valid, process.TermEnter)
-			valid = append(valid, process.Chars("|"))
+		if commandOptionalArgs(last.Name) || (inPipe && commandReadyInPipe(last.Name, "")) {
+			valid = append(valid, process.TermEnter, process.Chars("|"))
 		}
 	}
 	return valid
@@ -512,15 +508,6 @@ func commandOptionalArgs(name string) bool {
 	}
 	if b, err := simulation.GetBinary(name); err == nil {
 		return b.OptionalArgs
-	}
-	return false
-}
-
-func datumsContainEnter(ds []process.Datum) bool {
-	for _, d := range ds {
-		if t, ok := d.(process.TermCode); ok && t == process.TermEnter {
-			return true
-		}
 	}
 	return false
 }

@@ -436,7 +436,14 @@ func TestShellNextInvariant_EveryEnterStateTerminates(t *testing.T) {
 		}
 		next := p.Next()
 
-		if datumsContainEnter(next) {
+		hasEnter := false
+		for _, d := range next {
+			if t, ok := d.(process.TermCode); ok && t == process.TermEnter {
+				hasEnter = true
+				break
+			}
+		}
+		if hasEnter {
 			exploredEnterStates++
 			verifyEnterTerminates(t, cur, maxPolls)
 		}

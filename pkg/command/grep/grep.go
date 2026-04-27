@@ -10,6 +10,8 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
+var _ simulation.ValidArgs = validArgs
+
 func init() {
 	simulation.Register("grep", &simulation.Binary{
 		Launch:       launch,
@@ -26,25 +28,22 @@ func init() {
 // validArgs gates grep input to "<pattern> <file>" — both required.
 // Pattern phase: any printable except space; once any pattern char is
 // typed, space advances to the file phase. File phase: delegates to
-// ValidArgsFile, which only adds Enter on exact-match against an
-// existing file.
-func validArgs(sim *simulation.S, hostname string, cwd []string, partial string) []process.Datum {
-	spaceIdx := strings.Index(partial, " ")
-	if spaceIdx < 0 {
-		// Pattern phase. Any printable except space; space allowed once
-		// at least one pattern char has been typed.
-		var valid []process.Datum
+// ValidArgsFile, which only marks Complete on exact-match against an
+// existing file. Pattern alone is never Complete — bare grep with a
+// pattern hangs (the shell adds pipe-receiver Enter separately).
+func validArgs(sim *simulation.S, hostname string, cwd []string, partial string) simulation.Suggestion {
+	pattern, fileSpec, hasSpace := strings.Cut(partial, " ")
+	if !hasSpace {
+		// Pattern phase.
+		chars := make([]rune, 0, 127-33+1)
 		for c := byte(33); c < 127; c++ { // 33 skips space (0x20)
-			valid = append(valid, process.Chars(string(c)))
+			chars = append(chars, rune(c))
 		}
-		if partial != "" {
-			valid = append(valid, process.Chars(" "))
+		if pattern != "" {
+			chars = append(chars, ' ')
 		}
-		// No Enter, no `|` — pattern alone hangs.
-		return valid
+		return simulation.Suggestion{Chars: chars}
 	}
-	// File phase. partial = "<pattern> <fileSpec>"; delegate fileSpec.
-	fileSpec := partial[spaceIdx+1:]
 	return command.ValidArgsFile(sim, hostname, cwd, fileSpec)
 }
 

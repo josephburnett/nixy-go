@@ -42,14 +42,31 @@ type Binary struct {
 	PipeReceiver bool      // true if the command can read stdin from an upstream pipe (cat with no args, grep with just a pattern)
 }
 
-// ValidArgs returns valid next datum values given partial argument input.
-// If nil, the shell allows any printable character as arguments.
+// Suggestion is what an argument validator returns to the shell:
+//   - Chars are the characters the player may type next as part of the
+//     argument (e.g. continuations of a path prefix, including `/` to
+//     descend, or printable bytes for a free-form pattern).
+//   - Complete reports whether the current partial input forms a complete,
+//     submittable argument (e.g. exact-match against an existing file).
+//
+// The shell composes Enter and `|` on top of Complete. Validators do not
+// need to return TermEnter directly; they answer "what continuations?"
+// and "is this submittable?" and the shell handles segment-completion
+// keys.
+type Suggestion struct {
+	Chars    []rune
+	Complete bool
+}
+
+// ValidArgs returns the set of valid continuations and whether the
+// current partial input is a complete argument. If a binary's ValidArgs
+// is nil, the shell allows any printable character as arguments.
 type ValidArgs func(
 	sim *S,
 	hostname string,
 	cwd []string,
 	partialArgs string,
-) []process.Datum
+) Suggestion
 
 type Launch func(
 	s *S,
