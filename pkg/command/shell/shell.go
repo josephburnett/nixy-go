@@ -381,9 +381,9 @@ func (s *shell) builtinCd(args []string) error {
 // shell-level "execute this segment" keys, valid only when the current
 // segment is complete.
 //
-// Pipes are handled structurally: only the segment after the last `|` is
-// validated, so typing `ls|grep target` walks through fresh-prompt → ls
-// → exact-match → `|` → fresh-prompt → grep → arg-mode → ... naturally.
+// Pipes are handled structurally: command.Parse splits on `|` and we
+// validate only the last segment. Earlier segments are committed —
+// typing `|` was only allowed when the previous segment was complete.
 func (s *shell) Next() []process.Datum {
 	if s.exited {
 		return nil
@@ -398,17 +398,18 @@ func (s *shell) Next() []process.Datum {
 		valid = append(valid, process.TermBackspace)
 	}
 
-	// Pipe-aware: validate only the segment after the last `|` (with leading
-	// whitespace trimmed). Everything before is already a complete segment
-	// because typing `|` was only allowed when it was.
-	segment := s.currentCommand
-	if idx := strings.LastIndex(s.currentCommand, "|"); idx >= 0 {
-		segment = strings.TrimLeft(s.currentCommand[idx+1:], " ")
-	}
+	p := command.Parse(s.currentCommand)
+	last := p.Last()
+	// inPipe: at least one earlier segment exists, so the current segment
+	// runs as a pipe receiver. Commands marked PipeReceiver can execute
+	// with fewer args when piped (cat with zero args, grep with just a
+	// pattern) because their stdin comes from upstream rather than
+	// terminal input.
+	inPipe := p.InPipe()
 
 	cmdNames := s.availableCommands()
 
-	if segment == "" {
+	if last.Name == "" {
 		// Fresh prompt or fresh segment after a pipe.
 		firstChars := map[byte]bool{}
 		for _, name := range cmdNames {
@@ -422,23 +423,11 @@ func (s *shell) Next() []process.Datum {
 		return valid
 	}
 
-	// inPipe: there's a `|` before the current segment, so this segment runs
-	// as a pipe receiver. Commands marked PipeReceiver can execute with
-	// fewer args when piped (cat with zero args, grep with just a pattern)
-	// because their stdin comes from upstream rather than terminal input.
-	inPipe := strings.Contains(s.currentCommand, "|")
-
-	if strings.Contains(segment, " ") {
+	if last.HasArgs {
 		// Args mode for the current segment.
-		fields := strings.SplitN(segment, " ", 2)
-		cmdName := fields[0]
-		partialArgs := ""
-		if len(fields) > 1 {
-			partialArgs = fields[1]
-		}
-		argValidator := s.getArgValidator(cmdName)
+		argValidator := s.getArgValidator(last.Name)
 		if argValidator != nil {
-			argValid := argValidator(s.simulation, s.hostname, s.currentDirectory, partialArgs)
+			argValid := argValidator(s.simulation, s.hostname, s.currentDirectory, last.PartialArgs)
 			valid = append(valid, argValid...)
 			// `|` is shell-level — it's valid wherever Enter would be (i.e.
 			// when the validator considers the arg complete).
@@ -447,14 +436,14 @@ func (s *shell) Next() []process.Datum {
 			}
 			// Commands with optional args (ls, pwd) can run as-is when
 			// the partial arg is empty — allow Enter and `|` here too.
-			if partialArgs == "" && commandOptionalArgs(cmdName) {
+			if last.PartialArgs == "" && commandOptionalArgs(last.Name) {
 				valid = append(valid, process.TermEnter)
 				valid = append(valid, process.Chars("|"))
 			}
 			// Pipe-receiver position: command reads from upstream pipe, so
 			// fewer args are needed. e.g. `ls | grep target<Enter>` runs
 			// stdinGrep on ls's output.
-			if inPipe && commandReadyInPipe(cmdName, partialArgs) {
+			if inPipe && commandReadyInPipe(last.Name, last.PartialArgs) {
 				valid = append(valid, process.TermEnter)
 				valid = append(valid, process.Chars("|"))
 			}
@@ -473,12 +462,12 @@ func (s *shell) Next() []process.Datum {
 	continuations := map[byte]bool{}
 	exactMatch := false
 	for _, name := range cmdNames {
-		if strings.HasPrefix(name, segment) {
-			if name == segment {
+		if strings.HasPrefix(name, last.Name) {
+			if name == last.Name {
 				exactMatch = true
 			}
-			if len(name) > len(segment) {
-				continuations[name[len(segment)]] = true
+			if len(name) > len(last.Name) {
+				continuations[name[len(last.Name)]] = true
 			}
 		}
 	}
@@ -493,10 +482,10 @@ func (s *shell) Next() []process.Datum {
 		//   runs as stdinCat reading ls's output).
 		// Otherwise the binary itself would reject zero args ("missing
 		// operand"), violating the "no mistakes" invariant.
-		if commandOptionalArgs(segment) {
+		if commandOptionalArgs(last.Name) {
 			valid = append(valid, process.TermEnter)
 			valid = append(valid, process.Chars("|"))
-		} else if inPipe && commandReadyInPipe(segment, "") {
+		} else if inPipe && commandReadyInPipe(last.Name, "") {
 			valid = append(valid, process.TermEnter)
 			valid = append(valid, process.Chars("|"))
 		}
