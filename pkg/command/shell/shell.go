@@ -431,6 +431,12 @@ func (s *shell) Next() []process.Datum {
 		return valid
 	}
 
+	// inPipe: there's a `|` before the current segment, so this segment runs
+	// as a pipe receiver. Commands marked PipeReceiver can execute with
+	// fewer args when piped (cat with zero args, grep with just a pattern)
+	// because their stdin comes from upstream rather than terminal input.
+	inPipe := strings.Contains(s.currentCommand, "|")
+
 	if strings.Contains(segment, " ") {
 		// Args mode for the current segment.
 		fields := strings.SplitN(segment, " ", 2)
@@ -448,9 +454,16 @@ func (s *shell) Next() []process.Datum {
 			if datumsContainEnter(argValid) {
 				valid = append(valid, process.Chars("|"))
 			}
-			// Commands with optional args (ls, cat, pwd) can run as-is when
+			// Commands with optional args (ls, pwd) can run as-is when
 			// the partial arg is empty — allow Enter and `|` here too.
 			if partialArgs == "" && commandOptionalArgs(cmdName) {
+				valid = append(valid, process.TermEnter)
+				valid = append(valid, process.Chars("|"))
+			}
+			// Pipe-receiver position: command reads from upstream pipe, so
+			// fewer args are needed. e.g. `ls | grep target<Enter>` runs
+			// stdinGrep on ls's output.
+			if inPipe && commandReadyInPipe(cmdName, partialArgs) {
 				valid = append(valid, process.TermEnter)
 				valid = append(valid, process.Chars("|"))
 			}
@@ -483,16 +496,47 @@ func (s *shell) Next() []process.Datum {
 	}
 	if exactMatch {
 		valid = append(valid, process.Chars(" ")) // can always type args
-		// Enter and `|` only when the command can run with zero args.
-		// Otherwise the player would be able to execute a command that
-		// the binary itself rejects ("missing operand"), violating the
-		// "no mistakes" invariant.
+		// Enter and `|` only when the segment is executable as-is. Two cases:
+		// - OptionalArgs (e.g. `ls<Enter>` standalone)
+		// - PipeReceiver in pipe position (e.g. `ls | cat<Enter>` — cat
+		//   runs as stdinCat reading ls's output).
+		// Otherwise the binary itself would reject zero args ("missing
+		// operand"), violating the "no mistakes" invariant.
 		if commandOptionalArgs(segment) {
+			valid = append(valid, process.TermEnter)
+			valid = append(valid, process.Chars("|"))
+		} else if inPipe && commandReadyInPipe(segment, "") {
 			valid = append(valid, process.TermEnter)
 			valid = append(valid, process.Chars("|"))
 		}
 	}
 	return valid
+}
+
+// commandReadyInPipe reports whether a command segment is ready to
+// execute as a pipe receiver, given its current partial args.
+//
+//   - cat: always ready in pipe context — bare cat reads stdin from
+//     upstream.
+//   - grep: ready when at least one non-space char of pattern has been
+//     typed; without a pattern, grep errors ("missing pattern").
+//   - others: not ready in pipe context.
+//
+// This is the per-command rule the keyboard uses to decide when Enter
+// is valid in pipe-receiver position.
+func commandReadyInPipe(cmdName, partialArgs string) bool {
+	b, err := simulation.GetBinary(cmdName)
+	if err != nil || !b.PipeReceiver {
+		return false
+	}
+	switch cmdName {
+	case "cat":
+		return true // any args (or none) are fine in pipe context
+	case "grep":
+		// Need at least one pattern char (non-space).
+		return strings.TrimSpace(partialArgs) != ""
+	}
+	return false
 }
 
 // commandOptionalArgs reports whether the named command (binary or

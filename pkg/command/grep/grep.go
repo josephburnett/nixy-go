@@ -12,8 +12,40 @@ import (
 
 func init() {
 	simulation.Register("grep", &simulation.Binary{
-		Launch: launch,
+		Launch:       launch,
+		ValidArgs:    validArgs,
+		PipeReceiver: true, // `ls | grep PATTERN` is valid; `grep PATTERN` standalone hangs.
+		// OptionalArgs is false: bare grep errors with "missing pattern",
+		// and grep with one arg standalone returns stdinGrep which hangs.
+		// The validator only adds Enter at the standalone "pattern + file"
+		// state. Pipe-receiver Enter (after just pattern) is added by the
+		// shell when there's a preceding `|`.
 	})
+}
+
+// validArgs gates grep input to "<pattern> <file>" — both required.
+// Pattern phase: any printable except space; once any pattern char is
+// typed, space advances to the file phase. File phase: delegates to
+// ValidArgsFile, which only adds Enter on exact-match against an
+// existing file.
+func validArgs(sim *simulation.S, hostname string, cwd []string, partial string) []process.Datum {
+	spaceIdx := strings.Index(partial, " ")
+	if spaceIdx < 0 {
+		// Pattern phase. Any printable except space; space allowed once
+		// at least one pattern char has been typed.
+		var valid []process.Datum
+		for c := byte(33); c < 127; c++ { // 33 skips space (0x20)
+			valid = append(valid, process.Chars(string(c)))
+		}
+		if partial != "" {
+			valid = append(valid, process.Chars(" "))
+		}
+		// No Enter, no `|` — pattern alone hangs.
+		return valid
+	}
+	// File phase. partial = "<pattern> <fileSpec>"; delegate fileSpec.
+	fileSpec := partial[spaceIdx+1:]
+	return command.ValidArgsFile(sim, hostname, cwd, fileSpec)
 }
 
 func launch(

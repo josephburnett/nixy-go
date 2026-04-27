@@ -38,7 +38,8 @@ func (s *S) Launch(hostname, owner, binaryName string, args []string, cwd []stri
 type Binary struct {
 	Launch       Launch
 	ValidArgs    ValidArgs // optional: returns valid next inputs for arguments
-	OptionalArgs bool      // true if the command can run with zero arguments
+	OptionalArgs bool      // true if the command can run with zero arguments (standalone, no pipe required)
+	PipeReceiver bool      // true if the command can read stdin from an upstream pipe (cat with no args, grep with just a pattern)
 }
 
 // ValidArgs returns valid next datum values given partial argument input.

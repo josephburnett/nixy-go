@@ -1,9 +1,11 @@
 package shell
 
 import (
+	"sort"
 	"strings"
 	"testing"
 
+	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
 	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
 	_ "github.com/josephburnett/nixy-go/pkg/command/pwd"
@@ -54,6 +56,13 @@ func testSetup(t *testing.T) (*simulation.S, process.P) {
 						OwnerPermission:  file.Write,
 						CommonPermission: file.Read,
 						Data:             "rm",
+					},
+					"cat": {
+						Type:             file.Binary,
+						Owner:            file.OwnerRoot,
+						OwnerPermission:  file.Write,
+						CommonPermission: file.Read,
+						Data:             "cat",
 					},
 				},
 			},
@@ -331,6 +340,186 @@ func TestShellNextInvariant_OptionalArgsCommandAllowsBareEnter(t *testing.T) {
 	if !containsDatum(next, process.Chars("|")) {
 		t.Fatal("`|` must be valid after 'ls' (can pipe ls output)")
 	}
+}
+
+// TestShellNextInvariant_CatStandaloneRequiresArgs: cat without args
+// standalone runs stdinCat which hangs forever waiting for input the
+// game can't supply (no terminal stdin). The keyboard must not allow
+// `cat<Enter>` or `cat <Enter>` standalone.
+func TestShellNextInvariant_CatStandaloneRequiresArgs(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "cat")
+	next := p.Next()
+	if containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must not be valid after standalone 'cat' (would hang)")
+	}
+	if containsDatum(next, process.Chars("|")) {
+		t.Fatal("`|` must not be valid after standalone 'cat' (nothing to pipe)")
+	}
+	writeString(t, p, " ")
+	next = p.Next()
+	if containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must not be valid after 'cat ' standalone")
+	}
+}
+
+// TestShellNextInvariant_CatInPipeAllowsBareEnter: in pipe-receiver
+// position (`ls | cat`), cat with no args is valid — stdinCat reads
+// from the upstream pipe and terminates when the upstream EOFs.
+func TestShellNextInvariant_CatInPipeAllowsBareEnter(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "ls|cat")
+	next := p.Next()
+	if !containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must be valid after 'ls|cat' (cat is pipe receiver)")
+	}
+}
+
+// TestShellNextInvariant_GrepStandaloneRequiresFile: grep with just a
+// pattern (no file) standalone returns stdinGrep which hangs. The
+// keyboard must not allow Enter at `grep PATTERN` standalone — only
+// at `grep PATTERN file` (validator's exact-match Enter).
+func TestShellNextInvariant_GrepStandaloneRequiresFile(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "grep err")
+	next := p.Next()
+	if containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must not be valid after standalone 'grep err' (no file = hang)")
+	}
+}
+
+// TestShellNextInvariant_GrepInPipeAllowsPatternOnly: in pipe-receiver
+// position, `ls | grep PATTERN` is valid — stdinGrep filters upstream's
+// output. Enter must be allowed once a pattern is typed.
+func TestShellNextInvariant_GrepInPipeAllowsPatternOnly(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "ls|grep err")
+	next := p.Next()
+	if !containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must be valid after 'ls|grep err' (grep is pipe receiver, pattern typed)")
+	}
+}
+
+// TestShellNextInvariant_EveryEnterStateTerminates is the structural
+// guardian for the "no mistakes" invariant: for every keyboard state
+// where Enter is in the valid set, pressing Enter must result in a
+// terminating execution. The test walks the keyboard space (BFS from
+// empty buffer, Chars-only edges) and at each Enter-valid state replays
+// those keystrokes on a fresh shell, presses Enter, and confirms the
+// shell recovers.
+//
+// This is the test that should have caught the cat-hang and grep-hang
+// bugs deterministically. The hint-guided E2E fuzz can't catch them
+// because it follows the planner's exact output, so it never explores
+// states like `cat<Enter>` or `grep pat<Enter>`.
+func TestShellNextInvariant_EveryEnterStateTerminates(t *testing.T) {
+	const (
+		maxStates           = 2000
+		maxLen              = 25
+		maxPolls            = 200
+		maxChildrenPerState = 6 // cap branching so one no-validator command can't monopolize the BFS budget
+	)
+
+	seen := map[string]bool{"": true}
+	queue := []string{""}
+	checked := 0
+	exploredEnterStates := 0
+
+	for len(queue) > 0 && len(seen) < maxStates {
+		cur := queue[0]
+		queue = queue[1:]
+
+		// Build a fresh shell, replay the prefix, get Next().
+		_, p := testSetup(t)
+		for _, r := range cur {
+			_, _ = p.Stdin(process.Data{process.Chars(string(r))})
+		}
+		next := p.Next()
+
+		if datumsContainEnter(next) {
+			exploredEnterStates++
+			verifyEnterTerminates(t, cur, maxPolls)
+		}
+
+		if len(cur) >= maxLen {
+			continue
+		}
+
+		// Collect Chars children, sort for determinism, evenly sample.
+		var chars []string
+		for _, d := range next {
+			if c, ok := d.(process.Chars); ok {
+				chars = append(chars, string(c))
+			}
+		}
+		sort.Strings(chars)
+		picks := chars
+		if len(chars) > maxChildrenPerState {
+			step := len(chars) / maxChildrenPerState
+			picks = picks[:0]
+			for i := 0; i < maxChildrenPerState; i++ {
+				picks = append(picks, chars[i*step])
+			}
+		}
+		for _, c := range picks {
+			ns := cur + c
+			if !seen[ns] {
+				seen[ns] = true
+				queue = append(queue, ns)
+			}
+		}
+		checked++
+	}
+
+	if exploredEnterStates == 0 {
+		t.Fatal("BFS reached no Enter-valid states — bounds too tight or invariant test misconfigured")
+	}
+	t.Logf("walked %d states, %d Enter-valid states verified", checked, exploredEnterStates)
+}
+
+// verifyEnterTerminates types `prefix` on a fresh shell, presses Enter,
+// and drains until either: (a) the shell returns to fresh prompt (child
+// reaped, currentCommand empty — the normal case), or (b) the shell
+// itself EOFs (exit was the typed command). Fails if neither happens
+// within maxPolls iterations — the hang signature.
+func verifyEnterTerminates(t *testing.T, prefix string, maxPolls int) {
+	t.Helper()
+	_, p := testSetup(t)
+	for _, r := range prefix {
+		_, _ = p.Stdin(process.Data{process.Chars(string(r))})
+	}
+	_, _ = p.Stdin(process.Data{process.TermEnter})
+
+	for i := 0; i < maxPolls; i++ {
+		_, eof, _ := p.Stdout()
+		_, _, _ = p.Stderr()
+		if eof { // shell exited — correct termination for `exit`
+			return
+		}
+		if isFreshPrompt(p.Next()) {
+			return
+		}
+	}
+	t.Fatalf("hang: shell did not recover after %q + Enter within %d polls", prefix, maxPolls)
+}
+
+// isFreshPrompt reports whether the shell looks like it's at an empty
+// prompt (childProcess nil, currentCommand empty). At that point Next()
+// returns first chars of available commands and does NOT include
+// Backspace.
+func isFreshPrompt(next []process.Datum) bool {
+	for _, d := range next {
+		if t, ok := d.(process.TermCode); ok && t == process.TermBackspace {
+			return false
+		}
+	}
+	chars := 0
+	for _, d := range next {
+		if _, ok := d.(process.Chars); ok {
+			chars++
+		}
+	}
+	return chars >= 2
 }
 
 // TestShellNextInvariant_PipeStartsFreshSegment: after typing `|`, the

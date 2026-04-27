@@ -24,15 +24,31 @@ This is what makes exploration safe. A beginner mashing keys learns,
 not panics.
 
 Implementation:
-- `simulation.Binary.OptionalArgs` declares whether a command runs
-  with zero args (`ls`, `cat`, `pwd` — true; everything else false).
-- `Enter` and `|` are valid only at *segment-completion points* —
-  exact-match of an optional-args command, or exact-match of a
-  complete argument.
+- `simulation.Binary` declares two flags:
+  - `OptionalArgs` — command runs cleanly with zero args *standalone*
+    (`ls`, `pwd`). NOT cat or grep — those hang without an upstream
+    pipe because the game has no terminal stdin.
+  - `PipeReceiver` — command can read from an upstream pipe (`cat`
+    with no args, `grep` with just a pattern). Enter is valid in
+    pipe-receiver position even when standalone Enter wouldn't be.
+- `Enter` and `|` are valid only at *segment-completion points*:
+  - exact-match of an optional-args command (`ls<Enter>`),
+  - exact-match of a complete argument (`cat readme.txt<Enter>`),
+  - or pipe-receiver position with the per-command minimum (e.g.
+    `ls | cat<Enter>` or `ls | grep target<Enter>`).
 - `shell.Next()` is pipe-aware: it splits on `|` and validates only
   the segment after the last pipe, so typing `|` resets to fresh-prompt
-  state for the next segment.
-- Pinned by `TestShellNextInvariant_*` in `pkg/command/shell/shell_test.go`.
+  state for the next segment. The `inPipe` flag (any `|` in the
+  current input) gates `PipeReceiver` execution.
+- The structural property test
+  `TestShellNextInvariant_EveryEnterStateTerminates` walks the keyboard
+  space (BFS from empty buffer, capped) and verifies every Enter-valid
+  state terminates. This is the deterministic guard against the
+  cat-hang / grep-hang class of bug — the hint-guided E2E fuzz can't
+  catch these since it follows the planner's exact output, never
+  exploring partial-input states.
+- Other invariants pinned by `TestShellNextInvariant_*` in
+  `pkg/command/shell/shell_test.go`.
 
 ### 2. Real Unix, not a toy (simulation layer)
 
