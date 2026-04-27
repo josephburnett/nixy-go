@@ -283,6 +283,73 @@ func TestShellSurfacesChildStderr(t *testing.T) {
 	}
 }
 
+// TestShellNextInvariant_PartialArgCannotExecute pins the "no mistakes"
+// invariant for argument typing: a player cannot press Enter or `|`
+// while in the middle of typing a filename that doesn't yet match an
+// existing file. Otherwise they'd execute commands like "cat r" against
+// nonexistent paths.
+func TestShellNextInvariant_PartialArgCannotExecute(t *testing.T) {
+	_, p := testSetup(t)
+	// Set up: type "rm " (with space) to enter arg mode. testSetup's /home/user
+	// folder is empty, so any partial filename has no exact match.
+	writeString(t, p, "rm ")
+	_ = readAllStdout(t, p)
+	next := p.Next()
+	if containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must not be valid mid-arg for rm (no exact match)")
+	}
+	if containsDatum(next, process.Chars("|")) {
+		t.Fatal("`|` must not be valid mid-arg for rm (no exact match)")
+	}
+}
+
+// TestShellNextInvariant_RequiredArgsCommandRejectsBareEnter pins the
+// invariant for command names: a command that needs args (like rm)
+// must not accept Enter at the bare command name. Without this, the
+// player could type `rm<Enter>` and trigger "rm: missing operand".
+func TestShellNextInvariant_RequiredArgsCommandRejectsBareEnter(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "rm")
+	next := p.Next()
+	if containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must not be valid after just 'rm' (rm requires args)")
+	}
+	if !containsDatum(next, process.Chars(" ")) {
+		t.Fatal("space must be valid after 'rm' so the player can supply args")
+	}
+}
+
+// TestShellNextInvariant_OptionalArgsCommandAllowsBareEnter: ls accepts
+// zero args (lists cwd). Enter must be valid right after typing "ls".
+func TestShellNextInvariant_OptionalArgsCommandAllowsBareEnter(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "ls")
+	next := p.Next()
+	if !containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must be valid after 'ls' (ls accepts zero args)")
+	}
+	if !containsDatum(next, process.Chars("|")) {
+		t.Fatal("`|` must be valid after 'ls' (can pipe ls output)")
+	}
+}
+
+// TestShellNextInvariant_PipeStartsFreshSegment: after typing `|`, the
+// shell must validate the next segment as a fresh command name (first
+// chars of available commands).
+func TestShellNextInvariant_PipeStartsFreshSegment(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "ls|")
+	next := p.Next()
+	// Should include first chars of any installed command (e.g. 'g' for grep)
+	if !containsDatum(next, process.Chars("g")) {
+		t.Fatal("after `ls|` first chars of commands (e.g. 'g' for grep) should be valid")
+	}
+	// Must not include Enter — no command yet on the right side of the pipe
+	if containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must not be valid right after `|` — no command on the right yet")
+	}
+}
+
 func TestShellExit(t *testing.T) {
 	_, p := testSetup(t)
 

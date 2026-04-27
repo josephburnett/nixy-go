@@ -384,6 +384,15 @@ func (s *shell) builtinCd(args []string) error {
 	return nil
 }
 
+// Next returns the keystrokes that lead to a correct, executable action
+// at the current cursor position. The invariant: a player can never type
+// something the shell would refuse to run cleanly. Enter and `|` are
+// shell-level "execute this segment" keys, valid only when the current
+// segment is complete.
+//
+// Pipes are handled structurally: only the segment after the last `|` is
+// validated, so typing `ls|grep target` walks through fresh-prompt → ls
+// → exact-match → `|` → fresh-prompt → grep → arg-mode → ... naturally.
 func (s *shell) Next() []process.Datum {
 	if s.exited {
 		return nil
@@ -394,16 +403,22 @@ func (s *shell) Next() []process.Datum {
 
 	var valid []process.Datum
 
-	// Backspace if there's text
 	if len(s.currentCommand) > 0 {
 		valid = append(valid, process.TermBackspace)
 	}
 
-	// Collect all valid command names
+	// Pipe-aware: validate only the segment after the last `|` (with leading
+	// whitespace trimmed). Everything before is already a complete segment
+	// because typing `|` was only allowed when it was.
+	segment := s.currentCommand
+	if idx := strings.LastIndex(s.currentCommand, "|"); idx >= 0 {
+		segment = strings.TrimLeft(s.currentCommand[idx+1:], " ")
+	}
+
 	cmdNames := s.availableCommands()
 
-	if s.currentCommand == "" {
-		// At empty prompt: first char of any valid command
+	if segment == "" {
+		// Fresh prompt or fresh segment after a pipe.
 		firstChars := map[byte]bool{}
 		for _, name := range cmdNames {
 			if len(name) > 0 {
@@ -413,10 +428,12 @@ func (s *shell) Next() []process.Datum {
 		for ch := range firstChars {
 			valid = append(valid, process.Chars(string(ch)))
 		}
-	} else if strings.Contains(s.currentCommand, " ") {
-		// After command name + space: we're in arguments.
-		// Check if the command has a ValidArgs function.
-		fields := strings.SplitN(s.currentCommand, " ", 2)
+		return valid
+	}
+
+	if strings.Contains(segment, " ") {
+		// Args mode for the current segment.
+		fields := strings.SplitN(segment, " ", 2)
 		cmdName := fields[0]
 		partialArgs := ""
 		if len(fields) > 1 {
@@ -424,44 +441,84 @@ func (s *shell) Next() []process.Datum {
 		}
 		argValidator := s.getArgValidator(cmdName)
 		if argValidator != nil {
-			valid = append(valid, argValidator(s.simulation, s.hostname, s.currentDirectory, partialArgs)...)
-			// Shell metacharacters and Enter belong to the shell, not the
-			// command's argument validator. Always allow them so the player
-			// can pipe (`|`) or execute with whatever args they've typed.
-			valid = append(valid, process.Chars("|"))
-			valid = append(valid, process.TermEnter)
+			argValid := argValidator(s.simulation, s.hostname, s.currentDirectory, partialArgs)
+			valid = append(valid, argValid...)
+			// `|` is shell-level — it's valid wherever Enter would be (i.e.
+			// when the validator considers the arg complete).
+			if datumsContainEnter(argValid) {
+				valid = append(valid, process.Chars("|"))
+			}
+			// Commands with optional args (ls, cat, pwd) can run as-is when
+			// the partial arg is empty — allow Enter and `|` here too.
+			if partialArgs == "" && commandOptionalArgs(cmdName) {
+				valid = append(valid, process.TermEnter)
+				valid = append(valid, process.Chars("|"))
+			}
 		} else {
-			// Default: allow any printable character, space, enter
+			// No validator: any printable + Enter + |
 			for c := byte(32); c < 127; c++ {
 				valid = append(valid, process.Chars(string(c)))
 			}
 			valid = append(valid, process.TermEnter)
+			valid = append(valid, process.Chars("|"))
 		}
-	} else {
-		// Mid-command-name: chars that continue toward a valid command
-		continuations := map[byte]bool{}
-		exactMatch := false
-		for _, name := range cmdNames {
-			if strings.HasPrefix(name, s.currentCommand) {
-				if name == s.currentCommand {
-					exactMatch = true
-				}
-				if len(name) > len(s.currentCommand) {
-					continuations[name[len(s.currentCommand)]] = true
-				}
-			}
-		}
-		for ch := range continuations {
-			valid = append(valid, process.Chars(string(ch)))
-		}
-		if exactMatch {
-			// Can press space to start args or enter to execute
-			valid = append(valid, process.Chars(" "))
-			valid = append(valid, process.TermEnter)
-		}
+		return valid
 	}
 
+	// Mid-command-name for the current segment.
+	continuations := map[byte]bool{}
+	exactMatch := false
+	for _, name := range cmdNames {
+		if strings.HasPrefix(name, segment) {
+			if name == segment {
+				exactMatch = true
+			}
+			if len(name) > len(segment) {
+				continuations[name[len(segment)]] = true
+			}
+		}
+	}
+	for ch := range continuations {
+		valid = append(valid, process.Chars(string(ch)))
+	}
+	if exactMatch {
+		valid = append(valid, process.Chars(" ")) // can always type args
+		// Enter and `|` only when the command can run with zero args.
+		// Otherwise the player would be able to execute a command that
+		// the binary itself rejects ("missing operand"), violating the
+		// "no mistakes" invariant.
+		if commandOptionalArgs(segment) {
+			valid = append(valid, process.TermEnter)
+			valid = append(valid, process.Chars("|"))
+		}
+	}
 	return valid
+}
+
+// commandOptionalArgs reports whether the named command (binary or
+// builtin) can run with zero args. Used to gate Enter/| at exact-match
+// points so the player can never execute a command that would error on
+// zero args.
+func commandOptionalArgs(name string) bool {
+	switch name {
+	case "cd", "exit": // builtins that take no args (cd → /, exit terminates)
+		return true
+	case "nx": // requires subcommand
+		return false
+	}
+	if b, err := simulation.GetBinary(name); err == nil {
+		return b.OptionalArgs
+	}
+	return false
+}
+
+func datumsContainEnter(ds []process.Datum) bool {
+	for _, d := range ds {
+		if t, ok := d.(process.TermCode); ok && t == process.TermEnter {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *shell) getArgValidator(cmdName string) simulation.ValidArgs {

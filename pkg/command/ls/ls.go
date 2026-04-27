@@ -13,8 +13,9 @@ import (
 
 func init() {
 	simulation.Register("ls", &simulation.Binary{
-		Launch:    launch,
-		ValidArgs: command.ValidArgsFolder,
+		Launch:       launch,
+		ValidArgs:    command.ValidArgsFolder,
+		OptionalArgs: true, // ls with no args lists cwd
 	})
 }
 

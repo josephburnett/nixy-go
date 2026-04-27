@@ -11,7 +11,8 @@ import (
 
 func init() {
 	simulation.Register("pwd", &simulation.Binary{
-		Launch: launch,
+		Launch:       launch,
+		OptionalArgs: true, // pwd takes no args
 	})
 }
 

@@ -12,8 +12,9 @@ import (
 
 func init() {
 	simulation.Register("cat", &simulation.Binary{
-		Launch:    launch,
-		ValidArgs: command.ValidArgsFile,
+		Launch:       launch,
+		ValidArgs:    command.ValidArgsFile,
+		OptionalArgs: true, // cat with no args reads stdin (used in pipes)
 	})
 }
 

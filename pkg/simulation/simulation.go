@@ -36,8 +36,9 @@ func (s *S) Launch(hostname, owner, binaryName string, args []string, cwd []stri
 }
 
 type Binary struct {
-	Launch    Launch
-	ValidArgs ValidArgs // optional: returns valid next inputs for arguments
+	Launch       Launch
+	ValidArgs    ValidArgs // optional: returns valid next inputs for arguments
+	OptionalArgs bool      // true if the command can run with zero arguments
 }
 
 // ValidArgs returns valid next datum values given partial argument input.
