@@ -30,7 +30,7 @@ func (q *Modification) Setup(sim *simulation.S) error {
 	}
 	return c.Filesystem.CreateFile([]string{"home", "nixy"}, "junk.txt", &file.F{
 		Type:             file.Text,
-		Owner:            "user",
+		Owner:            "nixy",
 		OwnerPermission:  file.Write,
 		CommonPermission: file.Read,
 		Data:             "This file is junk. Please delete me!",

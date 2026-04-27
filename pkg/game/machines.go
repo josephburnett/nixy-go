@@ -16,14 +16,16 @@ type MachineEntry struct {
 
 // MachineRegistry manages which machines are available.
 type MachineRegistry struct {
-	entries []MachineEntry
-	booted  map[string]bool
+	entries  []MachineEntry
+	booted   map[string]bool
+	username string // player's chosen name; used to provision /home/<username> on each machine
 }
 
-func NewMachineRegistry(entries []MachineEntry) *MachineRegistry {
+func NewMachineRegistry(entries []MachineEntry, username string) *MachineRegistry {
 	return &MachineRegistry{
-		entries: entries,
-		booted:  map[string]bool{},
+		entries:  entries,
+		booted:   map[string]bool{},
+		username: username,
 	}
 }
 
@@ -68,7 +70,35 @@ func (r *MachineRegistry) bootMachine(sim *simulation.S, e MachineEntry) error {
 		return err
 	}
 	r.booted[e.Hostname] = true
-	return nil
+	return r.provisionUserHome(sim, e.Hostname)
+}
+
+// provisionUserHome ensures /home/<username> exists on the just-booted
+// machine, owned by the player. Skips silently if /home doesn't exist
+// on this machine (some test fixtures), or if /home/<username> already
+// exists (e.g. the player picked "nixy" and the world ships /home/nixy).
+func (r *MachineRegistry) provisionUserHome(sim *simulation.S, hostname string) error {
+	if r.username == "" {
+		return nil
+	}
+	c, err := sim.GetComputer(hostname)
+	if err != nil {
+		return err
+	}
+	if _, err := c.Filesystem.Navigate([]string{"home"}); err != nil {
+		return nil // no /home on this machine
+	}
+	if _, err := c.Filesystem.Navigate([]string{"home", r.username}); err == nil {
+		return nil // already exists
+	}
+	home := &file.F{
+		Type:             file.Folder,
+		Owner:            r.username,
+		OwnerPermission:  file.Write,
+		CommonPermission: file.Read,
+		Files:            map[string]*file.F{},
+	}
+	return c.Filesystem.CreateFile([]string{"home"}, r.username, home, file.OwnerRoot)
 }
 
 func (r *MachineRegistry) addToAllHosts(sim *simulation.S, newHost string) {
@@ -81,12 +111,15 @@ func (r *MachineRegistry) addToAllHosts(sim *simulation.S, newHost string) {
 		if err != nil {
 			continue
 		}
-		// Check if already listed
-		lines := strings.Split(hostsFile.Data, "\n")
-		for _, line := range lines {
+		already := false
+		for _, line := range strings.Split(hostsFile.Data, "\n") {
 			if strings.TrimSpace(line) == newHost {
-				return
+				already = true
+				break
 			}
+		}
+		if already {
+			continue
 		}
 		hostsFile.Data += "\n" + newHost
 	}

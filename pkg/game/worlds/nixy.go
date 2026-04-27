@@ -29,10 +29,14 @@ func Nixy() *file.F {
 			"home": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
 				Files: map[string]*file.F{
-					"nixy": {Type: file.Folder, Owner: "user",
-						OwnerPermission: file.Write, CommonPermission: file.Read,
+					// Nixy's home. CommonPermission is Write for now — Nixy is loose
+					// with permissions so the player can clean up junk.txt without
+					// sudo. The future Permissions quest will tighten this back to
+					// Read and teach sudo as the way in.
+					"nixy": {Type: file.Folder, Owner: "nixy",
+						OwnerPermission: file.Write, CommonPermission: file.Write,
 						Files: map[string]*file.F{
-							"readme.txt": {Type: file.Text, Owner: "user",
+							"readme.txt": {Type: file.Text, Owner: "nixy",
 								OwnerPermission: file.Write, CommonPermission: file.Read,
 								Data: "Welcome to Nixy! I'm glad you're here.\nPlease look around and help me out!"},
 						}},

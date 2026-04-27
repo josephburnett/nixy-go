@@ -13,30 +13,37 @@ import (
 const (
 	fuzzIterations = 5
 	fuzzMaxSteps   = 200
-	fuzzStuckLimit = 12
+	fuzzStuckLimit = 20
 )
 
-// worldKey captures the variables that should change as the player makes
-// progress. A long run of identical worldKeys is the hang signature.
+// worldKey captures variables that signal real player progress.
+//
+// Tracker record count is deliberately NOT included: it grows on every
+// Enter regardless of whether the command had any effect on the world,
+// so it makes a stuck quest (e.g. rm failing silently) look like
+// progress. Quest progression and shell location are the honest signals.
 type worldKey struct {
-	mode     Mode
-	hostname string
-	cwd      string
-	trackerN int
-	activeQ  string
-	line     string
+	mode               Mode
+	hostname           string
+	cwd                string
+	activeQ            string
+	numCompletedQuests int
 }
 
-func snapWorld(s *Session, term *terminal.T) worldKey {
-	w := worldKey{mode: s.Mode, line: term.State.Line}
+func snapWorld(s *Session) worldKey {
+	w := worldKey{mode: s.Mode}
 	if s.Shell != nil {
 		w.hostname = s.Shell.Hostname()
 		w.cwd = strings.Join(s.Shell.CurrentDirectory(), "/")
 	}
 	if s.Game != nil {
-		w.trackerN = len(s.Game.Manager.Tracker.Records())
 		if a := s.Game.Manager.ActiveQuest(); a != nil {
 			w.activeQ = a.ID()
+		}
+		for _, q := range s.Game.Manager.Quests() {
+			if s.Game.Manager.GetQuestState(q.ID()) == game.QuestComplete {
+				w.numCompletedQuests++
+			}
 		}
 	}
 	return w
@@ -133,7 +140,7 @@ func runE2EFuzzIteration(t *testing.T, rng *rand.Rand, iter int) {
 		t.Fatalf("iter %d: ModePlaying but Game/Guide/Shell nil", iter)
 	}
 
-	prevWorld := snapWorld(sess, term)
+	prevWorld := snapWorld(sess)
 	prevQuests := snapQuests(sess)
 	stuck := 0
 
@@ -180,7 +187,7 @@ func runE2EFuzzIteration(t *testing.T, rng *rand.Rand, iter int) {
 		prevQuests = curQuests
 
 		// Liveness: world must change within fuzzStuckLimit consecutive Enters.
-		cur := snapWorld(sess, term)
+		cur := snapWorld(sess)
 		if cur == prevWorld {
 			stuck++
 			if stuck >= fuzzStuckLimit {
@@ -193,16 +200,29 @@ func runE2EFuzzIteration(t *testing.T, rng *rand.Rand, iter int) {
 		}
 	}
 
-	// If we exhausted maxSteps without finishing, demand the planner still
-	// has a path forward (matches existing TestFuzzQuests invariant).
-	active := sess.Game.Manager.ActiveQuest()
-	if active != nil {
-		host := sess.Shell.Hostname()
-		cwd := sess.Shell.CurrentDirectory()
-		target := active.PlanNextCommand(sess.Game.Sim, sess.Game.Manager.Tracker, host, cwd)
-		if target == "" && !active.IsComplete(sess.Game.Sim, sess.Game.Manager.Tracker) {
-			t.Fatalf("iter %d: stranded — quest %q has no plan and is not complete (host=%s cwd=%v)",
-				iter, active.ID(), host, cwd)
+	// Hard terminal: if any quest is still incomplete after fuzzMaxSteps,
+	// the run failed. "Planner has a path" was the old (too lenient) check
+	// that let a stuck quest masquerade as in-progress.
+	if sess.Game.Manager.ActiveQuest() != nil {
+		var unfinished []string
+		for id, st := range snapQuests(sess) {
+			if st != game.QuestComplete {
+				unfinished = append(unfinished, id+"="+stateName(st))
+			}
 		}
+		t.Fatalf("iter %d: did not complete all quests in %d steps; unfinished=%v",
+			iter, fuzzMaxSteps, unfinished)
 	}
+}
+
+func stateName(s game.QuestState) string {
+	switch s {
+	case game.QuestInactive:
+		return "Inactive"
+	case game.QuestActive:
+		return "Active"
+	case game.QuestComplete:
+		return "Complete"
+	}
+	return "?"
 }

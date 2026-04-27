@@ -184,7 +184,7 @@ func (s *Session) bootstrapGame(t *terminal.T) error {
 		{Hostname: "nixy", Filesystem: worlds.Nixy},
 		{Hostname: "server", Filesystem: worlds.Server, UnlockedBy: "server-unlocked"},
 	}
-	g, err := game.NewGame(allQuests, machines)
+	g, err := game.NewGame(allQuests, machines, s.Username)
 	if err != nil {
 		return err
 	}

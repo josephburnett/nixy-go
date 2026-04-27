@@ -43,7 +43,7 @@ func allMachines() []game.MachineEntry {
 
 func newGame(t *testing.T) *game.Game {
 	t.Helper()
-	g, err := game.NewGame(allQuests(), allMachines())
+	g, err := game.NewGame(allQuests(), allMachines(), "user")
 	if err != nil {
 		t.Fatal(err)
 	}

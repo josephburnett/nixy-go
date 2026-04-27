@@ -414,6 +414,11 @@ func (s *shell) Next() []process.Datum {
 		argValidator := s.getArgValidator(cmdName)
 		if argValidator != nil {
 			valid = append(valid, argValidator(s.simulation, s.hostname, s.currentDirectory, partialArgs)...)
+			// Shell metacharacters and Enter belong to the shell, not the
+			// command's argument validator. Always allow them so the player
+			// can pipe (`|`) or execute with whatever args they've typed.
+			valid = append(valid, process.Chars("|"))
+			valid = append(valid, process.TermEnter)
 		} else {
 			// Default: allow any printable character, space, enter
 			for c := byte(32); c < 127; c++ {

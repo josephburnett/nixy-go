@@ -134,7 +134,7 @@ func TestMachineRegistryBootInitial(t *testing.T) {
 	r := NewMachineRegistry([]MachineEntry{
 		{Hostname: "local", Filesystem: minimalFS},
 		{Hostname: "locked", Filesystem: minimalFS, UnlockedBy: "key"},
-	})
+	}, "user")
 	err := r.BootInitialMachines(sim)
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +152,7 @@ func TestMachineRegistryCheckUnlocks(t *testing.T) {
 	r := NewMachineRegistry([]MachineEntry{
 		{Hostname: "local", Filesystem: minimalFS},
 		{Hostname: "locked", Filesystem: minimalFS, UnlockedBy: "key"},
-	})
+	}, "user")
 	r.BootInitialMachines(sim)
 
 	ach := NewAchievementSet()
@@ -193,7 +193,7 @@ func (q *mockQuest) PlanNextCommand(_ *simulation.S, _ *CommandTracker, _ string
 
 func TestManagerActivatesFirstQuest(t *testing.T) {
 	sim := simulation.New()
-	r := NewMachineRegistry(nil)
+	r := NewMachineRegistry(nil, "user")
 	q := &mockQuest{id: "q1", machine: "m"}
 	m := NewManager([]Quest{q}, r)
 	m.AfterCommand(sim)
@@ -207,7 +207,7 @@ func TestManagerActivatesFirstQuest(t *testing.T) {
 
 func TestManagerCompletesAndAdvances(t *testing.T) {
 	sim := simulation.New()
-	r := NewMachineRegistry(nil)
+	r := NewMachineRegistry(nil, "user")
 	q1 := &mockQuest{id: "q1", machine: "m", granted: []Achievement{"done-q1"}}
 	q2 := &mockQuest{id: "q2", machine: "m", required: []Achievement{"done-q1"}}
 	m := NewManager([]Quest{q1, q2}, r)
@@ -226,7 +226,7 @@ func TestManagerCompletesAndAdvances(t *testing.T) {
 
 func TestManagerDoesNotActivateWithoutAchievements(t *testing.T) {
 	sim := simulation.New()
-	r := NewMachineRegistry(nil)
+	r := NewMachineRegistry(nil, "user")
 	q := &mockQuest{id: "q1", machine: "m", required: []Achievement{"needed"}}
 	m := NewManager([]Quest{q}, r)
 	m.AfterCommand(sim)
@@ -237,7 +237,7 @@ func TestManagerDoesNotActivateWithoutAchievements(t *testing.T) {
 
 func TestManagerDialogOnActivation(t *testing.T) {
 	sim := simulation.New()
-	r := NewMachineRegistry(nil)
+	r := NewMachineRegistry(nil, "user")
 	q := &mockQuest{id: "connect", machine: "m"}
 	m := NewManager([]Quest{q}, r)
 	m.AfterCommand(sim) // activates connect
@@ -249,7 +249,7 @@ func TestManagerDialogOnActivation(t *testing.T) {
 
 func TestManagerDialogOnCompletion(t *testing.T) {
 	sim := simulation.New()
-	r := NewMachineRegistry(nil)
+	r := NewMachineRegistry(nil, "user")
 	q := &mockQuest{id: "connect", machine: "m"}
 	m := NewManager([]Quest{q}, r)
 	m.AfterCommand(sim) // activates

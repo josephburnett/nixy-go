@@ -15,10 +15,12 @@ type Game struct {
 	Manager *Manager
 }
 
-// NewGame creates a game with the given quests and machines.
-func NewGame(quests []Quest, machines []MachineEntry) (*Game, error) {
+// NewGame creates a game with the given quests and machines. The username
+// is used to provision /home/<username> on every booted machine — both at
+// initial boot and at later unlock-time boots (e.g. server).
+func NewGame(quests []Quest, machines []MachineEntry, username string) (*Game, error) {
 	sim := simulation.New()
-	registry := NewMachineRegistry(machines)
+	registry := NewMachineRegistry(machines, username)
 
 	if err := registry.BootInitialMachines(sim); err != nil {
 		return nil, err

@@ -26,13 +26,11 @@ func Laptop() *file.F {
 						OwnerPermission: file.Write, CommonPermission: file.Read,
 						Data: "laptop\nnixy"},
 				}},
+			// /home starts empty; the player's /home/<username> is created at
+			// game bootstrap (see MachineRegistry.provisionUserHome).
 			"home": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
-				Files: map[string]*file.F{
-					"user": {Type: file.Folder, Owner: "user",
-						OwnerPermission: file.Write, CommonPermission: file.Read,
-						Files: map[string]*file.F{}},
-				}},
+				Files: map[string]*file.F{}},
 		},
 	}
 }
