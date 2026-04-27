@@ -2,70 +2,92 @@
 
 Educational Unix-learning game. Go reimplementation of ~/nixy.
 
-The whole point is to **teach real Unix**: ownership, permissions, paths,
-piping, sudo. The constraints in this codebase are pedagogical — they
-exist so the player learns the right mental model. When deciding how to
-fix a bug or add a feature, ask: *what does this teach?* If a "fix"
-papers over a Unix concept (e.g. faking ownership to make `rm` succeed),
-it's the wrong fix.
+The ambition: teach real Unix by *doing* it — typing commands, seeing
+real output, hitting real consequences — safely enough that a beginner
+can explore without getting lost.
 
-## Core invariants — do not violate
+## Core principles
 
-These keep getting forgotten. Treat them as the spine of the project.
+Three principles, operating at three layers of the system. Specific
+design decisions across the codebase are usually instances of one of
+them. When a fix violates one, it's the wrong fix.
 
-### 1. The keyboard cannot let the player do something wrong
+### 1. No mistakes (keystroke layer)
 
-At every keystroke, the valid set returned by `shell.Next()` (and gated
-by `pkg/guide`) must contain only keys that lead toward a correct,
-executable action. The player should never be able to type a command
-that the binary then rejects with "missing operand" or "no such file."
-Errors that come from typing something invalid are a bug in `Next()`,
-not a runtime concern.
+At every keystroke, the keyboard's valid set must contain only keys
+that lead toward a correct, executable action. The player can never
+type a command the shell would then reject (`missing operand`, `no
+such file`). Errors that come from invalid typing are bugs in
+`shell.Next()`, not runtime concerns.
 
-Implementation hooks:
-- `simulation.Binary.OptionalArgs` declares whether a command can run
+This is what makes exploration safe. A beginner mashing keys learns,
+not panics.
+
+Implementation:
+- `simulation.Binary.OptionalArgs` declares whether a command runs
   with zero args (`ls`, `cat`, `pwd` — true; everything else false).
-- `Enter` and `|` are shell-level "execute this segment" keys. They are
-  only valid at *segment-completion points* — exact-match of an
-  optional-args command, or exact-match of a complete argument.
-- `shell.Next()` is pipe-aware: it splits `currentCommand` on `|` and
-  validates only the segment after the last pipe.
+- `Enter` and `|` are valid only at *segment-completion points* —
+  exact-match of an optional-args command, or exact-match of a
+  complete argument.
+- `shell.Next()` is pipe-aware: it splits on `|` and validates only
+  the segment after the last pipe, so typing `|` resets to fresh-prompt
+  state for the next segment.
 - Pinned by `TestShellNextInvariant_*` in `pkg/command/shell/shell_test.go`.
 
-### 2. The prompt is ground truth
+### 2. Real Unix, not a toy (simulation layer)
 
-`<user>@<host>:<path>>` is a claim about who, where, and where in the
-filesystem. It must match reality. If the prompt says `joe`, then `joe`
-is the identity for permission checks; files joe creates are owned by
-joe; `whoami` (when implemented) says joe.
+The mental model the player builds here must transfer to real Unix.
+Permissions, ownership, paths, processes, pipes are honest — if
+minimal — implementations of the real concepts. When the player learns
+`sudo`, they're learning real `sudo`.
 
-Login is not cosmetic. The username chosen at login is the player's
-real identity on every machine they reach. `Sim.Launch` is called with
-`s.Username` as the shell owner, and that flows through every
-permission check.
+Concrete implications (these all flow from this single principle):
+- **Identity is real.** The username chosen at login is the player's
+  account on every machine. The prompt (`<user>@<host>:<path>>`) is
+  ground truth — it matches `whoami`, owns the files the player
+  creates, and is what `CanWrite` checks against.
+- **Per-user homes.** `MachineRegistry.bootMachine` provisions
+  `/home/<username>` on every booted machine. Other users (Nixy) have
+  their own homes. World definitions don't ship a placeholder
+  `/home/user` — each player gets a real one.
+- **Permissions matter.** Don't work around `CanWrite`/`CanRead` to
+  make a quest succeed. If the player can't do something, that's a
+  teaching opportunity — fix the world (perms, ownership) or the
+  quest. The Permissions quest specifically teaches `sudo`; preserve
+  the model it depends on. (Today, `/home/nixy` is `Common: Write`
+  on purpose — Nixy is loose with perms so early quests work without
+  `sudo`. A future quest will tighten that and teach `sudo` as the
+  way back in. Don't undo Nixy's loose perms without that quest.)
+- **Errors look like Unix errors.** Stderr surfaces normally, exit
+  vs. EOF behave correctly, etc.
 
-### 3. Home differs by user
+When choosing how to fix a bug or add a feature, ask: *would this
+choice make sense in real Unix?* If it papers over a real concept,
+it's the wrong fix.
 
-When the game starts, `MachineRegistry.bootMachine` provisions
-`/home/<username>` on every booted machine (initial and late-unlock),
-owned by the player with `OwnerPermission: Write, CommonPermission: Read`.
-Other users have their own homes — Nixy owns `/home/nixy` on the nixy
-machine. The world definitions in `pkg/game/worlds/` deliberately do
-**not** ship a `/home/user` placeholder; each player gets a real home.
+### 3. Guided progression (game-design layer)
 
-Nixy's `/home/nixy` currently has `CommonPermission: Write` — she's
-loose with permissions on purpose, so Modification/Composition quests
-work without sudo. A future quest will tighten this and teach `sudo`
-as the way back in. **Do not** undo Nixy's loose perms without that
-quest in flight.
+A bare faithful-Unix shell would be useless to a beginner. The game
+loop wraps it in scaffolding:
 
-### 4. Permissions are part of the lesson
+- **Quests** introduce concepts in order, each unlocked by achievements
+  granted by the prior one. New quests should build on what's been
+  taught, not require leaping forward.
+- **The planner** (`game.PlanNextCommand`, `game.PlanHint`) computes
+  the next concrete keystroke toward the active quest. This is what
+  the green hint key on the keyboard means.
+- **Nixy's dialog** (`pkg/character/`) frames each concept narratively,
+  before and after. The player isn't memorizing — they're helping
+  someone.
 
-Don't work around `CanWrite` / `CanRead` to make a quest succeed. If
-the player can't do something, that's the teaching opportunity — fix
-the world (perms, ownership) or the quest, not the permission system.
-The Permissions quest specifically teaches `sudo`; preserve the model
-it depends on.
+Hint vs. validation are two separate systems and often conflated:
+- **Validation** (`shell.Next()` → `guide.Stdin`): *what can be typed*.
+  Enforces principle #1. Hard rule.
+- **Hint** (`PlanHint`): *what the planner suggests typing next*.
+  Advisory. When the player goes off-plan, `PlanHint` returns `nil`
+  — **not** `TermBackspace`. They may be running a different valid
+  command before returning to the plan; the planner re-engages on
+  the next empty prompt. Don't nag.
 
 ## Architecture
 
@@ -82,7 +104,7 @@ Reflow (pkg/terminal/reflow.go)   Wraps lines to current viewport width
 Layout (pkg/terminal/layout.go)   Composes screen into styled segments
   ↓
 Renderer (interface)              Platform-specific output from a Frame
-  ├── ANSIRenderer (ansi.go)      CLI terminal output (box-drawing + ANSI colors)
+  ├── ANSIRenderer (ansi.go)      CLI output (box-drawing + ANSI colors)
   └── HTMLRenderer (html.go)      Web output (<pre> + CSS classes)
 ```
 
@@ -101,35 +123,19 @@ suite for both.
 
 ### Key packages
 
-- `pkg/process/` — `Process` interface (`Stdout`, `Stderr`, `Stdin`,
-  `Next`, `Kill`) and Datum types (`Chars`, `TermCode`, `Signal`).
+- `pkg/process/` — `Process` interface and Datum types.
 - `pkg/simulation/` — Binary registry, computer management, process
   launching. `Binary.OptionalArgs` gates Enter at zero-args.
-- `pkg/command/shell/` — Shell with builtins (`cd`, `exit`, `nx`),
-  pipeline support, and the pipe-aware `Next()` that enforces
-  invariant #1.
+- `pkg/command/shell/` — Shell with builtins, pipeline support, and
+  the pipe-aware `Next()` that enforces principle #1.
 - `pkg/guide/` — Wraps a process, validates input against `Next()`
-  before forwarding. The bouncer for invariant #1.
+  before forwarding. The bouncer for principle #1.
 - `pkg/game/` — Quest manager, planner (keystroke hints), command
   tracker, machine registry. `MachineRegistry.bootMachine` provisions
   per-user homes.
-- `pkg/debug/` — Snapshot ring (last N keystrokes' state). Ctrl+\ dumps
-  it to disk; useful when the player hits something weird in `make repl`.
-
-### Hint vs. validation
-
-Two separate systems, often confused:
-
-- **Validation** (`shell.Next()` → `guide.Stdin`): *what can be typed*.
-  Must respect invariant #1.
-- **Hint** (`game.PlanHint` in `pkg/game/planner.go`): *what the
-  planner suggests typing next* — the green key on the keyboard. Hints
-  are advisory.
-
-When the player goes off-plan (typed prefix doesn't match the planned
-command), `PlanHint` returns `nil`, **not** `TermBackspace`. Don't nag
-the player — they may be running a different valid command before
-returning to the plan. The planner re-engages on the next empty prompt.
+- `pkg/character/` — Nixy's dialog data and queue.
+- `pkg/debug/` — Snapshot ring (last N keystrokes' state). Ctrl+\
+  dumps it to disk; useful when something weird happens in `make repl`.
 
 ## Testing
 
@@ -145,18 +151,17 @@ Two fuzz tests with different goals:
 
 - `TestFuzzQuests` (`pkg/game/quests/`) — bypasses the real shell,
   drives quests via `shellState`. Catches quest-logic bugs but
-  **cannot** catch shell-level regressions (e.g. permission, key
-  validation, stderr handling).
+  **cannot** catch shell-level regressions.
 - `TestFuzzE2EHintGuided` (`pkg/session/`) — drives keystrokes through
   `Session.HandleKeystroke`, the same chokepoint used by both CLI and
-  web. This is the canary for end-to-end correctness.
+  web. The canary for end-to-end correctness.
 
 Liveness in the E2E fuzz is keyed on quest progression
-(`activeQuestID + numCompletedQuests + hostname + cwd`). It deliberately
-does **not** include tracker record count — that grows on every Enter
-even when nothing real is happening, which lets stuck quests masquerade
-as progress. Terminal condition demands all-Complete; "planner has a
-path" is too lenient.
+(`activeQuestID + numCompletedQuests + hostname + cwd`). Tracker
+record count is deliberately **not** included — it grows on every
+Enter even when nothing real is happening, which lets stuck quests
+masquerade as progress. Terminal demands all-Complete; "planner has
+a path" is too lenient.
 
 ## Conventions
 
