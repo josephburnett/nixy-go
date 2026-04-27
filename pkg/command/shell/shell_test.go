@@ -522,6 +522,44 @@ func isFreshPrompt(next []process.Datum) bool {
 	return chars >= 2
 }
 
+// TestShellNextInvariant_CdRoot: `cd /<Enter>` must work — slash alone
+// resolves to the root directory, which is always a valid cd target.
+func TestShellNextInvariant_CdRoot(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "cd /")
+	next := p.Next()
+	if !containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must be valid after 'cd /' (root is a valid directory)")
+	}
+}
+
+// TestShellNextInvariant_CdParent: `cd ..<Enter>` must work — `..`
+// resolves to the parent directory of cwd, which is always a valid
+// (if no-op at root) cd target.
+func TestShellNextInvariant_CdParent(t *testing.T) {
+	_, p := testSetup(t)
+	// First navigate to /home/user so .. has somewhere to go.
+	writeString(t, p, "cd /home/user")
+	writeEnter(t, p)
+	_ = readAllStdout(t, p)
+	writeString(t, p, "cd ..")
+	next := p.Next()
+	if !containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must be valid after 'cd ..' (parent is a valid directory)")
+	}
+}
+
+// TestShellNextInvariant_CdTrailingSlash: any path that ends with `/`
+// resolves to a directory and Enter must be valid. e.g. `cd /home/`.
+func TestShellNextInvariant_CdTrailingSlash(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "cd /home/")
+	next := p.Next()
+	if !containsDatum(next, process.TermEnter) {
+		t.Fatal("Enter must be valid after 'cd /home/' (trailing / means resolved directory)")
+	}
+}
+
 // TestShellNextInvariant_PipeStartsFreshSegment: after typing `|`, the
 // shell must validate the next segment as a fresh command name (first
 // chars of available commands).

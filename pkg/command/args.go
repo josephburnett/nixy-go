@@ -121,6 +121,25 @@ func validArgsPath(sim *simulation.S, hostname string, cwd []string, partial str
 		for ch := range firstChars {
 			valid = append(valid, process.Chars(string(ch)))
 		}
+		// A non-empty partial that resolves to prefix=="" means the user
+		// has typed a complete path ending in `/` (e.g. "/", "../", "foo/").
+		// `dir` is the resolved target — Enter is valid (cd into it).
+		if partial != "" {
+			valid = append(valid, process.TermEnter)
+		}
+		return valid
+	}
+
+	// Special path components: "." (cwd) and ".." (parent). Both resolve
+	// to a real directory, so Enter is valid. The user can also continue
+	// typing — `.` toward `..`, or `/` to descend into the resolved dir.
+	if prefix == "." || prefix == ".." {
+		valid = append(valid, process.TermEnter)
+		valid = append(valid, process.Chars("/"))
+		if prefix == "." {
+			// Allow another `.` to form `..`.
+			valid = append(valid, process.Chars("."))
+		}
 		return valid
 	}
 
