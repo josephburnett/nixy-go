@@ -1,5 +1,7 @@
 package game
 
+import "github.com/josephburnett/nixy-go/pkg/command"
+
 // CommandTracker records player actions for quest completion checks.
 type CommandTracker struct {
 	// Commands records every command executed as {hostname, cwd, command}
@@ -74,12 +76,8 @@ func (t *CommandTracker) HasVisitedDir(hostname string, dir []string) bool {
 // HasPipe checks if a pipe command was executed on a host.
 func (t *CommandTracker) HasPipe(hostname string) bool {
 	for _, r := range t.commands {
-		if r.Hostname == hostname {
-			for _, c := range r.Command {
-				if c == '|' {
-					return true
-				}
-			}
+		if r.Hostname == hostname && command.Parse(r.Command).IsPipeline() {
+			return true
 		}
 	}
 	return false
