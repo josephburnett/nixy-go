@@ -522,14 +522,18 @@ func isFreshPrompt(next []process.Datum) bool {
 	return chars >= 2
 }
 
-// TestShellNextInvariant_CdRoot: `cd /<Enter>` must work — slash alone
-// resolves to the root directory, which is always a valid cd target.
+// TestShellNextInvariant_CdRoot: `cd /<Enter>` must work from a
+// non-root cwd — slash alone resolves to the root directory, a valid
+// cd target. (At root itself it's a no-op and is blocked elsewhere.)
 func TestShellNextInvariant_CdRoot(t *testing.T) {
 	_, p := testSetup(t)
+	writeString(t, p, "cd /home/user")
+	writeEnter(t, p)
+	_ = readAllStdout(t, p)
 	writeString(t, p, "cd /")
 	next := p.Next()
 	if !containsDatum(next, process.TermEnter) {
-		t.Fatal("Enter must be valid after 'cd /' (root is a valid directory)")
+		t.Fatal("Enter must be valid after 'cd /' from a non-root cwd")
 	}
 }
 
@@ -557,6 +561,72 @@ func TestShellNextInvariant_CdTrailingSlash(t *testing.T) {
 	next := p.Next()
 	if !containsDatum(next, process.TermEnter) {
 		t.Fatal("Enter must be valid after 'cd /home/' (trailing / means resolved directory)")
+	}
+}
+
+// TestShellNextInvariant_CdNoopBlocked: when the typed path resolves
+// to the cwd itself (no actual move), Enter must not be valid. This
+// covers `cd ..` at root, `cd /` when at root, `cd .` anywhere, and
+// `cd /home/user` when already there. Letting the player execute a
+// useless command violates the spirit of "no mistakes" — the keyboard
+// should only offer keys that lead to a real, observable action.
+func TestShellNextInvariant_CdNoopBlocked(t *testing.T) {
+	cases := []struct {
+		startPath string
+		typed     string
+		desc      string
+	}{
+		{"", "cd ..", "cd .. at root"},
+		{"", "cd /", "cd / at root"},
+		{"", "cd .", "cd . at root"},
+		{"/home/user", "cd /home/user", "cd to current path"},
+		{"/home/user", "cd .", "cd . in subdirectory"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			_, p := testSetup(t)
+			if tc.startPath != "" {
+				writeString(t, p, "cd "+tc.startPath)
+				writeEnter(t, p)
+				_ = readAllStdout(t, p)
+			}
+			writeString(t, p, tc.typed)
+			next := p.Next()
+			if containsDatum(next, process.TermEnter) {
+				t.Fatalf("Enter must not be valid: %s", tc.desc)
+			}
+		})
+	}
+}
+
+// TestShellNextInvariant_CdMovesAllowed: positive cases — Enter IS
+// valid when the cd would actually move cwd. Pairs with the no-op
+// blocked test to make sure we didn't over-block.
+func TestShellNextInvariant_CdMovesAllowed(t *testing.T) {
+	cases := []struct {
+		startPath string
+		typed     string
+		desc      string
+	}{
+		{"/home/user", "cd ..", "cd .. from subdirectory"},
+		{"/home/user", "cd /", "cd / from subdirectory"},
+		{"", "cd /home", "cd /home from root"},
+		{"/home", "cd user", "cd user (relative) from /home"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			_, p := testSetup(t)
+			if tc.startPath != "" {
+				writeString(t, p, "cd "+tc.startPath)
+				writeEnter(t, p)
+				_ = readAllStdout(t, p)
+			}
+			writeString(t, p, tc.typed)
+			next := p.Next()
+			if !containsDatum(next, process.TermEnter) {
+				t.Fatalf("Enter must be valid: %s", tc.desc)
+			}
+		})
 	}
 }
 

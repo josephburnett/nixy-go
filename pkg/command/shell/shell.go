@@ -569,7 +569,7 @@ func (s *shell) getArgValidator(cmdName string) simulation.ValidArgs {
 	// Check builtins first
 	switch cmdName {
 	case "cd":
-		return command.ValidArgsFolder
+		return command.ValidArgsCd
 	}
 	// Check binary registry
 	c, err := s.simulation.GetComputer(s.hostname)
