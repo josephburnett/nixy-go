@@ -338,28 +338,8 @@ func (s *shell) builtinCd(args []string) error {
 		return fmt.Errorf("cd: too many arguments")
 	}
 	target := args[0]
-	var newDir []string
+	newDir := file.Resolve(s.currentDirectory, target)
 
-	if strings.HasPrefix(target, "/") {
-		// Absolute path
-		parts := strings.Split(strings.TrimPrefix(target, "/"), "/")
-		newDir = filterEmpty(parts)
-	} else {
-		// Relative path
-		parts := strings.Split(target, "/")
-		newDir = append([]string{}, s.currentDirectory...)
-		for _, p := range parts {
-			if p == ".." {
-				if len(newDir) > 0 {
-					newDir = newDir[:len(newDir)-1]
-				}
-			} else if p != "" && p != "." {
-				newDir = append(newDir, p)
-			}
-		}
-	}
-
-	// Validate directory exists
 	c, err := s.simulation.GetComputer(s.hostname)
 	if err != nil {
 		return err
@@ -595,14 +575,4 @@ func (s *shell) Kill() error {
 		s.childProcess = nil
 	}
 	return nil
-}
-
-func filterEmpty(ss []string) []string {
-	var out []string
-	for _, s := range ss {
-		if s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }
