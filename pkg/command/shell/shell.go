@@ -151,23 +151,23 @@ func (s *shell) Stdin(d process.Data) (bool, error) {
 }
 
 func (s *shell) executeCommand(cmd string) error {
-	// Split on pipes
-	segments := strings.Split(cmd, "|")
+	p := command.Parse(cmd)
+	if len(p.Segments) == 0 {
+		return nil
+	}
 
-	if len(segments) == 1 {
-		return s.executeSingle(strings.TrimSpace(cmd))
+	if !p.IsPipeline() {
+		return s.executeSingle(p.Segments[0])
 	}
 
 	// Pipeline: launch each segment, wire stdout->stdin
 	var processes []process.P
-	for _, seg := range segments {
-		seg = strings.TrimSpace(seg)
-		if seg == "" {
+	for _, seg := range p.Segments {
+		if seg.Name == "" {
 			return fmt.Errorf("empty pipe segment")
 		}
 		p, err := s.launchBinary(seg)
 		if err != nil {
-			// Kill already-launched processes
 			for _, proc := range processes {
 				proc.Kill()
 			}
@@ -176,31 +176,26 @@ func (s *shell) executeCommand(cmd string) error {
 		processes = append(processes, p)
 	}
 
-	// Wire: pipe stdout of each process to stdin of the next
 	s.childProcess = &pipeline{processes: processes}
 	return nil
 }
 
-func (s *shell) executeSingle(cmd string) error {
-	fields := strings.Fields(cmd)
-	if len(fields) == 0 {
+func (s *shell) executeSingle(seg command.Segment) error {
+	if seg.Name == "" {
 		return nil
 	}
-	name := fields[0]
-	args := fields[1:]
 
-	// Builtins
-	switch name {
+	switch seg.Name {
 	case "cd":
-		return s.builtinCd(args)
+		return s.builtinCd(seg.Args)
 	case "exit":
 		s.exited = true
 		return nil
 	case "nx":
-		return s.builtinNx(args)
+		return s.builtinNx(seg.Args)
 	}
 
-	p, err := s.launchBinary(cmd)
+	p, err := s.launchBinary(seg)
 	if err != nil {
 		return err
 	}
@@ -208,27 +203,23 @@ func (s *shell) executeSingle(cmd string) error {
 	return nil
 }
 
-func (s *shell) launchBinary(cmd string) (process.P, error) {
-	fields := strings.Fields(cmd)
-	name := fields[0]
-	args := fields[1:]
-
+func (s *shell) launchBinary(seg command.Segment) (process.P, error) {
 	c, err := s.simulation.GetComputer(s.hostname)
 	if err != nil {
 		return nil, err
 	}
-	f, err := c.Filesystem.Navigate([]string{"bin", name})
+	f, err := c.Filesystem.Navigate([]string{"bin", seg.Name})
 	if err != nil {
-		return nil, fmt.Errorf("command not found: %v", name)
+		return nil, fmt.Errorf("command not found: %v", seg.Name)
 	}
 	if f.Type != file.Binary {
-		return nil, fmt.Errorf("not executable: %v", name)
+		return nil, fmt.Errorf("not executable: %v", seg.Name)
 	}
 	b, err := simulation.GetBinary(f.Data)
 	if err != nil {
 		return nil, err
 	}
-	return b.Launch(s.simulation, s.owner, s.hostname, s.currentDirectory, args)
+	return b.Launch(s.simulation, s.owner, s.hostname, s.currentDirectory, seg.Args)
 }
 
 func (s *shell) builtinNx(args []string) error {
