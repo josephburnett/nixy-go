@@ -17,3 +17,6 @@
 # WASM build artifacts
 web/nixy.wasm
 web/wasm_exec.js
+
+# Snapshot dumps from Ctrl+\ in the REPL
+nixy-debug-*.txt
