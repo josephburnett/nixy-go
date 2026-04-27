@@ -72,6 +72,17 @@ func (s *shell) Stdout() (process.Data, bool, error) {
 		}
 		data = append(data, d...)
 		if eof {
+			// Drain any pending stderr into echoErr before reaping the
+			// child. Without this, an errorProcess's message — which lives
+			// only on stderr — is lost because the session loop calls
+			// Stdout before Stderr, and Kill drops the child.
+			for {
+				errOut, _, _ := s.childProcess.Stderr()
+				if len(errOut) == 0 {
+					break
+				}
+				s.echoErr = append(s.echoErr, errOut...)
+			}
 			s.childProcess.Kill()
 			s.childProcess = nil
 		}

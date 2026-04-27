@@ -1,11 +1,13 @@
 package shell
 
 import (
+	"strings"
 	"testing"
 
 	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
 	_ "github.com/josephburnett/nixy-go/pkg/command/pwd"
+	_ "github.com/josephburnett/nixy-go/pkg/command/rm"
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
@@ -45,6 +47,13 @@ func testSetup(t *testing.T) (*simulation.S, process.P) {
 						OwnerPermission:  file.Write,
 						CommonPermission: file.Read,
 						Data:             "grep",
+					},
+					"rm": {
+						Type:             file.Binary,
+						Owner:            file.OwnerRoot,
+						OwnerPermission:  file.Write,
+						CommonPermission: file.Read,
+						Data:             "rm",
 					},
 				},
 			},
@@ -248,6 +257,29 @@ func TestShellUnknownCommand(t *testing.T) {
 
 	if errOut == "" {
 		t.Fatal("expected error for unknown command")
+	}
+}
+
+// TestShellSurfacesChildStderr confirms a child process's stderr is delivered
+// even when the session loop reads stdout first. Regression test for a bug
+// where shell.Stdout() killed the child on its EOF, before stderr was ever
+// read — the error message was generated but lost.
+func TestShellSurfacesChildStderr(t *testing.T) {
+	_, p := testSetup(t)
+
+	// rm with no args returns an errorProcess whose message lives only on
+	// stderr. The classic loop is: read all of stdout, THEN read stderr —
+	// which is exactly the order this test exercises.
+	writeString(t, p, "rm")
+	writeEnter(t, p)
+	_ = readAllStdout(t, p)
+	errOut := readAllStderr(t, p)
+
+	if errOut == "" {
+		t.Fatal("expected child's stderr to be surfaced after stdout drain")
+	}
+	if !strings.Contains(errOut, "missing operand") {
+		t.Fatalf("expected 'missing operand' in stderr, got: %q", errOut)
 	}
 }
 
