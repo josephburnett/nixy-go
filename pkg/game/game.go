@@ -87,32 +87,28 @@ func (g *Game) NxQuest() string {
 	return active.Description() + "\n"
 }
 
-// NxLog returns the adventure log.
+// NxLog returns the adventure log: every quest in the order it is
+// played, with the machine it's on (a quest line moves between
+// machines, so grouping by machine would scramble the order).
 func (g *Game) NxLog() string {
-	var sb strings.Builder
-	currentMachine := ""
+	width := 0
 	for _, q := range g.Manager.Quests() {
-		machine := q.Machine()
-		if machine != currentMachine {
-			if currentMachine != "" {
-				sb.WriteString("\n")
-			}
-			locked := ""
-			if !g.Manager.Machines().IsBooted(machine) {
-				locked = " (locked)"
-			}
-			sb.WriteString(fmt.Sprintf("== %s ==%s\n", machine, locked))
-			currentMachine = machine
-		}
-		state := g.Manager.GetQuestState(q.ID())
-		switch state {
+		width = max(width, len(q.Machine()))
+	}
+	var sb strings.Builder
+	for _, q := range g.Manager.Quests() {
+		mark := " "
+		switch g.Manager.GetQuestState(q.ID()) {
 		case QuestComplete:
-			sb.WriteString(fmt.Sprintf("  ✓ %s\n", q.Description()))
+			mark = "✓"
 		case QuestActive:
-			sb.WriteString(fmt.Sprintf("  ● %s\n", q.Description()))
-		case QuestInactive:
-			sb.WriteString(fmt.Sprintf("    %s\n", q.Description()))
+			mark = "●"
 		}
+		desc := q.Description()
+		if !g.Manager.Machines().IsBooted(q.Machine()) {
+			desc += " (locked)"
+		}
+		fmt.Fprintf(&sb, "%s %-*s  %s\n", mark, width, q.Machine(), desc)
 	}
 	return sb.String()
 }

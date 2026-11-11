@@ -283,3 +283,26 @@ func TestManagerDialogOnCompletion(t *testing.T) {
 		t.Fatal("expected dialog on quest completion")
 	}
 }
+
+// nx log lists each quest once, in play order, with its machine: the
+// quest line goes nixy → server → nixy, and grouping by runs of the
+// same machine printed the nixy header twice.
+func TestNxLogListsQuestsInOrderWithMachine(t *testing.T) {
+	quests := []Quest{
+		&mockQuest{id: "a", machine: "laptop"},
+		&mockQuest{id: "b", machine: "server", required: []Achievement{"x"}},
+		&mockQuest{id: "c", machine: "laptop", required: []Achievement{"x"}},
+	}
+	machines := []MachineEntry{
+		{Hostname: "laptop", Filesystem: func() *file.F { return &file.F{Type: file.Folder} }},
+		{Hostname: "server", Filesystem: func() *file.F { return &file.F{Type: file.Folder} }, UnlockedBy: "x"},
+	}
+	g, err := NewGame(quests, machines, "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "● laptop  mock quest\n  server  mock quest (locked)\n  laptop  mock quest\n"
+	if got := g.NxLog(); got != want {
+		t.Fatalf("nx log:\n%s\nwant:\n%s", got, want)
+	}
+}
