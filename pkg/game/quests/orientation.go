@@ -2,6 +2,7 @@ package quests
 
 import (
 	"github.com/josephburnett/nixy-go/pkg/game"
+	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
@@ -21,28 +22,35 @@ func (q *Orientation) GrantedAchievements() []game.Achievement {
 
 func (q *Orientation) Setup(_ *simulation.S) error { return nil }
 
+var nixyHome = []string{"home", "nixy"}
+
+// IsComplete: pwd and ls ran fine on nixy, and the player has been in
+// Nixy's home.
 func (q *Orientation) IsComplete(_ *simulation.S, tracker *game.CommandTracker) bool {
-	return tracker.HasCommand("nixy", "pwd") &&
-		tracker.HasCommandPrefix("nixy", "ls") &&
-		tracker.HasVisitedDir("nixy", []string{"home", "nixy"})
+	return ranOK(tracker, "nixy", "pwd") &&
+		ranOK(tracker, "nixy", "ls") &&
+		tracker.HasVisitedDir("nixy", nixyHome)
 }
 
-func (q *Orientation) PlanNextCommand(_ *simulation.S, tracker *game.CommandTracker, hostname string, cwd []string) string {
-	nav := planNavigate(hostname, "nixy", cwd)
-	if nav != "" {
+func (q *Orientation) PlanNextCommand(ctx game.PlanContext) string {
+	if nav := planNavigate(ctx, "nixy"); nav != "" {
 		return nav
 	}
-
-	if !tracker.HasCommand("nixy", "pwd") {
-		return "pwd"
+	if !ranOK(ctx.Tracker, "nixy", "pwd") {
+		return firstOf(need(ctx, "pwd"), "pwd")
 	}
-	if !tracker.HasCommandPrefix("nixy", "ls") {
+	if !ranOK(ctx.Tracker, "nixy", "ls") {
 		// The player starts in their own, empty home: /home shows
 		// whose homes are here, Nixy's included.
-		return "ls /home"
+		return firstOf(need(ctx, "ls"), "ls /home")
 	}
-	if !tracker.HasVisitedDir("nixy", []string{"home", "nixy"}) {
-		return "cd /home/nixy"
+	if !ctx.Tracker.HasVisitedDir("nixy", nixyHome) {
+		return planCd(ctx, nixyHome)
 	}
 	return ""
+}
+
+// Repair puts Nixy's home back, so there's somewhere to visit.
+func (q *Orientation) Repair(sim *simulation.S, _ *game.CommandTracker) []string {
+	return restore(sim, "nixy", worlds.Nixy(), nixyHome, false)
 }

@@ -300,15 +300,7 @@ func worldMachines() []game.MachineEntry {
 
 // newGame builds a fresh world and quest line for username.
 func newGame(username string) (*game.Game, error) {
-	allQuests := []game.Quest{
-		&quests.Connect{},
-		&quests.Orientation{},
-		&quests.Inspection{},
-		&quests.Modification{},
-		&quests.Composition{},
-		&quests.Permissions{},
-	}
-	return game.NewGame(allQuests, worldMachines(), username)
+	return game.NewGame(quests.All(), worldMachines(), username)
 }
 
 // --- playing mode -------------------------------------------------------
@@ -373,7 +365,7 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 			}
 			status, done := typedIn.LastStatus()
 			s.Game.Manager.Tracker.Record(game.CommandRecord{
-				Hostname: cmdHost, Cwd: cwd, Command: cmdLine,
+				Hostname: cmdHost, User: s.Username, Dir: cmdCwd, Cwd: cwd, Command: cmdLine,
 				Status: status, Running: !done,
 			})
 		}

@@ -1,7 +1,10 @@
 package quests
 
 import (
+	"slices"
+
 	"github.com/josephburnett/nixy-go/pkg/game"
+	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
@@ -21,24 +24,40 @@ func (q *Permissions) GrantedAchievements() []game.Achievement {
 
 func (q *Permissions) Setup(_ *simulation.S) error { return nil }
 
+var etcConfig = []string{"etc", "config"}
+
 func (q *Permissions) IsComplete(sim *simulation.S, _ *game.CommandTracker) bool {
-	return fileExists(sim, "server", []string{"etc", "config"})
+	return fileExists(sim, "server", etcConfig)
 }
 
-func (q *Permissions) PlanNextCommand(sim *simulation.S, tracker *game.CommandTracker, hostname string, cwd []string) string {
-	nav := planNavigate(hostname, "server", cwd)
-	if nav != "" {
+func (q *Permissions) PlanNextCommand(ctx game.PlanContext) string {
+	if nav := planNavigate(ctx, "server"); nav != "" {
 		return nav
 	}
-
-	if !binaryInstalled(sim, "server", "touch") {
+	if !runnable(ctx.Sim, "server", ctx.User, "touch") {
+		if !canSudoApt(ctx) || binaryInstalled(ctx.Sim, "server", "touch") {
+			return "nx panic"
+		}
 		// Try it as yourself first: apt's "are you root?" is the
 		// lesson that makes sudo make sense.
-		if !tracker.HasCommand("server", "apt install touch") {
+		if !triedAptInstall(ctx.Tracker, "touch") && runnable(ctx.Sim, "server", ctx.User, "apt") {
 			return "apt install touch"
 		}
 		return "sudo apt install touch"
 	}
+	return firstOf(need(ctx, "sudo"), "sudo touch /etc/config")
+}
 
-	return "sudo touch /etc/config"
+// triedAptInstall reports whether the player ran apt install pkg on
+// the server without sudo, and it failed.
+func triedAptInstall(t *game.CommandTracker, pkg string) bool {
+	return t.AnyInvocation("server", game.CommandRecord.Failed, func(inv game.Invocation) bool {
+		return inv.Name == "apt" && !inv.Sudo && len(inv.Args) > 1 &&
+			inv.Args[0] == "install" && slices.Contains(inv.Args[1:], pkg)
+	})
+}
+
+// Repair puts /etc back, for the config to go in.
+func (q *Permissions) Repair(sim *simulation.S, _ *game.CommandTracker) []string {
+	return restore(sim, "server", worlds.Server(), []string{"etc"}, false)
 }

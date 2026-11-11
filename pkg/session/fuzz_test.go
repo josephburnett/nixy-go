@@ -234,8 +234,9 @@ func stateName(s game.QuestState) string {
 //   - no panic, and the keyboard is never empty while the session runs;
 //   - no command writes to stderr except a permission error.
 //
-// It does not demand quest progress: random play can legitimately
-// strand a quest (e.g. by deleting the file it asks to read).
+// Then, from wherever random play left the world, it follows only the
+// hints and demands that they finish every quest: whatever the player
+// broke, the game recovers (see followHints).
 func TestFuzzE2ERandomKeys(t *testing.T) {
 	const (
 		runs  = 30
@@ -253,6 +254,10 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 		term.Resize(80, 24)
 		sess.InitTerminal(term)
 		typeCommand(t, sess, term, "user")
+		// Start random play at a different quest for each seed, so
+		// every quest gets broken in its own way.
+		skip := int(seed) % len(sess.Game.Manager.Quests())
+		followHints(t, sess, term, hintFinishKeys, func() bool { return completedQuests(sess) >= skip })
 		tap := &stderrTap{P: sess.Shell.(process.P)}
 		tapped := guide.New(tap)
 		sess.Guide = tapped
@@ -263,13 +268,14 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 			if len(valid) == 0 {
 				t.Fatalf("seed %d step %d: no valid keys at %q", seed, step, term.State.Line)
 			}
+			if hint := term.State.HintKey; hint != nil && !containsKey(valid, hint) {
+				t.Fatalf("seed %d step %d: hint %q is not a valid key at %q (plan %q)",
+					seed, step, keyName(hint), term.State.Line, plannedCommand(sess))
+			}
 			d := randomKey(rng, sess, term, &script)
 			line := term.State.Line
 			if !containsKey(valid, d) {
-				// A stale hint (random play can break a plan, e.g. by
-				// deleting its file), or a scripted line that can't
-				// be typed here.
-				continue
+				continue // a scripted line that can't be typed here
 			}
 			wasLogin := sess.Mode == ModeLogin
 			func() {
@@ -296,7 +302,90 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 				sess.Guide = tapped
 			}
 		}
+
+		// Liveness: from wherever random play left things, the hints
+		// alone must finish the quest line.
+		followHints(t, sess, term, hintFinishKeys, func() bool {
+			return sess.Mode == ModePlaying && sess.Game.Manager.ActiveQuest() == nil
+		})
 	}
+}
+
+// hintFinishKeys bounds how many keys followHints may press to finish
+// the whole quest line, from anywhere.
+const hintFinishKeys = 3000
+
+// followHints presses only what the planner hints until done holds,
+// failing if it takes more than maxKeys keys. Off-plan typing is
+// erased with Backspace, and at the login prompt it logs in as "user"
+// (whose game random play started). It fails when a hint is not a
+// valid key, when the planner has a plan the thought line doesn't
+// explain, or when there is a quest but no plan at an empty prompt:
+// each of those leaves the player stranded.
+func followHints(t *testing.T, sess *Session, term *terminal.T, maxKeys int, done func() bool) {
+	t.Helper()
+	for range maxKeys {
+		if done() {
+			return
+		}
+		valid := term.State.ValidKeys
+		hint := term.State.HintKey
+		line := term.State.Line
+		var d process.Datum
+		switch {
+		case sess.Mode == ModeLogin && line != "user" && line != "":
+			d = process.TermBackspace
+		case sess.Mode == ModeLogin:
+			d = process.TermEnter
+			if line == "" {
+				typeAccepted(t, sess, term, "user")
+				continue
+			}
+		case hint != nil:
+			if !containsKey(valid, hint) {
+				t.Fatalf("hint %q is not a valid key at %q (plan %q)", keyName(hint), line, plannedCommand(sess))
+			}
+			if plannedCommand(sess) != "" && term.State.Thought == "" {
+				t.Fatalf("plan %q has no thought", plannedCommand(sess))
+			}
+			d = hint
+		case line != "":
+			d = process.TermBackspace
+		default:
+			t.Fatalf("quest %q has no plan at an empty prompt on %s in /%s",
+				activeQuestID(sess), sess.Shell.Hostname(), strings.Join(sess.Shell.CurrentDirectory(), "/"))
+		}
+		pressAccepted(t, sess, term, d)
+	}
+	t.Fatalf("hints didn't finish within %d keys: quest %q, plan %q, line %q",
+		maxKeys, activeQuestID(sess), plannedCommand(sess), term.State.Line)
+}
+
+func completedQuests(sess *Session) int {
+	n := 0
+	for _, st := range snapQuests(sess) {
+		if st == game.QuestComplete {
+			n++
+		}
+	}
+	return n
+}
+
+func plannedCommand(sess *Session) string {
+	if sess.Mode != ModePlaying {
+		return ""
+	}
+	return sess.Game.GetPlannedCommand(sess.Shell.Hostname(), sess.Shell.CurrentDirectory())
+}
+
+func activeQuestID(sess *Session) string {
+	if sess.Game == nil {
+		return ""
+	}
+	if q := sess.Game.Manager.ActiveQuest(); q != nil {
+		return q.ID()
+	}
+	return ""
 }
 
 // randomKey picks the next key for random play: half the time the hint
@@ -306,7 +395,7 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 // script holds the rest of that line. The key may not be valid.
 func randomKey(rng *rand.Rand, sess *Session, term *terminal.T, script *[]process.Datum) process.Datum {
 	if len(*script) == 0 && term.State.Line == "" && rng.Intn(8) == 0 {
-		line := []string{"exit", "nx panic", "ssh nixy"}[rng.Intn(3)]
+		line := scriptedLines[rng.Intn(len(scriptedLines))]
 		if sess.Mode == ModeLogin {
 			line = []string{"user", fuzzLogin(rng)}[rng.Intn(2)]
 		}
@@ -327,6 +416,23 @@ func randomKey(rng *rand.Rand, sess *Session, term *terminal.T, script *[]proces
 		return hint
 	}
 	return term.State.ValidKeys[rng.Intn(len(term.State.ValidKeys))]
+}
+
+// scriptedLines are lines random play types now and then: ones that
+// leave a shell, and ones that break what quests depend on (each is
+// skipped where it can't be typed).
+var scriptedLines = []string{
+	"exit", "nx panic", "ssh nixy",
+	"rm /home/nixy/readme.txt",
+	"sudo rm /home/nixy/readme.txt",
+	"sudo rm /var/log/system.log",
+	"sudo rm /home/nixy/projects/target.txt",
+	"sudo rm /bin/grep", "sudo rm /bin/cat", "sudo rm /bin/rm",
+	"sudo rm /bin/touch", "sudo rm /bin/apt", "sudo rm /bin/sudo",
+	"sudo apt install mv",
+	"sudo mv /home/nixy/readme.txt /home/nixy/r.txt",
+	"sudo mv /bin/grep /bin/g",
+	"sudo mv /bin/ls /bin/cat",
 }
 
 // stderrTap wraps the player's shell and keeps a copy of its stderr.

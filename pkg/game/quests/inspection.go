@@ -2,6 +2,7 @@ package quests
 
 import (
 	"github.com/josephburnett/nixy-go/pkg/game"
+	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
@@ -21,26 +22,54 @@ func (q *Inspection) GrantedAchievements() []game.Achievement {
 
 func (q *Inspection) Setup(_ *simulation.S) error { return nil }
 
+var (
+	readme    = []string{"home", "nixy", "readme.txt"}
+	logDir    = []string{"var", "log"}
+	systemLog = []string{"var", "log", "system.log"}
+)
+
+// IsComplete: the player read readme.txt and searched the system log,
+// however they spelled the paths. A grep that found nothing, or a
+// command that failed, doesn't count.
 func (q *Inspection) IsComplete(_ *simulation.S, tracker *game.CommandTracker) bool {
-	return tracker.HasCommand("nixy", "cat readme.txt") &&
-		tracker.HasCommandPrefix("nixy", "grep")
+	return readOK(tracker, "nixy", readme) && searchedLog(tracker)
 }
 
-func (q *Inspection) PlanNextCommand(_ *simulation.S, tracker *game.CommandTracker, hostname string, cwd []string) string {
-	nav := planNavigate(hostname, "nixy", cwd)
-	if nav != "" {
+// searchedLog reports whether a grep succeeded on a command line that
+// read the system log (`grep error system.log`, or the log piped into
+// grep).
+func searchedLog(t *game.CommandTracker) bool {
+	return t.Any("nixy", func(r game.CommandRecord) bool {
+		if !r.OK() || !r.Invokes("grep") {
+			return false
+		}
+		for _, inv := range r.Invocations() {
+			if reads(inv, systemLog) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+func (q *Inspection) PlanNextCommand(ctx game.PlanContext) string {
+	if nav := planNavigate(ctx, "nixy"); nav != "" {
 		return nav
 	}
-
-	if !tracker.HasCommand("nixy", "cat readme.txt") {
-		if !pathEqual(cwd, []string{"home", "nixy"}) {
-			return "cd /home/nixy"
-		}
-		return "cat readme.txt"
+	if !readOK(ctx.Tracker, "nixy", readme) {
+		return firstOf(need(ctx, "cat"), planCd(ctx, nixyHome), "cat readme.txt")
 	}
+	return firstOf(need(ctx, "grep"), planCd(ctx, logDir), "grep error system.log")
+}
 
-	if !pathEqual(cwd, []string{"var", "log"}) {
-		return "cd /var/log"
+// Repair puts back whichever of the two files is still to be read.
+func (q *Inspection) Repair(sim *simulation.S, tracker *game.CommandTracker) []string {
+	var lines []string
+	if !readOK(tracker, "nixy", readme) {
+		lines = append(lines, restore(sim, "nixy", worlds.Nixy(), readme, false)...)
 	}
-	return "grep error system.log"
+	if !searchedLog(tracker) {
+		lines = append(lines, restore(sim, "nixy", worlds.Nixy(), systemLog, false)...)
+	}
+	return lines
 }

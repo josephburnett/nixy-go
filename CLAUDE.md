@@ -195,9 +195,41 @@ loop wraps it in scaffolding:
 - **Quests** introduce concepts in order, each unlocked by achievements
   granted by the prior one. New quests should build on what's been
   taught, not require leaping forward.
-- **The planner** (`game.PlanNextCommand`, `game.PlanHint`) computes
+- **The planner** (`Quest.PlanNextCommand`, `game.PlanHint`) computes
   the next concrete keystroke toward the active quest. This is what
-  the green hint key on the keyboard means.
+  the green hint key on the keyboard means. `game.PlanThought` says
+  why, in the thought line; every plannable command has a thought.
+- **Quests check outcomes, not spelling.** A quest whose goal is an
+  effect checks the world (`/etc/config` exists, junk.txt is gone).
+  Otherwise it asks the tracker what ran and how it ended:
+  `CommandRecord.Invocations()` parses the line into programs (sudo
+  seen through, `~` expanded) whose args resolve as paths from the
+  folder the command ran in (`Invocation.HasPath`), and `OK()` /
+  `Failed()` read its status. So `cat readme.txt`, `cat
+  /home/nixy/readme.txt` and `cat ~/../nixy/readme.txt | grep x` all
+  count as reading Nixy's readme, while a grep that matched nothing,
+  `lsx`, or a rejected command don't. A deliberate failure is an
+  outcome too: Permissions plans `apt install touch` until a failed
+  one is recorded. Never match command strings.
+- **Recovery: the player can break anything, never the quest line.**
+  Planners compute each step from the world as it is now, and:
+  - before planning a command they call `need(ctx, name)`: when
+    `/bin/<name>` is missing they plan `sudo apt install <name>` (if
+    sudo and apt work), and otherwise, or when it's been replaced by
+    another program, `nx panic`. `nx panic` puts every machine's
+    `/bin` back as shipped, keeping properly installed programs and
+    dropping anything else, so after it `sudo apt install` always
+    works. It is introduced in the Permissions dialog, where sudo
+    makes breaking things possible.
+  - a quest implementing `game.Repairer` puts back its own fixtures
+    after every command while it's active (readme.txt until it's
+    read, the system log until it's searched, the projects folder and
+    its files, Nixy's home, the server's /etc), from the world
+    definition, keeping whatever is there and of the right type. Nixy
+    says so in the dialog ("/home/nixy/readme.txt went missing. I put
+    it back"): it's her file, and she's a real user on her machine.
+  Hints are never filtered to hide a bad plan: a hint the keyboard
+  rejects is a planner bug, and the fuzz fails on it.
 - **Nixy's dialog** (`pkg/character/`) frames each concept narratively,
   before and after. The player isn't memorizing — they're helping
   someone.
@@ -249,8 +281,8 @@ suite for both.
 - The session never ends itself. `exit` on the laptop logs out to the
   `login:` prompt; each username keeps its own game, so logging back in
   resumes it. `nx panic` puts back every machine's shipped `/bin`
-  (from its world definition; later installs stay) and replaces the
-  whole shell stack with a fresh
+  (from its world definition; programs installed since stay, anything
+  else there goes) and replaces the whole shell stack with a fresh
   laptop shell (never a logout). Only the CLI's double Ctrl+C quits.
   The keyboard must never be empty — the web build has no other input.
 
@@ -285,7 +317,7 @@ suite for both.
 
 ### Fuzz strategy
 
-Three fuzz tests with different goals:
+Fuzz and liveness tests with different goals:
 
 - `TestFuzzQuests` (`pkg/game/quests/`) — bypasses the real shell,
   drives quests via `shellState`. Catches quest-logic bugs but
@@ -298,9 +330,20 @@ Three fuzz tests with different goals:
 - `TestFuzzE2ERandomKeys` (`pkg/session/`) — random valid keys (half
   the time the hint) through the same chokepoint, wandering into rm,
   mv, sudo and long pipelines, and on through logouts, logins and nx
-  panics. Fails on panics, an empty keyboard, or stderr other than
-  permission denied. No liveness demand: random play can strand a
-  quest.
+  panics; each seed starts random play at a different quest and now
+  and then types lines that break things (`sudo rm /bin/sudo`, delete
+  a quest's file). Fails on panics, an empty keyboard, stderr other
+  than permission denied, or a hint that isn't a valid key. Then the
+  liveness check: from wherever random play left the world, following
+  only the hints (`followHints`) must finish every quest within
+  `hintFinishKeys` keys, never meeting an invalid hint, a plan without
+  a thought, or an empty prompt with no plan.
+- `TestBrokenPrerequisitesRecover` (`pkg/session/`, deterministic) —
+  for each quest, breaks what it depends on (its files, the commands
+  it plans, sudo, apt) and demands the hints still finish the line.
+- `TestPlannedCommandsAreTaught` (`pkg/game/quests/`) — every program
+  a plan runs appears in backticks in Nixy's dialog before it's
+  planned.
 - `TestFuzzE2ERejectedKeys` (`pkg/session/`) — random play that also
   presses keys the keyboard doesn't offer, failing if any changes
   anything observable, and checks after every key that the process

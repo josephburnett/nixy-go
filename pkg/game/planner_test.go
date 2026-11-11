@@ -15,7 +15,7 @@ func newPlannerQuest(target string, done bool) *mockQuest {
 
 func TestPlanHintNextChar(t *testing.T) {
 	q := newPlannerQuest("cd /home", false)
-	hint := PlanHint(q, nil, nil, "", nil, "cd")
+	hint := PlanHint(q.PlanNextCommand(PlanContext{}), "cd")
 	if c, ok := hint.(process.Chars); !ok || string(c) != " " {
 		t.Fatalf("expected space, got %v", hint)
 	}
@@ -23,7 +23,7 @@ func TestPlanHintNextChar(t *testing.T) {
 
 func TestPlanHintFirstChar(t *testing.T) {
 	q := newPlannerQuest("ssh nixy", false)
-	hint := PlanHint(q, nil, nil, "", nil, "")
+	hint := PlanHint(q.PlanNextCommand(PlanContext{}), "")
 	if c, ok := hint.(process.Chars); !ok || string(c) != "s" {
 		t.Fatalf("expected 's', got %v", hint)
 	}
@@ -31,7 +31,7 @@ func TestPlanHintFirstChar(t *testing.T) {
 
 func TestPlanHintEnter(t *testing.T) {
 	q := newPlannerQuest("pwd", false)
-	hint := PlanHint(q, nil, nil, "", nil, "pwd")
+	hint := PlanHint(q.PlanNextCommand(PlanContext{}), "pwd")
 	if tc, ok := hint.(process.TermCode); !ok || tc != process.TermEnter {
 		t.Fatalf("expected TermEnter, got %v", hint)
 	}
@@ -44,7 +44,7 @@ func TestPlanHintEnter(t *testing.T) {
 // empty prompt.
 func TestPlanHintNoNagWhenOffPlan(t *testing.T) {
 	q := newPlannerQuest("cd /home", false)
-	hint := PlanHint(q, nil, nil, "", nil, "ls")
+	hint := PlanHint(q.PlanNextCommand(PlanContext{}), "ls")
 	if hint != nil {
 		t.Fatalf("expected nil hint when off-plan, got %v", hint)
 	}
@@ -52,14 +52,14 @@ func TestPlanHintNoNagWhenOffPlan(t *testing.T) {
 
 func TestPlanHintQuestComplete(t *testing.T) {
 	q := newPlannerQuest("", true)
-	hint := PlanHint(q, nil, nil, "", nil, "")
+	hint := PlanHint(q.PlanNextCommand(PlanContext{}), "")
 	if hint != nil {
 		t.Fatalf("expected nil for complete quest, got %v", hint)
 	}
 }
 
 func TestPlanHintNilQuest(t *testing.T) {
-	hint := PlanHint(nil, nil, nil, "", nil, "")
+	hint := PlanHint("", "")
 	if hint != nil {
 		t.Fatalf("expected nil for nil quest, got %v", hint)
 	}
@@ -67,7 +67,7 @@ func TestPlanHintNilQuest(t *testing.T) {
 
 func TestPlanHintPartialMatch(t *testing.T) {
 	q := newPlannerQuest("apt install grep", false)
-	hint := PlanHint(q, nil, nil, "", nil, "apt ")
+	hint := PlanHint(q.PlanNextCommand(PlanContext{}), "apt ")
 	if c, ok := hint.(process.Chars); !ok || string(c) != "i" {
 		t.Fatalf("expected 'i', got %v", hint)
 	}
@@ -78,7 +78,7 @@ func TestPlanHintPartialMatch(t *testing.T) {
 // `cd /etc` instead of `cd /home`). Still no Backspace nag.
 func TestPlanHintNoNagOnDivergence(t *testing.T) {
 	q := newPlannerQuest("cd /home", false)
-	hint := PlanHint(q, nil, nil, "", nil, "cd /etc")
+	hint := PlanHint(q.PlanNextCommand(PlanContext{}), "cd /etc")
 	if hint != nil {
 		t.Fatalf("expected nil hint on divergence, got %v", hint)
 	}

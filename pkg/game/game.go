@@ -45,10 +45,21 @@ func (g *Game) AfterCommand() {
 	g.Manager.AfterCommand(g.Sim)
 }
 
+// planContext is what the active quest's planner sees for a shell on
+// hostname in cwd.
+func (g *Game) planContext(hostname string, cwd []string) PlanContext {
+	return PlanContext{
+		Sim:      g.Sim,
+		Tracker:  g.Manager.Tracker,
+		Hostname: hostname,
+		Cwd:      cwd,
+		User:     g.Manager.Machines().Username(),
+	}
+}
+
 // GetHint returns the planner hint for the current quest.
 func (g *Game) GetHint(hostname string, cwd []string, partialLine string) process.Datum {
-	active := g.Manager.ActiveQuest()
-	return PlanHint(active, g.Sim, g.Manager.Tracker, hostname, cwd, partialLine)
+	return PlanHint(g.GetPlannedCommand(hostname, cwd), partialLine)
 }
 
 // GetThought returns a natural-language description of the next planned
@@ -64,7 +75,7 @@ func (g *Game) GetPlannedCommand(hostname string, cwd []string) string {
 	if active == nil {
 		return ""
 	}
-	return active.PlanNextCommand(g.Sim, g.Manager.Tracker, hostname, cwd)
+	return active.PlanNextCommand(g.planContext(hostname, cwd))
 }
 
 // NxQuest returns the current quest description.
@@ -114,10 +125,12 @@ func (g *Game) TakePanic() bool {
 	return p
 }
 
-// NxPanic puts back every machine's shipped /bin (so a deleted ssh,
-// apt or sudo can't strand the player) and flags the session to
-// disconnect the player back to the laptop (see TakePanic). Commands
-// installed since are kept.
+// NxPanic puts every booted machine's /bin back as shipped, keeping
+// the programs properly installed since (so a deleted ssh, apt or sudo
+// can't strand the player, and neither can a program replaced by
+// another), and flags the session to disconnect the player back to the
+// laptop (see TakePanic). It is the recovery planners fall back on when
+// sudo apt install can't fix what's broken.
 func (g *Game) NxPanic() string {
 	g.panicked = true
 	for _, e := range g.Manager.Machines().AllEntries() {
@@ -132,14 +145,15 @@ func (g *Game) NxPanic() string {
 		if !ok {
 			continue
 		}
-		bin, ok := c.Filesystem.Files["bin"]
-		if !ok || bin.Type != file.Folder {
-			c.Filesystem.Files["bin"] = shipped
-			continue
+		if bin, ok := c.Filesystem.Files["bin"]; ok && bin.Type == file.Folder {
+			for name, f := range bin.Files {
+				_, isShipped := shipped.Files[name]
+				if !isShipped && f.Type == file.Binary && f.Data == name {
+					shipped.Files[name] = f // installed: keep it
+				}
+			}
 		}
-		for name, f := range shipped.Files {
-			bin.Files[name] = f
-		}
+		c.Filesystem.Files["bin"] = shipped
 	}
 	return "Panic! Restoring system state...\n"
 }

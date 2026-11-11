@@ -1,6 +1,8 @@
 package quests
 
 import (
+	"slices"
+
 	"github.com/josephburnett/nixy-go/pkg/game"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
@@ -18,13 +20,15 @@ func (q *Connect) GrantedAchievements() []game.Achievement {
 
 func (q *Connect) Setup(_ *simulation.S) error { return nil }
 
+// IsComplete: the player got a shell on nixy.
 func (q *Connect) IsComplete(_ *simulation.S, tracker *game.CommandTracker) bool {
-	return tracker.HasCommandOnHost("nixy") || tracker.HasCommand("laptop", "ssh nixy")
+	return tracker.HasCommandOnHost("nixy") ||
+		tracker.AnyInvocation("laptop", func(r game.CommandRecord) bool { return r.Running || r.OK() },
+			func(inv game.Invocation) bool {
+				return inv.Name == "ssh" && slices.Equal(inv.Args, []string{"nixy"})
+			})
 }
 
-func (q *Connect) PlanNextCommand(_ *simulation.S, _ *game.CommandTracker, hostname string, _ []string) string {
-	if hostname == "nixy" {
-		return ""
-	}
-	return "ssh nixy"
+func (q *Connect) PlanNextCommand(ctx game.PlanContext) string {
+	return planNavigate(ctx, "nixy")
 }

@@ -131,6 +131,9 @@ func (r *MachineRegistry) AllEntries() []MachineEntry {
 	return r.entries
 }
 
+// Username is the player's account name.
+func (r *MachineRegistry) Username() string { return r.username }
+
 // IsBooted returns whether a machine has been booted.
 func (r *MachineRegistry) IsBooted(hostname string) bool {
 	return r.booted[hostname]

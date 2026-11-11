@@ -3,6 +3,7 @@ package quests
 import (
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/game"
+	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
@@ -25,7 +26,7 @@ func (q *Modification) Setup(sim *simulation.S) error {
 	if err != nil {
 		return err
 	}
-	if fileExists(sim, "nixy", []string{"home", "nixy", "junk.txt"}) {
+	if fileExists(sim, "nixy", junk) {
 		return nil
 	}
 	return c.Filesystem.CreateFile([]string{"home", "nixy"}, "junk.txt", &file.F{
@@ -37,26 +38,30 @@ func (q *Modification) Setup(sim *simulation.S) error {
 	}, "root")
 }
 
+var (
+	junk      = []string{"home", "nixy", "junk.txt"}
+	important = []string{"home", "nixy", "important.txt"}
+)
+
+// IsComplete: the file junk.txt is gone and important.txt exists.
 func (q *Modification) IsComplete(sim *simulation.S, _ *game.CommandTracker) bool {
-	junkGone := !fileExists(sim, "nixy", []string{"home", "nixy", "junk.txt"})
-	importantExists := fileExists(sim, "nixy", []string{"home", "nixy", "important.txt"})
-	return junkGone && importantExists
+	return !isFile(sim, "nixy", junk) && fileExists(sim, "nixy", important)
 }
 
-func (q *Modification) PlanNextCommand(sim *simulation.S, _ *game.CommandTracker, hostname string, cwd []string) string {
-	nav := planNavigate(hostname, "nixy", cwd)
-	if nav != "" {
+func (q *Modification) PlanNextCommand(ctx game.PlanContext) string {
+	if nav := planNavigate(ctx, "nixy"); nav != "" {
 		return nav
 	}
-
-	if !pathEqual(cwd, []string{"home", "nixy"}) {
-		return "cd /home/nixy"
+	if isFile(ctx.Sim, "nixy", junk) {
+		return firstOf(need(ctx, "rm"), planCd(ctx, nixyHome), "rm junk.txt")
 	}
-	if fileExists(sim, "nixy", []string{"home", "nixy", "junk.txt"}) {
-		return "rm junk.txt"
-	}
-	if !fileExists(sim, "nixy", []string{"home", "nixy", "important.txt"}) {
-		return "touch important.txt"
+	if !fileExists(ctx.Sim, "nixy", important) {
+		return firstOf(need(ctx, "touch"), planCd(ctx, nixyHome), "touch important.txt")
 	}
 	return ""
+}
+
+// Repair puts Nixy's home back, as the quest's files live there.
+func (q *Modification) Repair(sim *simulation.S, _ *game.CommandTracker) []string {
+	return restore(sim, "nixy", worlds.Nixy(), nixyHome, false)
 }

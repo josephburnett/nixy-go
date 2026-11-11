@@ -17,22 +17,14 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
 
+	"github.com/josephburnett/nixy-go/pkg/character"
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/game"
 	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-func allQuests() []game.Quest {
-	return []game.Quest{
-		&Connect{},
-		&Orientation{},
-		&Inspection{},
-		&Modification{},
-		&Composition{},
-		&Permissions{},
-	}
-}
+func allQuests() []game.Quest { return All() }
 
 func allMachines() []game.MachineEntry {
 	return []game.MachineEntry{
@@ -82,19 +74,32 @@ func newShellState(t *testing.T, g *game.Game) *shellState {
 
 func (s *shellState) executeCommand(t *testing.T, cmd string) {
 	t.Helper()
-
-	// Track before execution
-	s.game.Manager.Tracker.Record(game.CommandRecord{Hostname: s.hostname, Cwd: s.cwd, Command: cmd})
+	rec := game.CommandRecord{Hostname: s.hostname, User: "user", Dir: s.cwd, Cwd: s.cwd, Command: cmd}
+	record := func(status int) {
+		rec.Status = status
+		s.game.Manager.Tracker.Record(rec)
+		s.game.AfterCommand()
+	}
 
 	// Handle builtins directly (bypass shell for reliability)
 	if strings.HasPrefix(cmd, "cd ") {
 		s.handleCd(cmd)
-		s.game.AfterCommand()
+		rec.Cwd = s.cwd
+		record(0)
 		return
 	}
 	if cmd == "exit" {
 		s.handleExit(t)
-		s.game.AfterCommand()
+		record(0)
+		return
+	}
+	if cmd == "nx panic" {
+		s.game.NxPanic()
+		s.game.TakePanic()
+		for len(s.shells) > 0 {
+			s.handleExit(t)
+		}
+		record(0)
 		return
 	}
 	if strings.HasPrefix(cmd, "ssh ") {
@@ -107,20 +112,17 @@ func (s *shellState) executeCommand(t *testing.T, cmd string) {
 		s.shell = remoteShell
 		s.hostname = targetHost
 		s.cwd = file.Home("user")
-		s.game.AfterCommand()
+		rec.Running = true
+		record(0)
 		return
 	}
-
 	// Parse and execute command through the simulation directly
 	fields := strings.Fields(cmd)
 	name := fields[0]
 	args := fields[1:]
-
-	// Handle sudo
+	status := 0
 	if name == "sudo" && len(args) > 0 {
-		name = args[0]
-		args = args[1:]
-		s.launchAndDrain(t, name, args, "root")
+		status = s.launchAndDrain(args[0], args[1:], "root")
 	} else if strings.Contains(cmd, "|") {
 		// Handle pipe: execute each segment, pipe data
 		segments := strings.Split(cmd, "|")
@@ -130,6 +132,7 @@ func (s *shellState) executeCommand(t *testing.T, cmd string) {
 			segFields := strings.Fields(seg)
 			p, err := s.game.Sim.Launch(s.hostname, "user", segFields[0], segFields[1:], s.cwd)
 			if err != nil {
+				status = 127
 				break
 			}
 			if i > 0 {
@@ -137,21 +140,22 @@ func (s *shellState) executeCommand(t *testing.T, cmd string) {
 				p.CloseStdin()
 			}
 			data = process.Text(p.Read(), process.Stdout)
+			status, _ = p.Exit()
 		}
 	} else {
-		s.launchAndDrain(t, name, args, "user")
+		status = s.launchAndDrain(name, args, "user")
 	}
-
-	s.game.AfterCommand()
+	record(status)
 }
 
-func (s *shellState) launchAndDrain(t *testing.T, name string, args []string, owner string) {
-	t.Helper()
+func (s *shellState) launchAndDrain(name string, args []string, owner string) int {
 	p, err := s.game.Sim.Launch(s.hostname, owner, name, args, s.cwd)
 	if err != nil {
-		return // Command failed, that's okay
+		return 127
 	}
 	p.Read()
+	status, _ := p.Exit()
+	return status
 }
 
 func (s *shellState) handleCd(cmd string) {
@@ -199,7 +203,7 @@ func followHintsToCompletion(t *testing.T, g *game.Game, ss *shellState, maxStep
 			return true // All quests done
 		}
 
-		target := active.PlanNextCommand(g.Sim, g.Manager.Tracker, ss.hostname, ss.cwd)
+		target := g.GetPlannedCommand(ss.hostname, ss.cwd)
 		if target == "" {
 			// Quest thinks it's done but manager hasn't noticed
 			g.AfterCommand()
@@ -226,6 +230,56 @@ func TestDeterministicConnect(t *testing.T) {
 	}
 }
 
+// TestPlannedCommandsAreTaught plays the quest line by the planner and
+// checks that every program a plan runs was introduced in Nixy's
+// dialog, in backticks, before it is planned, and that the thought
+// line explains every plan. A quest must build on what has been
+// taught, not leap ahead.
+func TestPlannedCommandsAreTaught(t *testing.T) {
+	g := newGame(t)
+	ss := newShellState(t, g)
+	var said strings.Builder
+	for step := 0; step < 200 && g.Manager.ActiveQuest() != nil; step++ {
+		for _, l := range g.Manager.Dialog.Drain() {
+			said.WriteString(l + "\n")
+		}
+		target := g.GetPlannedCommand(ss.hostname, ss.cwd)
+		if target == "" {
+			t.Fatalf("quest %q has no plan", g.Manager.ActiveQuest().ID())
+		}
+		if game.PlanThought(target) == "" {
+			t.Errorf("plan %q has no thought", target)
+		}
+		for _, inv := range (game.CommandRecord{Command: target}).Invocations() {
+			names := []string{inv.Name}
+			if inv.Sudo {
+				names = append(names, "sudo")
+			}
+			for _, n := range names {
+				if !strings.Contains(said.String(), "`"+n) {
+					t.Errorf("quest %q plans %q before Nixy has taught `%s`", g.Manager.ActiveQuest().ID(), target, n)
+				}
+			}
+		}
+		ss.executeCommand(t, target)
+	}
+	if a := g.Manager.ActiveQuest(); a != nil {
+		t.Fatalf("quest %q didn't finish", a.ID())
+	}
+}
+
+func TestEveryQuestHasDialog(t *testing.T) {
+	entries := character.AllDialog()
+	for _, q := range All() {
+		if character.FindDialog(entries, character.OnQuestActivate, q.ID()) == nil {
+			t.Errorf("quest %q has no activation dialog", q.ID())
+		}
+		if character.FindDialog(entries, character.OnQuestComplete, q.ID()) == nil {
+			t.Errorf("quest %q has no completion dialog", q.ID())
+		}
+	}
+}
+
 func TestDeterministicAllQuests(t *testing.T) {
 	g := newGame(t)
 	ss := newShellState(t, g)
@@ -243,7 +297,7 @@ func TestDeterministicAllQuests(t *testing.T) {
 			return
 		}
 
-		target := active.PlanNextCommand(g.Sim, g.Manager.Tracker, ss.hostname, ss.cwd)
+		target := g.GetPlannedCommand(ss.hostname, ss.cwd)
 		if target == "" {
 			g.AfterCommand()
 			if g.Manager.ActiveQuest() == active {
@@ -276,7 +330,7 @@ func TestFuzzQuests(t *testing.T) {
 			}
 
 			// 80% follow hint, 20% random command
-			target := active.PlanNextCommand(g.Sim, g.Manager.Tracker, ss.hostname, ss.cwd)
+			target := g.GetPlannedCommand(ss.hostname, ss.cwd)
 			if target != "" && rng.Float64() < 0.8 {
 				ss.executeCommand(t, target)
 			} else if target != "" {
@@ -289,7 +343,7 @@ func TestFuzzQuests(t *testing.T) {
 		// Verify: either all quests complete, or the planner can still find a path
 		active := g.Manager.ActiveQuest()
 		if active != nil {
-			target := active.PlanNextCommand(g.Sim, g.Manager.Tracker, ss.hostname, ss.cwd)
+			target := g.GetPlannedCommand(ss.hostname, ss.cwd)
 			if target == "" && !active.IsComplete(g.Sim, g.Manager.Tracker) {
 				t.Fatalf("iteration %d: quest %q stuck — not complete and no plan", iteration, active.ID())
 			}

@@ -82,25 +82,42 @@ func TestTrackerLastN(t *testing.T) {
 	}
 }
 
-func TestTrackerHasCommand(t *testing.T) {
-	tr := NewCommandTracker()
-	tr.Record(CommandRecord{Hostname: "host", Cwd: nil, Command: "pwd"})
-	if !tr.HasCommand("host", "pwd") {
-		t.Fatal("should find exact command")
+func TestTrackerInvocations(t *testing.T) {
+	r := CommandRecord{
+		Hostname: "nixy", User: "joe", Dir: []string{"home", "joe"},
+		Command: "sudo cat ~/../nixy/readme.txt | grep -v x",
 	}
-	if tr.HasCommand("host", "ls") {
-		t.Fatal("should not find different command")
+	invs := r.Invocations()
+	if len(invs) != 2 {
+		t.Fatalf("got %d invocations, want 2: %+v", len(invs), invs)
+	}
+	if invs[0].Name != "cat" || !invs[0].Sudo {
+		t.Fatalf("first invocation = %+v, want cat under sudo", invs[0])
+	}
+	if !invs[0].HasPath(0, []string{"home", "nixy", "readme.txt"}) {
+		t.Fatalf("cat's arg should resolve to /home/nixy/readme.txt: %v", invs[0].Paths(0))
+	}
+	if invs[1].Name != "grep" || invs[1].Sudo {
+		t.Fatalf("second invocation = %+v, want plain grep", invs[1])
+	}
+	if !r.IsPipeline() || !r.Invokes("grep") || r.Invokes("gre") {
+		t.Fatal("Invokes must match whole program names")
 	}
 }
 
-func TestTrackerHasCommandPrefix(t *testing.T) {
+func TestTrackerOutcomes(t *testing.T) {
 	tr := NewCommandTracker()
-	tr.Record(CommandRecord{Hostname: "host", Cwd: nil, Command: "grep error log.txt"})
-	if !tr.HasCommandPrefix("host", "grep") {
-		t.Fatal("should match prefix")
+	tr.Record(CommandRecord{Hostname: "h", Command: "lsx", Status: 127})
+	tr.Record(CommandRecord{Hostname: "h", Command: "grep zzz f", Status: 1})
+	tr.Record(CommandRecord{Hostname: "h", Command: "ssh nixy", Running: true})
+	ran := func(name string) bool {
+		return tr.AnyInvocation("h", CommandRecord.OK, func(i Invocation) bool { return i.Name == name })
 	}
-	if tr.HasCommandPrefix("host", "ls") {
-		t.Fatal("should not match different prefix")
+	if ran("ls") || ran("lsx") || ran("grep") || ran("ssh") {
+		t.Fatal("failed or running commands must not count as successes")
+	}
+	if !tr.AnyInvocation("h", CommandRecord.Failed, func(i Invocation) bool { return i.Name == "grep" }) {
+		t.Fatal("the failed grep should be found as a failure")
 	}
 }
 
@@ -112,19 +129,6 @@ func TestTrackerHasVisitedDir(t *testing.T) {
 	}
 	if tr.HasVisitedDir("host", []string{"home"}) {
 		t.Fatal("should not match partial path")
-	}
-}
-
-func TestTrackerHasPipe(t *testing.T) {
-	tr := NewCommandTracker()
-	tr.Record(CommandRecord{Hostname: "host", Cwd: nil, Command: "ls | grep foo"})
-	if !tr.HasPipe("host") {
-		t.Fatal("should detect pipe")
-	}
-	tr2 := NewCommandTracker()
-	tr2.Record(CommandRecord{Hostname: "host", Cwd: nil, Command: "ls"})
-	if tr2.HasPipe("host") {
-		t.Fatal("should not detect pipe in non-pipe command")
 	}
 }
 
@@ -204,7 +208,7 @@ func (q *mockQuest) RequiredAchievements() []Achievement                { return
 func (q *mockQuest) GrantedAchievements() []Achievement                 { return q.granted }
 func (q *mockQuest) Setup(_ *simulation.S) error                        { q.setupRan = true; return nil }
 func (q *mockQuest) IsComplete(_ *simulation.S, _ *CommandTracker) bool { return q.complete }
-func (q *mockQuest) PlanNextCommand(_ *simulation.S, _ *CommandTracker, _ string, _ []string) string {
+func (q *mockQuest) PlanNextCommand(PlanContext) string {
 	return q.planTarget
 }
 

@@ -26,7 +26,29 @@ type Quest interface {
 	Setup(sim *simulation.S) error
 	// IsComplete checks if quest completion condition is met.
 	IsComplete(sim *simulation.S, tracker *CommandTracker) bool
-	// PlanNextCommand computes the target command from current state.
-	// Returns empty string if the quest should be complete (or no action needed).
-	PlanNextCommand(sim *simulation.S, tracker *CommandTracker, hostname string, cwd []string) string
+	// PlanNextCommand computes the next command line toward the goal
+	// from the world as it is now, so a plan the player has broken is
+	// replaced by one that recovers. The plan must be typeable at an
+	// empty prompt in the player's shell. Returns "" if no action is
+	// needed (the quest is complete).
+	PlanNextCommand(ctx PlanContext) string
+}
+
+// PlanContext is what a planner sees: the world, the player's history,
+// and where the player's shell is.
+type PlanContext struct {
+	Sim      *simulation.S
+	Tracker  *CommandTracker
+	Hostname string
+	Cwd      []string
+	User     string
+}
+
+// Repairer is a quest that can put back what it needs from the world
+// when the player has broken it (deleted or moved a file the quest is
+// about). The manager calls Repair after every command while the quest
+// is active. It returns what Nixy says about it, or nil when nothing
+// needed repair.
+type Repairer interface {
+	Repair(sim *simulation.S, tracker *CommandTracker) []string
 }

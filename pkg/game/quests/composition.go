@@ -1,8 +1,11 @@
 package quests
 
 import (
+	"slices"
+
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/game"
+	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
@@ -20,15 +23,13 @@ func (q *Composition) GrantedAchievements() []game.Achievement {
 	return []game.Achievement{"composer", "server-unlocked"}
 }
 
-func (q *Composition) Setup(sim *simulation.S) error {
-	c, err := sim.GetComputer("nixy")
-	if err != nil {
-		return err
-	}
-	if fileExists(sim, "nixy", []string{"home", "nixy", "projects"}) {
-		return nil
-	}
-	dir := &file.F{
+var projects = []string{"home", "nixy", "projects"}
+
+// projectsWorld is Nixy's world with her projects folder in it, for
+// Setup and Repair.
+func projectsWorld() *file.F {
+	w := worlds.Nixy()
+	w.Files["home"].Files["nixy"].Files["projects"] = &file.F{
 		Type: file.Folder, Owner: "nixy",
 		OwnerPermission: file.Write, CommonPermission: file.Read,
 		Files: map[string]*file.F{
@@ -39,21 +40,33 @@ func (q *Composition) Setup(sim *simulation.S) error {
 			"config.txt": {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "config"},
 		},
 	}
-	return c.Filesystem.CreateFile([]string{"home", "nixy"}, "projects", dir, "root")
+	return w
 }
 
+func (q *Composition) Setup(sim *simulation.S) error {
+	restore(sim, "nixy", projectsWorld(), projects, true)
+	return nil
+}
+
+// IsComplete: a pipeline into grep found something on nixy.
 func (q *Composition) IsComplete(_ *simulation.S, tracker *game.CommandTracker) bool {
-	return tracker.HasPipe("nixy")
+	return tracker.Any("nixy", func(r game.CommandRecord) bool {
+		invs := r.Invocations()
+		return r.OK() && len(invs) > 1 && slices.ContainsFunc(invs[1:], func(inv game.Invocation) bool {
+			return inv.Name == "grep"
+		})
+	})
 }
 
-func (q *Composition) PlanNextCommand(_ *simulation.S, _ *game.CommandTracker, hostname string, cwd []string) string {
-	nav := planNavigate(hostname, "nixy", cwd)
-	if nav != "" {
+func (q *Composition) PlanNextCommand(ctx game.PlanContext) string {
+	if nav := planNavigate(ctx, "nixy"); nav != "" {
 		return nav
 	}
+	return firstOf(need(ctx, "ls"), need(ctx, "grep"), planCd(ctx, projects), "ls | grep target")
+}
 
-	if !pathEqual(cwd, []string{"home", "nixy", "projects"}) {
-		return "cd /home/nixy/projects"
-	}
-	return "ls | grep target"
+// Repair puts back the projects folder and any of its files, so there
+// is a target.txt to find.
+func (q *Composition) Repair(sim *simulation.S, _ *game.CommandTracker) []string {
+	return restore(sim, "nixy", projectsWorld(), projects, true)
 }

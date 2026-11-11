@@ -65,21 +65,32 @@ func (m *Manager) AfterCommand(sim *simulation.S) {
 
 	// Activate next eligible quest
 	if m.ActiveQuest() == nil {
-		for _, q := range m.quests {
-			if m.states[q.ID()] != QuestInactive {
-				continue
+		m.activateNext(sim)
+	}
+
+	// Put back what the active quest needs, if the player broke it.
+	if r, ok := m.ActiveQuest().(Repairer); ok {
+		if lines := r.Repair(sim, m.Tracker); len(lines) > 0 {
+			m.Dialog.Enqueue(lines)
+		}
+	}
+}
+
+func (m *Manager) activateNext(sim *simulation.S) {
+	for _, q := range m.quests {
+		if m.states[q.ID()] != QuestInactive {
+			continue
+		}
+		if m.achievements.HasAll(q.RequiredAchievements()) {
+			m.states[q.ID()] = QuestActive
+			m.active = q.ID()
+			q.Setup(sim)
+			// Trigger activation dialog
+			lines := character.FindDialog(m.dialogData, character.OnQuestActivate, q.ID())
+			if lines != nil {
+				m.Dialog.Enqueue(lines)
 			}
-			if m.achievements.HasAll(q.RequiredAchievements()) {
-				m.states[q.ID()] = QuestActive
-				m.active = q.ID()
-				q.Setup(sim)
-				// Trigger activation dialog
-				lines := character.FindDialog(m.dialogData, character.OnQuestActivate, q.ID())
-				if lines != nil {
-					m.Dialog.Enqueue(lines)
-				}
-				break
-			}
+			break
 		}
 	}
 }

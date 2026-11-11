@@ -1,105 +1,137 @@
 package game
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
 	"github.com/josephburnett/nixy-go/pkg/process"
-	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
-// PlanHint returns the next Datum the player should type to advance toward
-// quest completion. If the player's partial line matches the plan, returns
-// the next character (or Enter at exact match). If the player has gone
-// off-plan, returns nil — let them run whatever command they want; the
-// planner re-engages on the next empty prompt. Returns nil if no plan
-// applies.
-func PlanHint(
-	quest Quest,
-	sim *simulation.S,
-	tracker *CommandTracker,
-	hostname string,
-	cwd []string,
-	partialLine string,
-) process.Datum {
-	if quest == nil {
-		return nil
-	}
-
-	target := quest.PlanNextCommand(sim, tracker, hostname, cwd)
+// PlanHint returns the next Datum the player should type to reach the
+// planned command line target. If the player's partial line matches the
+// plan, it is the next character (or Enter at exact match). If the
+// player has gone off-plan, it is nil: let them run whatever command
+// they want; the planner re-engages on the next empty prompt. It is nil
+// when there is no plan.
+func PlanHint(target, partialLine string) process.Datum {
 	if target == "" {
 		return nil
 	}
-
 	if partialLine == target {
 		return process.TermEnter
 	}
-
-	if len(partialLine) < len(target) && target[:len(partialLine)] == partialLine {
-		// Player is on-plan, return next character
+	if strings.HasPrefix(target, partialLine) {
 		return process.Chars(string(target[len(partialLine)]))
 	}
-
-	// Player is off-plan. Don't shove them toward Backspace — they may be
-	// running a perfectly valid command (e.g. `ls`) before getting back to
-	// the plan. The plan re-engages naturally once the line is empty again.
-	if len(partialLine) > 0 {
-		return nil
-	}
-
-	// Empty line, return first char of target
-	if len(target) > 0 {
-		return process.Chars(string(target[0]))
-	}
-
+	// Off-plan. Don't shove them toward Backspace: they may be running
+	// a perfectly valid command (e.g. `ls`) before getting back to the
+	// plan.
 	return nil
 }
 
 // PlanThought returns the player's "internal monologue" describing what
 // the next planned command will accomplish. Bridges the gap between Nixy's
-// dialog and the keyboard hint.
+// dialog and the keyboard hint. Every command a planner can plan has
+// one.
 func PlanThought(target string) string {
 	p := command.Parse(target)
 	if len(p.Segments) == 0 {
 		return ""
 	}
 	if p.IsPipeline() {
-		return "I need to chain some commands together"
+		var names []string
+		for _, seg := range p.Segments {
+			names = append(names, seg.Name)
+		}
+		return "I need to send the output of " + strings.Join(names, " into ")
 	}
 	seg := p.Segments[0]
+	if seg.Name == "sudo" && len(seg.Args) > 0 {
+		inner := command.Segment{Name: seg.Args[0], Args: seg.Args[1:]}
+		if what := intent(inner); what != "" {
+			return "I need root to " + what
+		}
+		return ""
+	}
+	switch seg.Name {
+	case "nx":
+		switch first(seg.Args) {
+		case "panic":
+			return "Something I need is broken. nx panic puts every machine's commands back"
+		case "quest":
+			return "I need to check what we're doing"
+		case "log":
+			return "I need to see how far I've come"
+		}
+		return ""
+	}
+	if what := intent(seg); what != "" {
+		return "I need to " + what
+	}
+	return ""
+}
+
+// intent says what one command does, as a verb phrase: "read
+// readme.txt". "" for a command no planner uses.
+func intent(seg command.Segment) string {
+	args := seg.Args
 	switch seg.Name {
 	case "ssh":
-		if len(seg.Args) > 0 {
-			return fmt.Sprintf("I need to connect to %s", seg.Args[0])
+		if len(args) > 0 {
+			return "connect to " + args[0]
 		}
 	case "exit":
-		return "I need to disconnect from this machine"
+		return "disconnect from this machine"
 	case "pwd":
-		return "I need to print the current working directory"
+		return "print the current working directory"
 	case "ls":
-		return "I need to list files here"
-	case "cd":
-		if len(seg.Args) > 0 {
-			return fmt.Sprintf("I need to change into %s", seg.Args[0])
+		if len(args) > 0 {
+			return "list what's in " + args[0]
 		}
+		return "list files here"
+	case "cd":
+		switch first(args) {
+		case "", "~":
+			return "go back to my home folder"
+		}
+		return "change into " + args[0]
 	case "cat":
-		return "I need to read this file"
+		if len(args) > 0 {
+			return "read " + args[0]
+		}
 	case "grep":
-		return "I need to search for a pattern"
+		if len(args) >= 2 {
+			return "search " + args[1] + " for " + args[0]
+		}
+		if len(args) == 1 {
+			return "search for " + args[0]
+		}
 	case "apt":
-		if len(seg.Args) >= 2 && seg.Args[0] == "install" {
-			return fmt.Sprintf("I need to install %s", seg.Args[1])
+		if len(args) >= 2 && args[0] == "install" {
+			return "install " + args[1]
+		}
+		if first(args) == "list" {
+			return "see what I can install"
 		}
 	case "rm":
-		return "I need to delete a file"
+		if len(args) > 0 {
+			return "delete " + args[0]
+		}
 	case "touch":
-		return "I need to create a file"
+		if len(args) > 0 {
+			return "create " + args[0]
+		}
 	case "mv":
-		return "I need to move a file"
-	case "sudo":
-		if len(seg.Args) > 0 {
-			return fmt.Sprintf("I need elevated permissions to run %s", seg.Args[0])
+		if len(args) >= 2 {
+			return "move " + args[0] + " to " + args[1]
 		}
 	}
 	return ""
+}
+
+func first(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	return args[0]
 }
