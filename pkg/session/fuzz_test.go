@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/nixy-go/pkg/game"
+	"github.com/josephburnett/nixy-go/pkg/guide"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
@@ -216,4 +217,84 @@ func stateName(s game.QuestState) string {
 		return "Complete"
 	}
 	return "?"
+}
+
+// TestFuzzE2ERandomKeys presses random valid keys (half the time the
+// hint, when there is one) through Session.HandleKeystroke. Unlike the
+// hint-guided fuzz it wanders off-plan into destructive commands
+// (rm, mv, sudo, apt) and long pipelines. It asserts:
+//
+//   - no panic, and the keyboard is never empty while the session runs;
+//   - no command writes to stderr except a permission error.
+//
+// It does not demand quest progress: random play can legitimately
+// strand a quest (e.g. by deleting the file it asks to read).
+func TestFuzzE2ERandomKeys(t *testing.T) {
+	const (
+		runs  = 30
+		steps = 2000
+	)
+	for seed := int64(0); seed < runs; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		sess, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		term := terminal.New(terminal.NewANSI())
+		term.Resize(80, 24)
+		sess.InitTerminal(term)
+		typeCommand(t, sess, term, "user")
+		tap := &stderrTap{P: sess.Shell.(process.P)}
+		sess.Guide = guide.New(tap)
+
+		for step := 0; step < steps; step++ {
+			valid := term.State.ValidKeys
+			if len(valid) == 0 {
+				t.Fatalf("seed %d step %d: no valid keys at %q", seed, step, term.State.Line)
+			}
+			var d process.Datum
+			if hint := term.State.HintKey; hint != nil && rng.Intn(2) == 0 {
+				d = hint
+			} else {
+				d = valid[rng.Intn(len(valid))]
+			}
+			line := term.State.Line
+			if !containsKey(valid, d) {
+				continue // random play can break a plan (e.g. delete its file), leaving a stale hint
+			}
+			ended := false
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						t.Fatalf("seed %d step %d: panic on %q at %q: %v", seed, step, keyName(d), line, r)
+					}
+				}()
+				ended = sess.HandleKeystroke(d, term)
+			}()
+			if msg := tap.take(); msg != "" && !strings.Contains(msg, "permission denied") {
+				t.Fatalf("seed %d step %d: %q + %s wrote %q", seed, step, line, keyName(d), msg)
+			}
+			if ended {
+				break // exit or nx panic on the laptop ends the session
+			}
+		}
+	}
+}
+
+// stderrTap wraps the player's shell and keeps a copy of its stderr.
+type stderrTap struct {
+	process.P
+	buf strings.Builder
+}
+
+func (s *stderrTap) Stderr() (process.Data, bool, error) {
+	d, eof, err := s.P.Stderr()
+	s.buf.WriteString(charsOf(d))
+	return d, eof, err
+}
+
+func (s *stderrTap) take() string {
+	out := s.buf.String()
+	s.buf.Reset()
+	return out
 }
