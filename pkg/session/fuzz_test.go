@@ -74,18 +74,6 @@ func pressKey(t *testing.T, s *Session, term *terminal.T, d process.Datum) {
 	_ = term.Render()
 }
 
-func typeString(t *testing.T, s *Session, term *terminal.T, str string) {
-	t.Helper()
-	for _, r := range str {
-		pressKey(t, s, term, process.Chars(string(r)))
-	}
-}
-
-func enter(t *testing.T, s *Session, term *terminal.T) {
-	t.Helper()
-	pressKey(t, s, term, process.TermEnter)
-}
-
 // fuzzLogin generates a 1-8 char username that satisfies the login filter.
 func fuzzLogin(rng *rand.Rand) string {
 	n := 1 + rng.Intn(8)
@@ -98,7 +86,10 @@ func fuzzLogin(rng *rand.Rand) string {
 
 // TestFuzzE2EHintGuided drives keystrokes through Session.HandleKeystroke
 // (the same chokepoint used by both CLI and web), 80% following the planner
-// and 20% running off-plan. After every step it asserts:
+// and 20% running off-plan. Every keystroke must be in the keyboard's
+// valid set, and the hint key must be nil or in that set (so the
+// planner can never ask for a key that would be swallowed). After every
+// step it asserts:
 //
 //   - mode never regresses (Login → Playing, never back)
 //   - in ModePlaying, Game/Guide/Shell are non-nil
@@ -131,8 +122,7 @@ func runE2EFuzzIteration(t *testing.T, rng *rand.Rand, iter int) {
 
 	// Login phase
 	name := fuzzLogin(rng)
-	typeString(t, sess, term, name)
-	enter(t, sess, term)
+	typeCommand(t, sess, term, name)
 	if sess.Mode != ModePlaying {
 		t.Fatalf("iter %d: failed to enter ModePlaying with name %q", iter, name)
 	}
@@ -167,8 +157,9 @@ func runE2EFuzzIteration(t *testing.T, rng *rand.Rand, iter int) {
 			cmd = randCmds[rng.Intn(len(randCmds))]
 		}
 
-		typeString(t, sess, term, cmd)
-		enter(t, sess, term)
+		// Key by key, failing if the keyboard doesn't offer a key the
+		// planner asked for, or hints a key it doesn't offer.
+		typeCommand(t, sess, term, cmd)
 
 		// Invariants
 		if sess.Mode != ModePlaying {
