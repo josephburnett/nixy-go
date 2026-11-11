@@ -34,6 +34,19 @@ func (t *CommandTracker) Records() []CommandRecord {
 	return out
 }
 
+// Len is how many commands have been recorded.
+func (t *CommandTracker) Len() int { return len(t.commands) }
+
+// LastN returns a copy of the last n recorded commands, oldest first.
+func (t *CommandTracker) LastN(n int) []CommandRecord {
+	if n > len(t.commands) {
+		n = len(t.commands)
+	}
+	out := make([]CommandRecord, n)
+	copy(out, t.commands[len(t.commands)-n:])
+	return out
+}
+
 // HasCommandOnHost checks if any command was run on the given hostname.
 func (t *CommandTracker) HasCommandOnHost(hostname string) bool {
 	for _, r := range t.commands {

@@ -80,9 +80,8 @@ func Capture(sess *session.Session, term *terminal.T, datum process.Datum) Snaps
 				State: questStateString(mgr.GetQuestState(q.ID())),
 			})
 		}
-		records := mgr.Tracker.Records()
-		s.TrackerTotal = len(records)
-		for _, r := range lastN(records, 20) {
+		s.TrackerTotal = mgr.Tracker.Len()
+		for _, r := range mgr.Tracker.LastN(20) {
 			s.Tracker = append(s.Tracker, TrackerRow{
 				Host: r.Hostname,
 				Cwd:  "/" + strings.Join(r.Cwd, "/"),
@@ -212,13 +211,6 @@ func promptText(p terminal.PromptInfo) string {
 		return "> "
 	}
 	return p.User + "@" + p.Host + ":" + p.Path + "> "
-}
-
-func lastN(rs []game.CommandRecord, n int) []game.CommandRecord {
-	if len(rs) <= n {
-		return rs
-	}
-	return rs[len(rs)-n:]
 }
 
 func lastNHistory(rs []terminal.HistoryLine, n int) []terminal.HistoryLine {

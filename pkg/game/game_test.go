@@ -65,6 +65,23 @@ func TestTrackerRecord(t *testing.T) {
 	}
 }
 
+func TestTrackerLastN(t *testing.T) {
+	tr := NewCommandTracker()
+	for _, c := range []string{"a", "b", "c"} {
+		tr.Record(CommandRecord{Command: c})
+	}
+	if tr.Len() != 3 {
+		t.Fatalf("Len = %d, want 3", tr.Len())
+	}
+	got := tr.LastN(2)
+	if len(got) != 2 || got[0].Command != "b" || got[1].Command != "c" {
+		t.Fatalf("LastN(2) = %+v, want b, c", got)
+	}
+	if got := tr.LastN(10); len(got) != 3 {
+		t.Fatalf("LastN(10) has %d records, want all 3", len(got))
+	}
+}
+
 func TestTrackerHasCommand(t *testing.T) {
 	tr := NewCommandTracker()
 	tr.Record(CommandRecord{Hostname: "host", Cwd: nil, Command: "pwd"})
