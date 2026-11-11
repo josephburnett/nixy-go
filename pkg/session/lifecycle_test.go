@@ -238,3 +238,34 @@ func TestNxPanicRestoresShippedBin(t *testing.T) {
 		t.Fatalf("ssh after panic: on %q", got)
 	}
 }
+
+// TestProcessTableNoLeak: ssh, exit, nx panic, logout and login, over
+// and over, leave only the live shells in the process tables.
+func TestProcessTableNoLeak(t *testing.T) {
+	sess, term := newLoggedIn(t, "alice")
+	for range 10 {
+		typeLine(t, sess, term, "ssh nixy")
+		if sess.Shell.Hostname() != "nixy" {
+			t.Fatal("ssh nixy didn't connect")
+		}
+		assertProcessTable(t, sess)
+		typeLine(t, sess, term, "exit")
+		typeLine(t, sess, term, "ssh nixy")
+		typeLine(t, sess, term, "nx panic")
+		if sess.Shell.Hostname() != "laptop" {
+			t.Fatal("nx panic didn't return to the laptop")
+		}
+		assertProcessTable(t, sess)
+		typeLine(t, sess, term, "exit") // log out
+		if sess.Mode != ModeLogin {
+			t.Fatal("exit on the laptop didn't log out")
+		}
+		assertProcessTable(t, sess)
+		typeLine(t, sess, term, "alice")
+		assertProcessTable(t, sess)
+	}
+	c, _ := sess.Game.Sim.GetComputer("laptop")
+	if ps := c.Processes(); len(ps) != 1 || ps[0].Owner != "alice" {
+		t.Fatalf("laptop processes: %+v", ps)
+	}
+}

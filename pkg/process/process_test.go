@@ -1,6 +1,7 @@
 package process
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -18,35 +19,39 @@ func (p *mockProcess) Kill()            { p.killed = true; p.Written.Kill() }
 
 func TestSpaceAddAndList(t *testing.T) {
 	s := NewSpace()
-	p1 := &mockProcess{owner: "a"}
-	p2 := &mockProcess{owner: "b"}
-
-	id1 := s.Add(p1)
-	id2 := s.Add(p2)
-
-	if id1 == id2 {
-		t.Fatal("IDs should be unique")
+	id1 := s.Add(&mockProcess{owner: "a"}, "ls")
+	id2 := s.Add(&mockProcess{owner: "b"}, "shell -l")
+	want := []Info{{PID: 1, Owner: "a", Command: "ls"}, {PID: 2, Owner: "b", Command: "shell -l"}}
+	if id1 != 1 || id2 != 2 {
+		t.Fatalf("PIDs %d %d, want 1 2", id1, id2)
 	}
+	if got := s.List(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("List = %v, want %v", got, want)
+	}
+}
 
-	list := s.List()
-	if len(list) != 2 {
-		t.Fatalf("expected 2 processes, got %d", len(list))
+func TestSpaceDropsExited(t *testing.T) {
+	s := NewSpace()
+	done := &mockProcess{owner: "a"}
+	s.Add(done, "ls")
+	s.Add(&mockProcess{owner: "b"}, "shell")
+	done.Finish(0)
+	if got := s.List(); len(got) != 1 || got[0].Command != "shell" {
+		t.Fatalf("exited process still listed: %v", got)
 	}
-	if list[id1].Owner() != "a" {
-		t.Fatal("wrong process for id1")
+	if _, ok := s.Get(1); ok {
+		t.Fatal("Get found an exited process")
 	}
-	if list[id2].Owner() != "b" {
-		t.Fatal("wrong process for id2")
+	if id := s.Add(&mockProcess{}, "x"); id != 3 {
+		t.Fatalf("PIDs are not reused: got %d", id)
 	}
 }
 
 func TestSpaceKill(t *testing.T) {
 	s := NewSpace()
 	p := &mockProcess{owner: "user"}
-	id := s.Add(p)
-
-	err := s.Kill(id)
-	if err != nil {
+	id := s.Add(p, "cat")
+	if err := s.Kill(id); err != nil {
 		t.Fatal(err)
 	}
 	if !p.killed {
@@ -55,23 +60,8 @@ func TestSpaceKill(t *testing.T) {
 	if len(s.List()) != 0 {
 		t.Fatal("process should be removed from list")
 	}
-}
-
-func TestSpaceKillInvalid(t *testing.T) {
-	s := NewSpace()
-	err := s.Kill(999)
-	if err == nil {
-		t.Fatal("expected error for invalid ID")
-	}
-}
-
-func TestSpaceIDsIncrement(t *testing.T) {
-	s := NewSpace()
-	id1 := s.Add(&mockProcess{})
-	id2 := s.Add(&mockProcess{})
-	id3 := s.Add(&mockProcess{})
-	if id1 != 0 || id2 != 1 || id3 != 2 {
-		t.Fatalf("expected sequential IDs 0,1,2 — got %d,%d,%d", id1, id2, id3)
+	if err := s.Kill(id); err != ErrNoProcess {
+		t.Fatalf("killing it again: %v, want ErrNoProcess", err)
 	}
 }
 

@@ -140,6 +140,44 @@ func TestFuzzE2ERejectedKeys(t *testing.T) {
 				d = hint
 			}
 			pressAccepted(t, sess, term, d)
+			assertProcessTable(t, sess)
+		}
+	}
+}
+
+// assertProcessTable checks that the machines' process tables hold
+// exactly the player's live shells: the login shell, and for each ssh
+// the ssh on one side and the remote shell on the other. Nothing that
+// has exited stays, and no old shell leaks across ssh, exit, logout or
+// nx panic.
+func assertProcessTable(t *testing.T, sess *Session) {
+	t.Helper()
+	for user, g := range sess.games {
+		shells, sshs := 0, 0
+		var all []string
+		for _, h := range []string{"laptop", "nixy", "server"} {
+			c, err := g.Sim.GetComputer(h)
+			if err != nil {
+				continue
+			}
+			for _, p := range c.Processes() {
+				all = append(all, fmt.Sprintf("%s:%d %s %q", h, p.PID, p.Owner, p.Command))
+				switch {
+				case p.Command == "shell -l":
+					shells++
+				case strings.HasPrefix(p.Command, "ssh "):
+					sshs++
+				default:
+					t.Fatalf("%s: unexpected process %s", user, all[len(all)-1])
+				}
+			}
+		}
+		want := 0
+		if sess.Mode == ModePlaying && user == sess.Username {
+			want = 1
+		}
+		if want == 0 && len(all) > 0 || want == 1 && (shells == 0 || sshs != shells-1) {
+			t.Fatalf("%s: process table %v doesn't match the live shells", user, all)
 		}
 	}
 }

@@ -33,10 +33,23 @@ func TestComputerBoot(t *testing.T) {
 	}
 }
 
-func TestComputerAddProcess(t *testing.T) {
-	fs := &file.F{Type: file.Folder, Owner: file.OwnerRoot,
-		OwnerPermission: file.Write, CommonPermission: file.Read}
-	c := New(fs)
-	// Should not panic
-	c.Add(&mockProcess{})
+func TestComputerKillNeedsOwnerOrRoot(t *testing.T) {
+	c := New(&file.F{Type: file.Folder, Owner: file.OwnerRoot})
+	pid := c.Add(&mockProcess{}, "cat") // owned by "user"
+	if err := c.Kill(pid, "eve"); err != process.ErrNotPermitted {
+		t.Fatalf("another user killed it: %v", err)
+	}
+	if err := c.Kill(pid, "user"); err != nil {
+		t.Fatalf("owner can't kill: %v", err)
+	}
+	pid = c.Add(&mockProcess{}, "cat")
+	if err := c.Kill(pid, file.OwnerRoot); err != nil {
+		t.Fatalf("root can't kill: %v", err)
+	}
+	if err := c.Kill(pid, file.OwnerRoot); err != process.ErrNoProcess {
+		t.Fatalf("killed twice: %v", err)
+	}
+	if len(c.Processes()) != 0 {
+		t.Fatalf("processes left: %v", c.Processes())
+	}
 }

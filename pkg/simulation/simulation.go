@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/computer"
 	"github.com/josephburnett/nixy-go/pkg/file"
@@ -20,20 +21,30 @@ func New() *S {
 	}
 }
 
+// Launch starts the registered binary binaryName on hostname as owner,
+// like Start. The game uses it for shells (login, ssh).
 func (s *S) Launch(hostname, owner, binaryName string, args []string, cwd []string) (process.P, error) {
-	c, ok := s.computers[hostname]
-	if !ok {
-		return nil, fmt.Errorf("hostname %v not found", hostname)
-	}
 	b, ok := registry[binaryName]
 	if !ok {
 		return nil, fmt.Errorf("binary %v not found", binaryName)
 	}
-	p, err := b.Launch(s, owner, hostname, cwd, args)
+	return s.Start(hostname, owner, b, append([]string{binaryName}, args...), cwd)
+}
+
+// Start runs b on hostname as owner with argv (argv[0] is the name it
+// was run as) and puts the process in that computer's process table,
+// which it leaves when it exits. Every process the game runs starts
+// here, so the table is what ps would show.
+func (s *S) Start(hostname, owner string, b *Binary, argv []string, cwd []string) (process.P, error) {
+	c, ok := s.computers[hostname]
+	if !ok {
+		return nil, fmt.Errorf("hostname %v not found", hostname)
+	}
+	p, err := b.Launch(s, owner, hostname, cwd, argv[1:])
 	if err != nil {
 		return nil, err
 	}
-	c.Add(p)
+	c.Add(p, strings.Join(argv, " "))
 	return p, nil
 }
 

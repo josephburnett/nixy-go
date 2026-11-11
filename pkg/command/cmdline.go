@@ -78,6 +78,11 @@ func parseSegment(raw string, isLast bool) Segment {
 	return seg
 }
 
+// Argv is the segment as a program sees it: its name, then its args.
+func (s Segment) Argv() []string {
+	return append([]string{s.Name}, s.Args...)
+}
+
 // IsPipeline reports whether the line contains at least one `|` (i.e. has
 // more than one segment). The empty Pipeline returns false.
 func (p Pipeline) IsPipeline() bool {

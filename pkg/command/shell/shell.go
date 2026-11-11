@@ -193,7 +193,7 @@ func (s *shell) executeCommand(cmd string) {
 	}
 	var stages []process.P
 	for i, seg := range p.Segments {
-		p, err := binaries[i].Launch(s.simulation, s.owner, s.hostname, s.currentDirectory, seg.Args)
+		p, err := s.simulation.Start(s.hostname, s.owner, binaries[i], seg.Argv(), s.currentDirectory)
 		if err != nil {
 			for _, proc := range stages {
 				proc.Kill()
@@ -240,7 +240,7 @@ func (s *shell) executeSingle(seg command.Segment) {
 		s.fail(lookupStatus(err), err.Error())
 		return
 	}
-	p, err := b.Launch(s.simulation, s.owner, s.hostname, s.currentDirectory, seg.Args)
+	p, err := s.simulation.Start(s.hostname, s.owner, b, seg.Argv(), s.currentDirectory)
 	if err != nil {
 		s.fail(1, err.Error())
 		return

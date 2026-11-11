@@ -1,35 +1,85 @@
 package process
 
-import "fmt"
+import "sort"
 
+// Info describes an entry in a process table, as ps shows it.
+type Info struct {
+	PID     int
+	Owner   string
+	Command string // the command line that started it
+}
+
+// Errno is an error from the process table, with the C library's text
+// for it, as kill(1) prints it.
+type Errno string
+
+func (e Errno) Error() string { return string(e) }
+
+const (
+	ErrNoProcess    Errno = "No such process"
+	ErrNotPermitted Errno = "Operation not permitted"
+)
+
+// Space is a computer's process table. A process is in it from when it
+// starts until it exits.
 type Space struct {
-	i         int
-	processes map[int]P
+	next      int
+	processes map[int]entry
+}
+
+type entry struct {
+	p       P
+	command string
 }
 
 func NewSpace() *Space {
-	return &Space{
-		processes: map[int]P{},
+	return &Space{next: 1, processes: map[int]entry{}}
+}
+
+// Add registers p, started by command, and returns its PID.
+func (ps *Space) Add(p P, command string) int {
+	ps.prune()
+	pid := ps.next
+	ps.next++
+	ps.processes[pid] = entry{p: p, command: command}
+	return pid
+}
+
+// List returns the running processes, by PID.
+func (ps *Space) List() []Info {
+	ps.prune()
+	out := make([]Info, 0, len(ps.processes))
+	for pid, e := range ps.processes {
+		out = append(out, Info{PID: pid, Owner: e.p.Owner(), Command: e.command})
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].PID < out[j].PID })
+	return out
 }
 
-func (ps *Space) Add(p P) int {
-	id := ps.i
-	ps.processes[id] = p
-	ps.i++
-	return id
+// Get returns the running process with pid.
+func (ps *Space) Get(pid int) (P, bool) {
+	ps.prune()
+	e, ok := ps.processes[pid]
+	return e.p, ok
 }
 
-func (ps *Space) List() map[int]P {
-	return ps.processes
-}
-
-func (ps *Space) Kill(id int) error {
-	p, ok := ps.processes[id]
+// Kill kills the process with pid. Who may do so is the caller's
+// check (see computer.C.Kill).
+func (ps *Space) Kill(pid int) error {
+	p, ok := ps.Get(pid)
 	if !ok {
-		return fmt.Errorf("invalid process id %v", id)
+		return ErrNoProcess
 	}
 	p.Kill()
-	delete(ps.processes, id)
+	delete(ps.processes, pid)
 	return nil
+}
+
+// prune removes processes that have exited.
+func (ps *Space) prune() {
+	for pid, e := range ps.processes {
+		if _, exited := e.p.Exit(); exited {
+			delete(ps.processes, pid)
+		}
+	}
 }

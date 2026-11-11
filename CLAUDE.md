@@ -170,6 +170,14 @@ Concrete implications (these all flow from this single principle):
   command line (`CommandRecord.Status`, `Running` for one still going,
   like ssh), so quests can check what a command did. Embed
   `process.Written` to get the output queue and exit status for free.
+- **Every process is in a process table.** Everything starts through
+  `sim.Start` (or `sim.Launch` by binary name), which puts it in its
+  computer's table with a PID and its command line; it leaves the
+  table when it exits. `computer.C.Processes()` lists PID, owner and
+  command line (for `ps`); `computer.C.Kill(pid, user)` lets only the
+  owner or root kill (`process.ErrNotPermitted`, `ErrNoProcess`).
+  Each pipeline stage is its own process; ssh shows as `ssh HOST` on
+  the client and its remote `shell -l` on the server.
 - **Nothing hangs.** Processes act only when called. A pipeline moves
   data one step per `Read`, and the session reads a bounded number of
   times per keystroke, so a source that never ends can't freeze the
