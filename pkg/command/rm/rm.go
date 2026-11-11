@@ -34,17 +34,26 @@ func launch(
 	}
 
 	for _, arg := range args {
-		path := file.Resolve(cwd, arg)
-		if len(path) == 0 {
-			return command.NewErrorProcess(owner, "rm: cannot remove '/'\n"), nil
-		}
-		dir := path[:len(path)-1]
-		name := path[len(path)-1]
-		err := c.Filesystem.DeleteFile(dir, name, owner)
-		if err != nil {
-			return command.NewErrorProcess(owner, fmt.Sprintf("rm: %v\n", err)), nil
+		if err := remove(c.Filesystem, file.Resolve(cwd, arg), owner); err != nil {
+			return command.Fail(owner, "rm", fmt.Sprintf("cannot remove '%v'", arg), err), nil
 		}
 	}
 
 	return command.NewSingleValueProcess(owner, ""), nil
+}
+
+// remove deletes the file at path. Folders need -r, which rm doesn't
+// have.
+func remove(root *file.F, path []string, owner string) error {
+	if len(path) == 0 {
+		return file.ErrIsDir
+	}
+	f, err := root.Lookup(path, owner)
+	if err != nil {
+		return err
+	}
+	if f.Type == file.Folder {
+		return file.ErrIsDir
+	}
+	return root.DeleteFile(path[:len(path)-1], path[len(path)-1], owner)
 }

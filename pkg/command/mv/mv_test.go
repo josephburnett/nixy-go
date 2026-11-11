@@ -129,7 +129,7 @@ func TestMvSameFile(t *testing.T) {
 func TestMvTrailingSlashNotADirectory(t *testing.T) {
 	sim := testSetup(t)
 	p, _ := launch(sim, "user", "test", []string{"home"}, []string{"old.txt", "nope/"})
-	if errOut := stderr(t, p); !strings.Contains(errOut, "not a directory") {
+	if errOut := stderr(t, p); errOut != "mv: cannot move 'old.txt' to 'nope/': Not a directory\n" {
 		t.Fatalf("expected not a directory, got %q", errOut)
 	}
 }

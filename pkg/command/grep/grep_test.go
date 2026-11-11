@@ -76,8 +76,8 @@ func TestGrepMissingPattern(t *testing.T) {
 	sim := testSetup(t)
 	p, _ := launch(sim, "user", "test", []string{}, nil)
 	errOut := stderr(t, p)
-	if !strings.Contains(errOut, "missing pattern") {
-		t.Fatalf("expected missing pattern error, got %q", errOut)
+	if !strings.Contains(errOut, "Usage: grep") {
+		t.Fatalf("expected usage error, got %q", errOut)
 	}
 }
 

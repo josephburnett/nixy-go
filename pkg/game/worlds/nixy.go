@@ -26,6 +26,10 @@ func Nixy() *file.F {
 						OwnerPermission: file.Write, CommonPermission: file.Read,
 						Data: "nixy\nlaptop"},
 				}},
+			// root's home: only root may look inside.
+			"root": {Type: file.Folder, Owner: file.OwnerRoot,
+				OwnerPermission: file.Write, CommonPermission: file.None,
+				Files: map[string]*file.F{}},
 			"home": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
 				Files: map[string]*file.F{

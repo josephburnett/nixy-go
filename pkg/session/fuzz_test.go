@@ -271,7 +271,7 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 				}()
 				sess.HandleKeystroke(d, term)
 			}()
-			if msg := tap.take(); msg != "" && !strings.Contains(msg, "permission denied") {
+			if msg := tap.take(); msg != "" && !strings.Contains(msg, "Permission denied") {
 				t.Fatalf("seed %d step %d: %q + %s wrote %q", seed, step, line, keyName(d), msg)
 			}
 			if sess.Mode != ModePlaying {

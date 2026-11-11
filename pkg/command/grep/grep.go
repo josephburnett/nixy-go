@@ -1,7 +1,6 @@
 package grep
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
@@ -32,7 +31,7 @@ func launch(
 	args []string,
 ) (process.P, error) {
 	if len(args) == 0 {
-		return command.NewErrorProcess(owner, "grep: missing pattern\n"), nil
+		return command.NewErrorProcess(owner, "Usage: grep PATTERN [FILE]\n"), nil
 	}
 
 	pattern := args[0]
@@ -43,17 +42,11 @@ func launch(
 		if err != nil {
 			return nil, err
 		}
-		f, err := c.Filesystem.Navigate(file.Resolve(cwd, args[1]))
+		data, err := c.Filesystem.ReadFile(file.Resolve(cwd, args[1]), owner)
 		if err != nil {
-			return command.NewErrorProcess(owner, fmt.Sprintf("grep: %v\n", err)), nil
+			return command.Fail(owner, "grep", args[1], err), nil
 		}
-		if !f.CanRead(owner) {
-			return command.NewErrorProcess(owner, "grep: permission denied\n"), nil
-		}
-		if f.Type == file.Folder {
-			return command.NewErrorProcess(owner, fmt.Sprintf("grep: %v: Is a directory\n", args[1])), nil
-		}
-		output := filterLines(f.Data, pattern)
+		output := filterLines(data, pattern)
 		return command.NewSingleValueProcess(owner, output), nil
 	}
 

@@ -28,6 +28,10 @@ func Laptop() *file.F {
 				}},
 			// /home starts empty; the player's /home/<username> is created at
 			// game bootstrap (see MachineRegistry.provisionUserHome).
+			// root's home: only root may look inside.
+			"root": {Type: file.Folder, Owner: file.OwnerRoot,
+				OwnerPermission: file.Write, CommonPermission: file.None,
+				Files: map[string]*file.F{}},
 			"home": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
 				Files: map[string]*file.F{}},

@@ -62,6 +62,9 @@ type ArgContext struct {
 	Sim      *S
 	Hostname string
 	Cwd      []string
+	// User is who the command runs as: the shell's owner, or root
+	// under sudo. Completion only looks inside folders User can read.
+	User string
 	// InPipe is true when the command reads stdin from an upstream
 	// pipe, so it may need fewer arguments (`ls | grep x`).
 	InPipe bool

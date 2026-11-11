@@ -75,7 +75,7 @@ func TestRmPermissionDenied(t *testing.T) {
 	sim := testSetup(t)
 	p, _ := launch(sim, "user", "test", []string{}, []string{"etc/config"})
 	errOut := stderr(t, p)
-	if !strings.Contains(errOut, "permission denied") {
+	if !strings.Contains(errOut, "Permission denied") {
 		t.Fatalf("expected permission denied, got %q", errOut)
 	}
 }

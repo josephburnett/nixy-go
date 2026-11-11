@@ -345,7 +345,7 @@ func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 		errOut, _, _ := g.Stderr()
 		stderr.WriteString(charsOf(errOut))
 	}
-	if msg := stderr.String(); msg != "" && !strings.Contains(msg, "permission denied") {
+	if msg := stderr.String(); msg != "" && !strings.Contains(msg, "Permission denied") {
 		t.Errorf("mistake: %q + Enter wrote %q", line, msg)
 	}
 }

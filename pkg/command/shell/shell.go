@@ -349,12 +349,15 @@ func (s *shell) builtinCd(args []string) error {
 	if err != nil {
 		return err
 	}
-	f, err := c.Filesystem.Navigate(newDir)
-	if err != nil {
-		return fmt.Errorf("cd: %v", err)
+	f, err := c.Filesystem.Lookup(newDir, s.owner)
+	if err == nil && f.Type != file.Folder {
+		err = file.ErrNotDir
 	}
-	if f.Type != file.Folder {
-		return fmt.Errorf("cd: %v: not a directory", target)
+	if err == nil && !f.CanRead(s.owner) {
+		err = file.ErrPermission
+	}
+	if err != nil {
+		return fmt.Errorf("cd: %v: %v", target, err)
 	}
 	s.currentDirectory = newDir
 	return nil
@@ -390,6 +393,7 @@ func (s *shell) Next() []process.Datum {
 		Sim:      s.simulation,
 		Hostname: s.hostname,
 		Cwd:      s.currentDirectory,
+		User:     s.owner,
 		InPipe:   p.InPipe(),
 	}
 	text := last.Name

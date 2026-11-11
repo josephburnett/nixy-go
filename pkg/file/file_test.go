@@ -256,3 +256,54 @@ func TestCanWrite(t *testing.T) {
 		t.Fatal("owner with Write permission should be able to write")
 	}
 }
+
+// TestLookupTraversal: reaching a path needs Read on every folder on the
+// way, the model's search permission. The target itself isn't checked.
+func TestLookupTraversal(t *testing.T) {
+	fs := testFilesystem()
+	for _, tc := range []struct {
+		path []string
+		user string
+		want error
+	}{
+		{[]string{"etc"}, "user", nil}, // naming /etc is fine
+		{[]string{"etc", "config"}, "user", ErrPermission},
+		{[]string{"etc", "config"}, OwnerRoot, nil},
+		{[]string{"etc", "nope"}, "user", ErrPermission}, // can't even tell
+		{[]string{"home", "nope"}, "user", ErrNotExist},
+		{[]string{"bin", "pwd", "x"}, "user", ErrNotDir},
+	} {
+		_, err := fs.Lookup(tc.path, tc.user)
+		if err != tc.want {
+			t.Errorf("Lookup(%v, %q) = %v, want %v", tc.path, tc.user, err, tc.want)
+		}
+	}
+	if _, err := fs.Navigate([]string{"etc", "config"}); err != nil {
+		t.Errorf("Navigate ignores permissions, got %v", err)
+	}
+}
+
+func TestReadFile(t *testing.T) {
+	fs := testFilesystem()
+	if _, err := fs.ReadFile([]string{"etc", "config"}, "user"); err != ErrPermission {
+		t.Errorf("unreadable: got %v", err)
+	}
+	if _, err := fs.ReadFile([]string{"home"}, "user"); err != ErrIsDir {
+		t.Errorf("folder: got %v", err)
+	}
+	if d, err := fs.ReadFile([]string{"etc", "config"}, OwnerRoot); err != nil || d != "key=value" {
+		t.Errorf("root: got %q, %v", d, err)
+	}
+}
+
+func TestCreateFileNeedsTraversal(t *testing.T) {
+	fs := testFilesystem()
+	fs.Files["etc"].CommonPermission = None
+	fs.Files["etc"].Files["sub"] = &F{Type: Folder, Owner: "user",
+		OwnerPermission: Write, CommonPermission: Write, Files: map[string]*F{}}
+	// sub is writable by user, but /etc can't be searched.
+	err := fs.CreateFile([]string{"etc", "sub"}, "x", &F{Type: Text}, "user")
+	if err != ErrPermission {
+		t.Fatalf("got %v, want %v", err, ErrPermission)
+	}
+}

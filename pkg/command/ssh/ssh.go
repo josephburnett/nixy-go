@@ -35,27 +35,24 @@ func launch(
 	if err != nil {
 		return nil, err
 	}
-	hostsFile, err := c.Filesystem.Navigate([]string{"etc", "hosts"})
-	if err != nil {
-		return command.NewErrorProcess(owner, "ssh: /etc/hosts not found\n"), nil
-	}
-
-	// Check if target is in hosts
+	// Resolving the name reads /etc/hosts as the user, like the
+	// resolver in real ssh.
+	hosts, _ := c.Filesystem.ReadFile([]string{"etc", "hosts"}, owner)
 	found := false
-	for _, line := range strings.Split(hostsFile.Data, "\n") {
+	for _, line := range strings.Split(hosts, "\n") {
 		if strings.TrimSpace(line) == targetHost {
 			found = true
 			break
 		}
 	}
 	if !found {
-		return command.NewErrorProcess(owner, fmt.Sprintf("ssh: could not resolve hostname '%v'\n", targetHost)), nil
+		return command.NewErrorProcess(owner, fmt.Sprintf("ssh: Could not resolve hostname %v: Name or service not known\n", targetHost)), nil
 	}
 
 	// Check target computer exists in simulation
 	_, err = sim.GetComputer(targetHost)
 	if err != nil {
-		return command.NewErrorProcess(owner, fmt.Sprintf("ssh: connection refused: %v\n", targetHost)), nil
+		return command.NewErrorProcess(owner, fmt.Sprintf("ssh: connect to host %v port 22: Connection refused\n", targetHost)), nil
 	}
 
 	// Launch a shell on the target machine

@@ -2,6 +2,7 @@ package mv
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
@@ -38,55 +39,60 @@ func launch(
 		return nil, err
 	}
 
-	srcPath := file.Resolve(cwd, args[0])
-	dstPath := file.Resolve(cwd, args[1])
-	if len(srcPath) == 0 {
-		return command.NewErrorProcess(owner, "mv: cannot move '/'\n"), nil
+	if err := move(c.Filesystem, cwd, args[0], args[1], owner); err != nil {
+		return command.NewErrorProcess(owner, "mv: "+err.Error()+"\n"), nil
+	}
+	return command.NewSingleValueProcess(owner, ""), nil
+}
+
+// move moves the file src to dst (as typed) for owner. Errors read like
+// GNU mv's, without the "mv: " prefix.
+func move(root *file.F, cwd []string, src, dst, owner string) error {
+	cannot := func(err error) error {
+		return fmt.Errorf("cannot move '%v' to '%v': %w", src, dst, err)
+	}
+	srcPath := file.Resolve(cwd, src)
+	dstPath := file.Resolve(cwd, dst)
+	srcFile, err := root.Lookup(srcPath, owner)
+	if err != nil {
+		return fmt.Errorf("cannot stat '%v': %w", src, err)
+	}
+	if len(srcPath) == 0 || srcFile.Type == file.Folder {
+		return cannot(file.ErrIsDir) // folders need more than this mv does
 	}
 	srcName := srcPath[len(srcPath)-1]
-	srcParent, err := c.Filesystem.Navigate(srcPath[:len(srcPath)-1])
-	if err != nil {
-		return command.NewErrorProcess(owner, fmt.Sprintf("mv: %v\n", err)), nil
-	}
-	srcFile, ok := srcParent.Files[srcName]
-	if !ok {
-		return command.NewErrorProcess(owner, fmt.Sprintf("mv: %v: not found\n", args[0])), nil
-	}
 
 	// Moving onto a folder moves into it, keeping the name.
-	if f, err := c.Filesystem.Navigate(dstPath); err == nil && f.Type == file.Folder {
+	if f, err := root.Lookup(dstPath, owner); err == nil && f.Type == file.Folder {
 		dstPath = append(dstPath, srcName)
-	} else if strings.HasSuffix(args[1], "/") {
-		return command.NewErrorProcess(owner, fmt.Sprintf("mv: %v: not a directory\n", args[1])), nil
+	} else if strings.HasSuffix(dst, "/") {
+		return cannot(file.ErrNotDir)
 	}
-	if len(dstPath) == 0 {
-		return command.NewErrorProcess(owner, "mv: cannot move to '/'\n"), nil
+	if slices.Equal(dstPath, srcPath) {
+		return fmt.Errorf("'%v' and '%v' are the same file", src, dst)
 	}
-	if strings.Join(dstPath, "/") == strings.Join(srcPath, "/") {
-		return command.NewErrorProcess(owner, fmt.Sprintf("mv: '%v' and '%v' are the same file\n", args[0], args[1])), nil
-	}
-	dstName := dstPath[len(dstPath)-1]
-	dstParent, err := c.Filesystem.Navigate(dstPath[:len(dstPath)-1])
+	srcParent, err := root.LookupDir(srcPath[:len(srcPath)-1], owner)
 	if err != nil {
-		return command.NewErrorProcess(owner, fmt.Sprintf("mv: %v\n", err)), nil
+		return cannot(err)
 	}
-	if dstParent.Type != file.Folder {
-		return command.NewErrorProcess(owner, fmt.Sprintf("mv: %v: not a directory\n", args[1])), nil
+	dstDir, dstName := dstPath[:len(dstPath)-1], dstPath[len(dstPath)-1]
+	dstParent, err := root.LookupDir(dstDir, owner)
+	if err != nil {
+		return cannot(err)
 	}
 	if !srcParent.CanWrite(owner) || !dstParent.CanWrite(owner) {
-		return command.NewErrorProcess(owner, "mv: permission denied\n"), nil
+		return cannot(file.ErrPermission)
 	}
 	if existing, ok := dstParent.Files[dstName]; ok {
 		if existing.Type == file.Folder {
-			return command.NewErrorProcess(owner, fmt.Sprintf("mv: cannot overwrite directory '%v'\n", dstName)), nil
+			return fmt.Errorf("cannot overwrite directory '%v' with non-directory", dst)
 		}
 		// Like real mv, an existing file is replaced.
 		delete(dstParent.Files, dstName)
 	}
-	if err := c.Filesystem.CreateFile(dstPath[:len(dstPath)-1], dstName, srcFile, owner); err != nil {
-		return command.NewErrorProcess(owner, fmt.Sprintf("mv: %v\n", err)), nil
+	if err := root.CreateFile(dstDir, dstName, srcFile, owner); err != nil {
+		return cannot(err)
 	}
 	delete(srcParent.Files, srcName)
-
-	return command.NewSingleValueProcess(owner, ""), nil
+	return nil
 }

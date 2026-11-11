@@ -104,8 +104,24 @@ Concrete implications (these all flow from this single principle):
   on purpose — Nixy is loose with perms so early quests work without
   `sudo`. A future quest will tighten that and teach `sudo` as the
   way back in. Don't undo Nixy's loose perms without that quest.)
-- **Errors look like Unix errors.** Stderr surfaces normally, exit
-  vs. EOF behave correctly, etc.
+- **Permissions are checked one way.** The model has three levels
+  (None/Read/Write); on a folder, Read means both listing and search
+  (real Unix's r and x), Write adds creating and deleting entries.
+  `file.Lookup(path, user)` walks a path as the kernel does: every
+  folder passed through must be readable. Commands go through it (or
+  `LookupDir`, `ReadFile`, `CreateFile`, `DeleteFile`, which use it);
+  `Navigate` ignores permissions and is for the game layer only (quest
+  checks, world setup). Root passes every check.
+- **Completion respects permissions.** Validators see `ArgContext.User`
+  (root under sudo). A folder the user can't read can still be named
+  (`ls /root`, `cd /root` → permission denied, a real lesson), but
+  nothing inside it is offered, so the keyboard never steers into an
+  unreadable tree or leaks its names.
+- **Errors look like Unix errors.** File errors are `file.Err*`
+  sentinels carrying strerror text; `command.Fail` prints them the way
+  coreutils does (`cat: foo: No such file or directory`, `rm: cannot
+  remove 'x': Permission denied`). Stderr surfaces normally, exit vs.
+  EOF behave correctly, etc.
 
 When choosing how to fix a bug or add a feature, ask: *would this
 choice make sense in real Unix?* If it papers over a real concept,

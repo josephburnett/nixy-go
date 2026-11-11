@@ -1,6 +1,7 @@
 package command
 
 import (
+	"errors"
 	"sort"
 	"strings"
 
@@ -169,12 +170,12 @@ var Hostname = OneOf(func(ctx simulation.ArgContext) []string {
 	if err != nil {
 		return nil
 	}
-	hostsFile, err := c.Filesystem.Navigate([]string{"etc", "hosts"})
+	data, err := c.Filesystem.ReadFile([]string{"etc", "hosts"}, ctx.User)
 	if err != nil {
 		return nil
 	}
 	var hosts []string
-	for _, line := range strings.Split(hostsFile.Data, "\n") {
+	for _, line := range strings.Split(data, "\n") {
 		if h := strings.TrimSpace(line); h != "" {
 			hosts = append(hosts, h)
 		}
@@ -297,64 +298,58 @@ func pathArg(ctx simulation.ArgContext, token string, allowNew bool, accept path
 		return simulation.Suggestion{}
 	}
 	root := c.Filesystem
-	viable := func(path []string, f *file.F) bool { return viableDir(path, f, allowNew, accept) }
+	viable := func(path []string, f *file.F) bool { return viableDir(ctx.User, path, f, allowNew, accept) }
 
 	var chars charSet
 	dirPath, prefix := file.Split(ctx.Cwd, token)
-	parent, err := root.Navigate(dirPath)
-	if err != nil || parent.Type != file.Folder {
-		// The cwd itself may be gone (deleted from under the player);
-		// an absolute path still works, as in a real shell.
-		if token == "" && viable(nil, root) {
-			chars.add('/')
-		}
-		return simulation.Suggestion{Chars: sortedKeys(chars)}
-	}
-
 	if token == "" && viable(nil, root) {
 		chars.add('/')
 	}
-
-	type entry struct {
-		path []string
-		f    *file.F
-		dot  bool // `.` or `..`: a directory written as such
-	}
-	entries := map[string]entry{
-		".":  {dirPath, parent, true},
-		"..": {nil, nil, true},
-	}
-	if len(dirPath) > 0 {
-		up := dirPath[:len(dirPath)-1]
-		if f, err := root.Navigate(up); err == nil {
-			entries[".."] = entry{up, f, true}
+	// Nothing inside the folder is offered when it is gone (deleted
+	// from under the player) or unreadable; an absolute path still
+	// works, as in a real shell.
+	if parent, err := root.LookupDir(dirPath, ctx.User); err == nil {
+		type entry struct {
+			path []string
+			f    *file.F
+			dot  bool // `.` or `..`: a directory written as such
 		}
-	} else {
-		entries[".."] = entry{nil, root, true}
-	}
-	for name, f := range parent.Files {
-		entries[name] = entry{append(append([]string{}, dirPath...), name), f, false}
-	}
-
-	for name, e := range entries {
-		if e.f == nil || !strings.HasPrefix(name, prefix) {
-			continue
+		entries := map[string]entry{
+			".":  {dirPath, parent, true},
+			"..": {nil, nil, true},
 		}
-		isFolder := e.f.Type == file.Folder
-		if len(name) > len(prefix) {
-			if accept(e.path, e.f, e.dot) || (isFolder && viable(e.path, e.f)) {
-				chars.add(rune(name[len(prefix)]))
+		if len(dirPath) > 0 {
+			up := dirPath[:len(dirPath)-1]
+			if f, err := root.Navigate(up); err == nil {
+				entries[".."] = entry{up, f, true}
 			}
-		} else if isFolder && viable(e.path, e.f) {
-			chars.add('/')
+		} else {
+			entries[".."] = entry{nil, root, true}
 		}
-	}
-	if allowNew && (prefix == "" || prefix[0] != '-') && isWord(prefix) {
-		for _, r := range wordChars {
-			if prefix == "" && r == '-' {
+		for name, f := range parent.Files {
+			entries[name] = entry{append(append([]string{}, dirPath...), name), f, false}
+		}
+
+		for name, e := range entries {
+			if e.f == nil || !strings.HasPrefix(name, prefix) {
 				continue
 			}
-			chars.add(r)
+			isFolder := e.f.Type == file.Folder
+			if len(name) > len(prefix) {
+				if accept(e.path, e.f, e.dot) || (isFolder && viable(e.path, e.f)) {
+					chars.add(rune(name[len(prefix)]))
+				}
+			} else if isFolder && viable(e.path, e.f) {
+				chars.add('/')
+			}
+		}
+		if allowNew && (prefix == "" || prefix[0] != '-') && isWord(prefix) {
+			for _, r := range wordChars {
+				if prefix == "" && r == '-' {
+					continue
+				}
+				chars.add(r)
+			}
 		}
 	}
 
@@ -362,9 +357,11 @@ func pathArg(ctx simulation.ArgContext, token string, allowNew bool, accept path
 	if token != "" {
 		target := file.Resolve(ctx.Cwd, token)
 		dir := strings.HasSuffix(token, "/") || prefix == "." || prefix == ".."
-		if f, err := root.Navigate(target); err == nil {
+		f, err := root.Lookup(target, ctx.User)
+		switch {
+		case err == nil:
 			complete = accept(target, f, dir)
-		} else {
+		case errors.Is(err, file.ErrNotExist):
 			complete = allowNew && !dir && validNewName(prefix) && accept(target, nil, false)
 		}
 	}
@@ -373,9 +370,17 @@ func pathArg(ctx simulation.ArgContext, token string, allowNew bool, accept path
 
 // viableDir reports whether typing `/` after folder f (at path) can lead
 // to an accepted path: the folder itself written as `dir/`, a new name
-// inside it, or something accepted further down.
-func viableDir(path []string, f *file.F, allowNew bool, accept pathAccept) bool {
-	if accept(path, f, true) || allowNew {
+// inside it, or something accepted further down. Completion never looks
+// inside a folder the user can't read: it may be named (`ls /root` is a
+// real lesson in permission denied) but its contents stay hidden.
+func viableDir(user string, path []string, f *file.F, allowNew bool, accept pathAccept) bool {
+	if accept(path, f, true) {
+		return true
+	}
+	if user != "" && !f.CanRead(user) {
+		return false
+	}
+	if allowNew {
 		return true
 	}
 	for name, child := range f.Files {
@@ -383,7 +388,7 @@ func viableDir(path []string, f *file.F, allowNew bool, accept pathAccept) bool 
 		if accept(p, child, false) {
 			return true
 		}
-		if child.Type == file.Folder && viableDir(p, child, allowNew, accept) {
+		if child.Type == file.Folder && viableDir(user, p, child, allowNew, accept) {
 			return true
 		}
 	}

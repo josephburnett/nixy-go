@@ -1,7 +1,6 @@
 package cat
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
@@ -40,17 +39,10 @@ func launch(
 		return nil, err
 	}
 
-	f, err := c.Filesystem.Navigate(file.Resolve(cwd, args[0]))
+	data, err := c.Filesystem.ReadFile(file.Resolve(cwd, args[0]), owner)
 	if err != nil {
-		return command.NewErrorProcess(owner, fmt.Sprintf("cat: %v\n", err)), nil
+		return command.Fail(owner, "cat", args[0], err), nil
 	}
-	if f.Type == file.Folder {
-		return command.NewErrorProcess(owner, fmt.Sprintf("cat: %v: Is a directory\n", args[0])), nil
-	}
-	if !f.CanRead(owner) {
-		return command.NewErrorProcess(owner, "cat: permission denied\n"), nil
-	}
-	data := f.Data
 	if len(data) > 0 && !strings.HasSuffix(data, "\n") {
 		data += "\n"
 	}

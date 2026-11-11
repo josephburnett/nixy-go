@@ -112,7 +112,7 @@ func TestLsPermissionDenied(t *testing.T) {
 		t.Fatal(err)
 	}
 	errOut := stderr(t, p)
-	if !strings.Contains(errOut, "permission denied") {
+	if !strings.Contains(errOut, "Permission denied") {
 		t.Fatalf("expected permission denied, got %q", errOut)
 	}
 }

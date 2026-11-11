@@ -93,7 +93,7 @@ func TestSshUnknownHost(t *testing.T) {
 	sim := testSetup(t)
 	p, _ := launch(sim, "user", "local", []string{}, []string{"unknown"})
 	errOut := stderr(t, p)
-	if !strings.Contains(errOut, "could not resolve") {
+	if errOut != "ssh: Could not resolve hostname unknown: Name or service not known\n" {
 		t.Fatalf("expected resolve error, got %q", errOut)
 	}
 }

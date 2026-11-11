@@ -43,6 +43,12 @@ func testFS() *file.F {
 		"etc": dir(file.OwnerRoot, map[string]*file.F{
 			"hosts": text(file.OwnerRoot, "test"),
 		}),
+		// Only root may look inside /root.
+		"root": {Type: file.Folder, Owner: file.OwnerRoot,
+			OwnerPermission: file.Write, CommonPermission: file.None,
+			Files: map[string]*file.F{
+				"secret.txt": text(file.OwnerRoot, "hidden"),
+			}},
 		"home": dir(file.OwnerRoot, map[string]*file.F{
 			"user": dir("user", map[string]*file.F{
 				"notes.txt": text("user", "a note\nanother"),
@@ -488,7 +494,7 @@ func verifyEnterTerminates(t *testing.T, prefix string, maxPolls int) {
 	}
 	// Permission denied is a real consequence; any other error means the
 	// keyboard let the player type something the command rejects.
-	if msg := stderr.String(); msg != "" && !strings.Contains(msg, "permission denied") {
+	if msg := stderr.String(); msg != "" && !strings.Contains(msg, "Permission denied") {
 		t.Errorf("mistake: %q + Enter wrote %q", prefix, msg)
 	}
 }
@@ -851,6 +857,14 @@ func TestShellNextInvariant_Lines(t *testing.T) {
 		{"mv /home/user/notes.txt /home/user/notes.txt", false},
 		{"mv /home/user/notes.txt", false},
 		{"mv /home/user/docs /tmp", false},
+		// An unreadable folder can be named (permission denied is a
+		// real lesson) but nothing inside it is completed.
+		{"ls /root", true},
+		{"cd /root", true},
+		{"cat /root/secret.txt", false},
+		{"touch /root/new.txt", false},
+		{"sudo cat /root/secret.txt", true},
+		{"sudo touch /root/new.txt", true},
 	} {
 		_, p := testSetup(t)
 		if got := canRun(p, tc.line); got != tc.ok {

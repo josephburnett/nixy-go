@@ -18,6 +18,7 @@ func init() {
 // /bin other than sudo itself (under any name: /bin entries can be
 // renamed), then whatever that command's own validator accepts.
 func validArgs(ctx simulation.ArgContext, partial string) simulation.Suggestion {
+	ctx.User = file.OwnerRoot // the command runs as root
 	return command.ValidCommand(ctx, partial, sudoable(ctx), func(name string) (simulation.ValidArgs, bool) {
 		b, err := ctx.Sim.LookupBinary(ctx.Hostname, name)
 		if err != nil {

@@ -33,34 +33,32 @@ func launch(
 	}
 
 	for _, arg := range args {
-		path := file.Resolve(cwd, arg)
-		if len(path) == 0 {
-			return command.NewErrorProcess(owner, "touch: cannot touch '/'\n"), nil
-		}
-		dir := path[:len(path)-1]
-		name := path[len(path)-1]
-
-		// Check if file already exists - if so, no-op
-		parent, err := c.Filesystem.Navigate(dir)
-		if err != nil {
-			return command.NewErrorProcess(owner, fmt.Sprintf("touch: %v\n", err)), nil
-		}
-		if _, exists := parent.Files[name]; exists {
-			continue
-		}
-
-		newFile := &file.F{
-			Type:             file.Text,
-			Owner:            owner,
-			OwnerPermission:  file.Write,
-			CommonPermission: file.Read,
-			Data:             "",
-		}
-		err = c.Filesystem.CreateFile(dir, name, newFile, owner)
-		if err != nil {
-			return command.NewErrorProcess(owner, fmt.Sprintf("touch: %v\n", err)), nil
+		if err := touch(c.Filesystem, file.Resolve(cwd, arg), owner); err != nil {
+			return command.Fail(owner, "touch", fmt.Sprintf("cannot touch '%v'", arg), err), nil
 		}
 	}
 
 	return command.NewSingleValueProcess(owner, ""), nil
+}
+
+// touch creates an empty file at path owned by owner, or leaves an
+// existing one alone.
+func touch(root *file.F, path []string, owner string) error {
+	if len(path) == 0 {
+		return nil // `/` exists
+	}
+	dir, name := path[:len(path)-1], path[len(path)-1]
+	parent, err := root.LookupDir(dir, owner)
+	if err != nil {
+		return err
+	}
+	if _, exists := parent.Files[name]; exists {
+		return nil
+	}
+	return root.CreateFile(dir, name, &file.F{
+		Type:             file.Text,
+		Owner:            owner,
+		OwnerPermission:  file.Write,
+		CommonPermission: file.Read,
+	}, owner)
 }
