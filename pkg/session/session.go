@@ -391,10 +391,11 @@ func (s *Session) updatePlayingTerminal(t *terminal.T) {
 	t.SetPromptTarget(s.Game.GetPlannedCommand(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 	valid := s.Guide.Next()
 	hint := s.Game.GetHint(s.Shell.Hostname(), s.Shell.CurrentDirectory(), s.Shell.CurrentCommand())
-	if !slices.Contains(valid, hint) {
-		// The planner plans command lines; while one runs (only ^C
-		// is offered), or if its plan has gone stale, a hint on a key
-		// that does nothing is worse than none.
+	if slices.Contains(valid, process.Datum(process.SigInt)) {
+		// A job is running (^C is offered), so there's no line to type.
+		// The planner plans command lines; don't hint one now. Any other
+		// hint the keyboard rejects is a planner bug, and the fuzz must
+		// see it, so it isn't filtered here.
 		hint = nil
 	}
 	t.SetKeyboard(valid, hint)
