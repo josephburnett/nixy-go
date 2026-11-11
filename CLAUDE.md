@@ -101,7 +101,11 @@ Concrete implications (these all flow from this single principle):
   (`shell -l`: the laptop login and ssh) start there, falling back to
   `/` if it can't be entered; bare `cd` goes there, and like `cd DIR`
   is offered only when it would move. The prompt shows home as `~`,
-  like bash's `\w`.
+  like bash's `\w`. The shell expands `~` and `~/...` in every arg
+  before the command runs (`file.ExpandHome`; under sudo it is still
+  the player's home), and path validators offer `~` at the start of a
+  path through the same function, so typing and running agree. The
+  `~` key sits at the end of the keyboard's bottom letter row.
 - **Permissions matter.** Don't work around `CanWrite`/`CanRead` to
   make a quest succeed. If the player can't do something, that's a
   teaching opportunity — fix the world (perms, ownership) or the

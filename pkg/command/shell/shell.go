@@ -173,6 +173,13 @@ func (s *shell) executeCommand(cmd string) error {
 	if len(p.Segments) == 0 {
 		return nil
 	}
+	// Tilde expansion happens here, before any command sees its args,
+	// as in a real shell (so `sudo cat ~/x` is still the player's ~).
+	for i := range p.Segments {
+		for j, a := range p.Segments[i].Args {
+			p.Segments[i].Args[j] = file.ExpandHome(a, s.home)
+		}
+	}
 
 	if !p.IsPipeline() {
 		return s.executeSingle(p.Segments[0])

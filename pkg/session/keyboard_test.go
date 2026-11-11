@@ -182,7 +182,7 @@ func TestKeyboardWalk_NoMistakes(t *testing.T) {
 								picks = append(picks, chars[i*step])
 							}
 							for _, c := range chars {
-								if c == " " || c == "/" {
+								if c == " " || c == "/" || c == "~" {
 									picks = append(picks, c)
 								}
 							}

@@ -441,9 +441,12 @@ func TestShellNextInvariant_EveryEnterStateTerminates(t *testing.T) {
 		picks := chars
 		if len(chars) > maxChildrenPerState {
 			step := len(chars) / maxChildrenPerState
-			picks = picks[:0]
+			picks = nil
 			for i := 0; i < maxChildrenPerState; i++ {
 				picks = append(picks, chars[i*step])
+			}
+			if chars[len(chars)-1] == "~" { // sorts last, so never sampled
+				picks = append(picks, "~")
 			}
 		}
 		for _, c := range picks {
@@ -865,6 +868,21 @@ func TestShellNextInvariant_Lines(t *testing.T) {
 		{"touch /root/new.txt", false},
 		{"sudo cat /root/secret.txt", true},
 		{"sudo touch /root/new.txt", true},
+		// ~ is the player's home, wherever a path goes.
+		{"cat ~/notes.txt", true},
+		{"cat ~", false},
+		{"ls ~", true},
+		{"ls ~/docs", true},
+		{"cd ~", true},
+		{"cd ~/docs", true},
+		{"touch ~/new.txt", true},
+		{"touch ~", false},
+		{"rm ~", false},
+		{"mv ~/notes.txt ~/docs", true},
+		{"mv ~/notes.txt ~", false}, // already there
+		{"sudo cat ~/notes.txt", true},
+		{"ls ~x", false},
+		{"grep ~ ~/notes.txt", false},
 	} {
 		_, p := testSetup(t)
 		if got := canRun(p, tc.line); got != tc.ok {
@@ -963,5 +981,33 @@ func TestShellLoginWithoutHome(t *testing.T) {
 	}
 	if canRunFresh(p, "cd") {
 		t.Error("bare cd offered with no home to go to")
+	}
+}
+
+// TestShellTildeExpansion: the shell expands ~ before the command runs,
+// for builtins, binaries, pipelines and sudo alike.
+func TestShellTildeExpansion(t *testing.T) {
+	sim, p := testSetup(t)
+	if got := runLine(t, p, "cat ~/notes.txt | grep another"); got != "another\n" {
+		t.Errorf("cat ~/notes.txt | grep: got %q", got)
+	}
+	if got := runLine(t, p, "sudo cat ~/notes.txt"); got != "a note\nanother\n" {
+		t.Errorf("sudo cat ~/notes.txt: got %q", got)
+	}
+	runLine(t, p, "mv ~/notes.txt ~/docs")
+	c, _ := sim.GetComputer("test")
+	if _, err := c.Filesystem.Navigate([]string{"home", "user", "docs", "notes.txt"}); err != nil {
+		t.Errorf("mv ~/notes.txt ~/docs: %v", err)
+	}
+	runLine(t, p, "cd ~/docs")
+	if got := runLine(t, p, "pwd"); got != "/home/user/docs\n" {
+		t.Errorf("cd ~/docs: pwd %q", got)
+	}
+	runLine(t, p, "cd ~")
+	if got := runLine(t, p, "pwd"); got != "/home/user\n" {
+		t.Errorf("cd ~: pwd %q", got)
+	}
+	if canRunFresh(p, "cd ~") {
+		t.Error("cd ~ offered while already home")
 	}
 }

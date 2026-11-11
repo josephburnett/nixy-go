@@ -71,3 +71,20 @@ func TestSplit(t *testing.T) {
 		})
 	}
 }
+
+func TestExpandHome(t *testing.T) {
+	home := []string{"home", "joe"}
+	for in, want := range map[string]string{
+		"~":         "/home/joe",
+		"~/":        "/home/joe/",
+		"~/a/b":     "/home/joe/a/b",
+		"~joe":      "~joe",
+		"a~":        "a~",
+		"/~":        "/~",
+		"notes.txt": "notes.txt",
+	} {
+		if got := ExpandHome(in, home); got != want {
+			t.Errorf("ExpandHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

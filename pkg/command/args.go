@@ -240,7 +240,7 @@ func MoveDest(ctx simulation.ArgContext, prev []string, token string) simulation
 	if len(prev) == 0 {
 		return simulation.Suggestion{}
 	}
-	src := file.Resolve(ctx.Cwd, prev[0])
+	src := file.Resolve(ctx.Cwd, file.ExpandHome(prev[0], ctx.Home))
 	if len(src) == 0 {
 		return simulation.Suggestion{}
 	}
@@ -300,10 +300,30 @@ func pathArg(ctx simulation.ArgContext, token string, allowNew bool, accept path
 	root := c.Filesystem
 	viable := func(path []string, f *file.F) bool { return viableDir(ctx.User, path, f, allowNew, accept) }
 
+	// `~` is the home folder, written as a directory; `~/...` is a path
+	// below it (see file.ExpandHome).
+	home, homeOK := ctx.Home, ctx.Home != nil
+	homeFile, err := root.Lookup(home, ctx.User)
+	homeOK = homeOK && err == nil && homeFile.Type == file.Folder
+	if token == "~" {
+		if !homeOK {
+			return simulation.Suggestion{}
+		}
+		var chars charSet
+		if viable(home, homeFile) {
+			chars.add('/')
+		}
+		return simulation.Suggestion{Chars: sortedKeys(chars), Complete: accept(home, homeFile, true)}
+	}
+	token = file.ExpandHome(token, home)
+
 	var chars charSet
 	dirPath, prefix := file.Split(ctx.Cwd, token)
 	if token == "" && viable(nil, root) {
 		chars.add('/')
+	}
+	if token == "" && homeOK && (accept(home, homeFile, true) || viable(home, homeFile)) {
+		chars.add('~')
 	}
 	// Nothing inside the folder is offered when it is gone (deleted
 	// from under the player) or unreadable; an absolute path still

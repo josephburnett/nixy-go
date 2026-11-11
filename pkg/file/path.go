@@ -61,3 +61,17 @@ func Split(cwd []string, expr string) (dir []string, last string) {
 	}
 	return Resolve(cwd, expr[:idx+1]), expr[idx+1:]
 }
+
+// ExpandHome does the shell's tilde expansion on one word: `~` is the
+// home folder and `~/rest` is rest under it. Other words, including
+// `~user` forms, are returned unchanged.
+//
+//	ExpandHome("~", ["home", "joe"])        → "/home/joe"
+//	ExpandHome("~/notes", ["home", "joe"])  → "/home/joe/notes"
+//	ExpandHome("a~b", ["home", "joe"])      → "a~b"
+func ExpandHome(word string, home []string) string {
+	if word != "~" && !strings.HasPrefix(word, "~/") {
+		return word
+	}
+	return "/" + strings.Join(home, "/") + word[1:]
+}
