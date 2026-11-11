@@ -77,12 +77,12 @@ func TestRenderersBothShowKeyContent(t *testing.T) {
 	expectations := []string{
 		"first batch line",
 		"second batch with",
-		"pwd",                      // the highlighted command
+		"pwd",                       // the highlighted command
 		"current working directory", // thought (status slot)
-		"user@nixy:/home/nixy>",    // active prompt
-		"ssh nixy",                 // history input
-		"Last login: Sat Jan 1",    // history output
-		"q", "w", "e",              // keyboard letters
+		"user@nixy:/home/nixy>",     // active prompt
+		"ssh nixy",                  // history input
+		"Last login: Sat Jan 1",     // history output
+		"q", "w", "e",               // keyboard letters
 		"[space]", "[enter]", "[bksp]", // keyboard specials
 	}
 

@@ -10,9 +10,9 @@ type Frame struct {
 	PromptInputOff string     // typed input that has gone off-path
 	CursorOnPath   bool       // green block cursor when true, white otherwise
 	Dialog         []DialogLine
-	DialogSpace    int        // total lines allocated for dialog (pad with blank lines)
-	Status         string     // single status line below the box
-	StatusIsNotice bool       // true: notice (errors/Ctrl+C); false: thought
+	DialogSpace    int    // total lines allocated for dialog (pad with blank lines)
+	Status         string // single status line below the box
+	StatusIsNotice bool   // true: notice (errors/Ctrl+C); false: thought
 	ValidKeys      []process.Datum
 	HintKey        process.Datum
 	Width          int
@@ -29,19 +29,19 @@ type Renderer interface {
 type Style int
 
 const (
-	StyleDefault Style = iota
-	StyleBox            // box-drawing borders
-	StylePrompt         // bold blue prompt frame ("user@", ":", path, "> ")
-	StyleHost           // host name (color depends on which host)
-	StylePromptOff      // white off-path input
-	StyleOnPath         // bold green: on-path input, hint key, command markers
-	StyleDialog         // Nixy dialog (single color)
-	StyleDim            // thought (faded grey)
-	StyleNotice         // notice line (errors, Ctrl+C)
-	StyleCursorOn       // green cursor block
-	StyleCursorOff      // white cursor block
-	StyleKeyValid       // bold white keyboard key
-	StyleKeyDim         // dim keyboard key
+	StyleDefault   Style = iota
+	StyleBox             // box-drawing borders
+	StylePrompt          // bold blue prompt frame ("user@", ":", path, "> ")
+	StyleHost            // host name (color depends on which host)
+	StylePromptOff       // white off-path input
+	StyleOnPath          // bold green: on-path input, hint key, command markers
+	StyleDialog          // Nixy dialog (single color)
+	StyleDim             // thought (faded grey)
+	StyleNotice          // notice line (errors, Ctrl+C)
+	StyleCursorOn        // green cursor block
+	StyleCursorOff       // white cursor block
+	StyleKeyValid        // bold white keyboard key
+	StyleKeyDim          // dim keyboard key
 )
 
 // Segment is one styled span of text within a rendered line.

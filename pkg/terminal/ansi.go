@@ -19,9 +19,9 @@ const colorDialog = "\033[38;5;209m" // salmon
 // fall back to colorPrompt (laptop is the user's home — same color as the
 // prompt frame).
 var hostColorsANSI = map[string]string{
-	"laptop": colorPrompt,        // bold blue
-	"nixy":   "\033[38;5;209m",   // salmon
-	"server": "\033[38;5;73m",    // teal / cadet
+	"laptop": colorPrompt,      // bold blue
+	"nixy":   "\033[38;5;209m", // salmon
+	"server": "\033[38;5;73m",  // teal / cadet
 }
 
 // ANSIRenderer renders frames using ANSI escape codes and box-drawing characters.

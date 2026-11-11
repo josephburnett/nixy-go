@@ -335,10 +335,10 @@ func TestRenderLayoutHeightInvariant(t *testing.T) {
 // the upcoming layout refactor doesn't lose them.
 func TestRenderPromptCursorAndPath(t *testing.T) {
 	tests := []struct {
-		name        string
-		setup       func(*T)
-		wantCursor  string // "green" or "white"
-		wantOnGreen string // substring expected to be wrapped in green
+		name         string
+		setup        func(*T)
+		wantCursor   string // "green" or "white"
+		wantOnGreen  string // substring expected to be wrapped in green
 		wantOffWhite string
 	}{
 		{
