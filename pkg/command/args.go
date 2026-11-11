@@ -8,162 +8,386 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
-// ValidArgsFile returns valid next inputs for a file path argument (files and folders).
-func ValidArgsFile(sim *simulation.S, hostname string, cwd []string, partial string) simulation.Suggestion {
-	return validArgsPath(sim, hostname, cwd, partial, false)
+// Arg validates one argument token (never contains a space). prev holds
+// the arguments already typed before it. Complete means the token is a
+// valid value for this position. Every char offered must lead toward a
+// Complete token.
+type Arg func(ctx simulation.ArgContext, prev []string, token string) simulation.Suggestion
+
+// Positional is the validator for a command that takes a fixed list of
+// positional arguments, e.g. `mv SRC DST` or `grep PATTERN [FILE]`.
+type Positional struct {
+	Args []Arg
+	// Required is how many args a standalone run needs.
+	Required int
+	// ReadsStdin commands can take their input from an upstream pipe
+	// instead of their trailing args: in a pipe they need only
+	// PipeRequired args (`ls | cat`, `ls | grep x`).
+	ReadsStdin   bool
+	PipeRequired int
 }
 
-// ValidArgsFolder returns valid next inputs for a folder path argument (folders only).
-func ValidArgsFolder(sim *simulation.S, hostname string, cwd []string, partial string) simulation.Suggestion {
-	return validArgsPath(sim, hostname, cwd, partial, true)
+// NoArgs is the validator for commands that take no arguments.
+var NoArgs = Positional{}.Validate
+
+// Validate implements simulation.ValidArgs. Arguments are separated by
+// single spaces. A space is offered after a complete argument when
+// another argument can follow, or when the command is complete (the
+// trailing space before `|`).
+func (p Positional) Validate(ctx simulation.ArgContext, partial string) simulation.Suggestion {
+	tokens := strings.Split(partial, " ")
+	i := len(tokens) - 1
+	prev, cur := tokens[:i], tokens[i]
+	for j, tok := range prev {
+		if j >= len(p.Args) || tok == "" || !p.Args[j](ctx, prev[:j], tok).Complete {
+			return simulation.Suggestion{}
+		}
+	}
+	if i >= len(p.Args) {
+		// Only the trailing space after the last argument.
+		if cur != "" {
+			return simulation.Suggestion{}
+		}
+		return simulation.Suggestion{Complete: p.enough(ctx, i)}
+	}
+
+	sug := p.Args[i](ctx, prev, cur)
+	var chars []rune
+	for _, r := range sug.Chars {
+		if r != ' ' && r != '|' {
+			chars = append(chars, r)
+		}
+	}
+	if cur == "" {
+		return simulation.Suggestion{Chars: chars, Complete: p.enough(ctx, i)}
+	}
+	if !sug.Complete {
+		return simulation.Suggestion{Chars: chars}
+	}
+	complete := p.enough(ctx, i+1)
+	if complete || (i+1 < len(p.Args) && live(p.Args[i+1](ctx, tokens, ""))) {
+		chars = append(chars, ' ')
+	}
+	return simulation.Suggestion{Chars: chars, Complete: complete}
 }
 
-// ValidArgsHostname returns valid next inputs for hostnames from /etc/hosts.
-func ValidArgsHostname(sim *simulation.S, hostname string, _ []string, partial string) simulation.Suggestion {
-	c, err := sim.GetComputer(hostname)
+// enough reports whether n complete args make a runnable command.
+func (p Positional) enough(ctx simulation.ArgContext, n int) bool {
+	if n >= p.Required {
+		return true
+	}
+	return ctx.InPipe && p.ReadsStdin && n >= p.PipeRequired
+}
+
+// live reports whether a suggestion leads anywhere: it is complete or
+// has a key to type next.
+func live(s simulation.Suggestion) bool {
+	return s.Complete || len(s.Chars) > 0
+}
+
+// ValidCommand validates "NAME ARGS..." for a choice of names, each with
+// its own args validator. It serves the shell's command position, sudo's
+// command argument and subcommands (apt install, nx quest). A name is
+// offered only when its args validator leads somewhere, so the player
+// can't type a command (or subcommand) that has no valid completion.
+func ValidCommand(
+	ctx simulation.ArgContext,
+	text string,
+	names []string,
+	lookup func(name string) (simulation.ValidArgs, bool),
+) simulation.Suggestion {
+	name, rest, hasArgs := strings.Cut(text, " ")
+	if hasArgs {
+		va, ok := lookup(name)
+		if !ok || !contains(names, name) {
+			return simulation.Suggestion{}
+		}
+		return va(ctx, rest)
+	}
+	var chars charSet
+	complete := false
+	for _, n := range names {
+		if !strings.HasPrefix(n, name) {
+			continue
+		}
+		va, ok := lookup(n)
+		if !ok {
+			continue
+		}
+		s := va(ctx, "")
+		if !live(s) {
+			continue
+		}
+		if len(n) > len(name) {
+			chars.add(rune(n[len(name)]))
+		} else {
+			chars.add(' ')
+			complete = s.Complete
+		}
+	}
+	return simulation.Suggestion{Chars: sortedKeys(chars), Complete: complete}
+}
+
+// Subcommands is the validator for `CMD SUB ARGS...`, e.g. apt install.
+func Subcommands(subs map[string]simulation.ValidArgs) simulation.ValidArgs {
+	names := make([]string, 0, len(subs))
+	for n := range subs {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	lookup := func(n string) (simulation.ValidArgs, bool) {
+		va, ok := subs[n]
+		return va, ok
+	}
+	return func(ctx simulation.ArgContext, partial string) simulation.Suggestion {
+		return ValidCommand(ctx, partial, names, lookup)
+	}
+}
+
+// OneOf returns an Arg that accepts exactly one of the given words.
+func OneOf(words func(ctx simulation.ArgContext) []string) Arg {
+	return func(ctx simulation.ArgContext, _ []string, token string) simulation.Suggestion {
+		var chars charSet
+		complete := false
+		for _, w := range words(ctx) {
+			if !strings.HasPrefix(w, token) {
+				continue
+			}
+			if len(w) > len(token) {
+				chars.add(rune(w[len(token)]))
+			} else {
+				complete = true
+			}
+		}
+		return simulation.Suggestion{Chars: sortedKeys(chars), Complete: complete}
+	}
+}
+
+// Hostname accepts a host listed in /etc/hosts.
+var Hostname = OneOf(func(ctx simulation.ArgContext) []string {
+	c, err := ctx.Sim.GetComputer(ctx.Hostname)
 	if err != nil {
-		return simulation.Suggestion{}
+		return nil
 	}
 	hostsFile, err := c.Filesystem.Navigate([]string{"etc", "hosts"})
 	if err != nil {
-		return simulation.Suggestion{}
+		return nil
 	}
-
 	var hosts []string
 	for _, line := range strings.Split(hostsFile.Data, "\n") {
-		h := strings.TrimSpace(line)
-		if h != "" {
+		if h := strings.TrimSpace(line); h != "" {
 			hosts = append(hosts, h)
 		}
 	}
+	return hosts
+})
 
-	return validArgsFromList(hosts, partial)
-}
-
-// validArgsFromList returns the suggestion for matching items in a list.
-func validArgsFromList(items []string, partial string) simulation.Suggestion {
-	if partial == "" {
-		firstChars := map[rune]bool{}
-		for _, item := range items {
-			if len(item) > 0 {
-				firstChars[rune(item[0])] = true
-			}
-		}
-		return simulation.Suggestion{Chars: sortedKeys(firstChars)}
-	}
-
-	continuations := map[rune]bool{}
-	exactMatch := false
-	for _, item := range items {
-		if strings.HasPrefix(item, partial) {
-			if item == partial {
-				exactMatch = true
-			}
-			if len(item) > len(partial) {
-				continuations[rune(item[len(partial)])] = true
-			}
-		}
-	}
-	return simulation.Suggestion{Chars: sortedKeys(continuations), Complete: exactMatch}
-}
-
-func validArgsPath(sim *simulation.S, hostname string, cwd []string, partial string, foldersOnly bool) simulation.Suggestion {
-	c, err := sim.GetComputer(hostname)
-	if err != nil {
-		return simulation.Suggestion{}
-	}
-
-	dir, prefix := file.Split(cwd, partial)
-
-	parent, err := c.Filesystem.Navigate(dir)
-	if err != nil {
-		return simulation.Suggestion{}
-	}
-	if parent.Type != file.Folder {
-		return simulation.Suggestion{}
-	}
-
-	var names []string
-	for name, f := range parent.Files {
-		if foldersOnly && f.Type != file.Folder {
+// Pattern accepts a literal search word for grep. It is limited to
+// characters that mean nothing special to a real shell or to grep's
+// regular expressions, so what the player types behaves the same in
+// real Unix. A leading `-` would be an option, so it is not offered.
+func Pattern(_ simulation.ArgContext, _ []string, token string) simulation.Suggestion {
+	var chars []rune
+	for _, r := range patternChars {
+		if r == '-' && token == "" {
 			continue
 		}
-		names = append(names, name)
+		chars = append(chars, r)
 	}
-	sort.Strings(names)
-
-	if prefix == "" {
-		chars := map[rune]bool{}
-		for _, name := range names {
-			if len(name) > 0 {
-				chars[rune(name[0])] = true
-			}
-		}
-		if partial == "" {
-			chars['/'] = true
-			chars['.'] = true
-		}
-		// Non-empty partial with prefix=="" means the partial ended with `/`
-		// (e.g. "/", "../", "foo/") — fully resolved to a directory, so the
-		// arg is complete (Enter is valid for commands that accept dirs).
-		return simulation.Suggestion{Chars: sortedKeys(chars), Complete: partial != ""}
-	}
-
-	// Special path components: "." (cwd) and ".." (parent). The arg is
-	// complete (the path resolves), and `/` lets the player descend; `.`
-	// after `.` forms `..`.
-	if prefix == "." || prefix == ".." {
-		chars := map[rune]bool{'/': true}
-		if prefix == "." {
-			chars['.'] = true
-		}
-		return simulation.Suggestion{Chars: sortedKeys(chars), Complete: true}
-	}
-
-	continuations := map[rune]bool{}
-	exactMatch := false
-	for _, name := range names {
-		if strings.HasPrefix(name, prefix) {
-			if name == prefix {
-				exactMatch = true
-			}
-			if len(name) > len(prefix) {
-				continuations[rune(name[len(prefix)])] = true
-			}
-		}
-	}
-	if exactMatch {
-		// Exact match — `/` is valid to descend into the directory (or
-		// continue addressing under it).
-		continuations['/'] = true
-	}
-	return simulation.Suggestion{Chars: sortedKeys(continuations), Complete: exactMatch}
+	return simulation.Suggestion{Chars: chars, Complete: token != ""}
 }
 
-// ValidArgsCd is the validator for the cd builtin. It wraps
-// ValidArgsFolder and clears Complete at any partial that would be a
-// no-op (resolves to the current cwd) — e.g. `cd ..` at root, `cd /`
-// at root, `cd .`, `cd /home/user` when already in /home/user. The
-// "no mistakes" invariant says the keyboard should only offer keys
-// that lead to a real, observable action; a no-op cd is not one.
-func ValidArgsCd(sim *simulation.S, hostname string, cwd []string, partial string) simulation.Suggestion {
-	sug := ValidArgsFolder(sim, hostname, cwd, partial)
-	if !cdWouldMove(cwd, partial) {
-		sug.Complete = false
-	}
-	return sug
+// FilePath accepts an existing file (not a folder). Folders are offered
+// only as path components to descend into.
+func FilePath(ctx simulation.ArgContext, _ []string, token string) simulation.Suggestion {
+	return pathArg(ctx, token, false, func(_ []string, f *file.F, dir bool) bool {
+		return f != nil && f.Type != file.Folder && !dir
+	})
 }
 
-// cdWouldMove reports whether `cd partial` from `cwd` would land on a
-// different path. Returns false for partials that resolve back to cwd
-// itself.
-func cdWouldMove(cwd []string, partial string) bool {
-	if partial == "" {
-		// Bare `cd` (handled by OptionalArgs) goes to /. That's a move
-		// iff cwd is non-root.
-		return len(cwd) > 0
+// AnyPath accepts any existing path, file or folder.
+func AnyPath(ctx simulation.ArgContext, _ []string, token string) simulation.Suggestion {
+	return pathArg(ctx, token, false, func(_ []string, f *file.F, _ bool) bool {
+		return f != nil
+	})
+}
+
+// CdTarget accepts a folder other than the cwd: cd to where you
+// already are is a no-op, not an action.
+func CdTarget(ctx simulation.ArgContext, _ []string, token string) simulation.Suggestion {
+	return pathArg(ctx, token, false, func(target []string, f *file.F, _ bool) bool {
+		return f != nil && f.Type == file.Folder && !pathsEqual(target, ctx.Cwd)
+	})
+}
+
+// NewPath accepts a path whose parent folder exists and whose last
+// component is a plain name: a new file, or an existing one (touch
+// on an existing file just updates it).
+func NewPath(ctx simulation.ArgContext, _ []string, token string) simulation.Suggestion {
+	return pathArg(ctx, token, true, func(target []string, _ *file.F, dir bool) bool {
+		return !dir && len(target) > 0
+	})
+}
+
+// MoveDest accepts a destination for moving the file prev[0], the way
+// real mv treats its last argument:
+//   - an existing folder: move into it, unless that is where the file
+//     already is or a folder of the same name is in the way;
+//   - an existing file other than the source: overwrite it;
+//   - a new name in an existing folder: rename.
+func MoveDest(ctx simulation.ArgContext, prev []string, token string) simulation.Suggestion {
+	if len(prev) == 0 {
+		return simulation.Suggestion{}
 	}
-	return !pathsEqual(file.Resolve(cwd, partial), cwd)
+	src := file.Resolve(ctx.Cwd, prev[0])
+	if len(src) == 0 {
+		return simulation.Suggestion{}
+	}
+	base := src[len(src)-1]
+	return pathArg(ctx, token, true, func(target []string, f *file.F, dir bool) bool {
+		if f != nil && f.Type == file.Folder {
+			into := append(append([]string{}, target...), base)
+			if pathsEqual(into, src) {
+				return false
+			}
+			existing, ok := f.Files[base]
+			return !ok || existing.Type != file.Folder
+		}
+		return !dir && len(target) > 0 && !pathsEqual(target, src)
+	})
+}
+
+// wordChars are the characters offered for free-form words (new file
+// names, grep patterns): portable filename characters, none of which
+// a real shell would interpret.
+const wordChars = "-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+
+// patternChars are wordChars without `.`, which real grep reads as "any
+// character" while ours matches it literally.
+const patternChars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+
+func validNewName(name string) bool {
+	if name == "" || name == "." || name == ".." || name[0] == '-' {
+		return false
+	}
+	return isWord(name)
+}
+
+func isWord(s string) bool {
+	for _, r := range s {
+		if !strings.ContainsRune(wordChars, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// pathAccept decides whether a resolved path is a valid value. f is nil
+// when nothing exists there. dir is true when the token is written as
+// a directory (ends in `/`, or is `.` or `..`).
+type pathAccept func(target []string, f *file.F, dir bool) bool
+
+// pathArg is path completion shared by the path Args. It offers only
+// keys that lead to an accepted path: existing names whose subtree
+// holds an accepted path, `/` after a folder worth descending into,
+// `.`/`..`, and (when allowNew) characters of a new name.
+func pathArg(ctx simulation.ArgContext, token string, allowNew bool, accept pathAccept) simulation.Suggestion {
+	c, err := ctx.Sim.GetComputer(ctx.Hostname)
+	if err != nil {
+		return simulation.Suggestion{}
+	}
+	root := c.Filesystem
+	viable := func(path []string, f *file.F) bool { return viableDir(path, f, allowNew, accept) }
+
+	var chars charSet
+	dirPath, prefix := file.Split(ctx.Cwd, token)
+	parent, err := root.Navigate(dirPath)
+	if err != nil || parent.Type != file.Folder {
+		// The cwd itself may be gone (deleted from under the player);
+		// an absolute path still works, as in a real shell.
+		if token == "" && viable(nil, root) {
+			chars.add('/')
+		}
+		return simulation.Suggestion{Chars: sortedKeys(chars)}
+	}
+
+	if token == "" && viable(nil, root) {
+		chars.add('/')
+	}
+
+	type entry struct {
+		path []string
+		f    *file.F
+		dot  bool // `.` or `..`: a directory written as such
+	}
+	entries := map[string]entry{
+		".":  {dirPath, parent, true},
+		"..": {nil, nil, true},
+	}
+	if len(dirPath) > 0 {
+		up := dirPath[:len(dirPath)-1]
+		if f, err := root.Navigate(up); err == nil {
+			entries[".."] = entry{up, f, true}
+		}
+	} else {
+		entries[".."] = entry{nil, root, true}
+	}
+	for name, f := range parent.Files {
+		entries[name] = entry{append(append([]string{}, dirPath...), name), f, false}
+	}
+
+	for name, e := range entries {
+		if e.f == nil || !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		isFolder := e.f.Type == file.Folder
+		if len(name) > len(prefix) {
+			if accept(e.path, e.f, e.dot) || (isFolder && viable(e.path, e.f)) {
+				chars.add(rune(name[len(prefix)]))
+			}
+		} else if isFolder && viable(e.path, e.f) {
+			chars.add('/')
+		}
+	}
+	if allowNew && (prefix == "" || prefix[0] != '-') && isWord(prefix) {
+		for _, r := range wordChars {
+			if prefix == "" && r == '-' {
+				continue
+			}
+			chars.add(r)
+		}
+	}
+
+	complete := false
+	if token != "" {
+		target := file.Resolve(ctx.Cwd, token)
+		dir := strings.HasSuffix(token, "/") || prefix == "." || prefix == ".."
+		if f, err := root.Navigate(target); err == nil {
+			complete = accept(target, f, dir)
+		} else {
+			complete = allowNew && !dir && validNewName(prefix) && accept(target, nil, false)
+		}
+	}
+	return simulation.Suggestion{Chars: sortedKeys(chars), Complete: complete}
+}
+
+// viableDir reports whether typing `/` after folder f (at path) can lead
+// to an accepted path: the folder itself written as `dir/`, a new name
+// inside it, or something accepted further down.
+func viableDir(path []string, f *file.F, allowNew bool, accept pathAccept) bool {
+	if accept(path, f, true) || allowNew {
+		return true
+	}
+	for name, child := range f.Files {
+		p := append(append([]string{}, path...), name)
+		if accept(p, child, false) {
+			return true
+		}
+		if child.Type == file.Folder && viableDir(p, child, allowNew, accept) {
+			return true
+		}
+	}
+	return false
 }
 
 func pathsEqual(a, b []string) bool {
@@ -178,12 +402,32 @@ func pathsEqual(a, b []string) bool {
 	return true
 }
 
-func sortedKeys(m map[rune]bool) []rune {
-	out := make([]rune, 0, len(m))
-	for r := range m {
-		out = append(out, r)
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
-	return out
+	return false
 }
 
+// charSet collects suggested ASCII characters; sortedKeys lists them in
+// order.
+type charSet [128]bool
+
+// add ignores non-ASCII: the keyboard is ASCII.
+func (c *charSet) add(r rune) {
+	if r >= 0 && r < 128 {
+		c[r] = true
+	}
+}
+
+func sortedKeys(c charSet) []rune {
+	var out []rune
+	for r, ok := range c {
+		if ok {
+			out = append(out, rune(r))
+		}
+	}
+	return out
+}

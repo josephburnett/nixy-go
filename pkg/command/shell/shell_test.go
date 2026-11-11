@@ -5,87 +5,57 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/josephburnett/nixy-go/pkg/command/apt"
 	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
 	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
+	_ "github.com/josephburnett/nixy-go/pkg/command/mv"
 	_ "github.com/josephburnett/nixy-go/pkg/command/pwd"
 	_ "github.com/josephburnett/nixy-go/pkg/command/rm"
+	_ "github.com/josephburnett/nixy-go/pkg/command/ssh"
+	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
+	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
+// testBinaries are installed in the fixture's /bin: every registered
+// command, so the structural tests cover them all.
+var testBinaries = []string{"apt", "cat", "grep", "ls", "mv", "pwd", "rm", "ssh", "sudo", "touch"}
+
+func testFS() *file.F {
+	dir := func(owner string, files map[string]*file.F) *file.F {
+		return &file.F{Type: file.Folder, Owner: owner,
+			OwnerPermission: file.Write, CommonPermission: file.Read, Files: files}
+	}
+	text := func(owner, data string) *file.F {
+		return &file.F{Type: file.Text, Owner: owner,
+			OwnerPermission: file.Write, CommonPermission: file.Read, Data: data}
+	}
+	bin := map[string]*file.F{}
+	for _, name := range testBinaries {
+		bin[name] = &file.F{Type: file.Binary, Owner: file.OwnerRoot,
+			OwnerPermission: file.Write, CommonPermission: file.Read, Data: name}
+	}
+	return dir(file.OwnerRoot, map[string]*file.F{
+		"bin": dir(file.OwnerRoot, bin),
+		"etc": dir(file.OwnerRoot, map[string]*file.F{
+			"hosts": text(file.OwnerRoot, "test"),
+		}),
+		"home": dir(file.OwnerRoot, map[string]*file.F{
+			"user": dir("user", map[string]*file.F{
+				"notes.txt": text("user", "a note\nanother"),
+				"docs":      dir("user", map[string]*file.F{}),
+			}),
+		}),
+	})
+}
+
 func testSetup(t *testing.T) (*simulation.S, process.P) {
 	t.Helper()
-	fs := &file.F{
-		Type:             file.Folder,
-		Owner:            file.OwnerRoot,
-		OwnerPermission:  file.Write,
-		CommonPermission: file.Read,
-		Files: map[string]*file.F{
-			"bin": {
-				Type:             file.Folder,
-				Owner:            file.OwnerRoot,
-				OwnerPermission:  file.Write,
-				CommonPermission: file.Read,
-				Files: map[string]*file.F{
-					"pwd": {
-						Type:             file.Binary,
-						Owner:            file.OwnerRoot,
-						OwnerPermission:  file.Write,
-						CommonPermission: file.Read,
-						Data:             "pwd",
-					},
-					"ls": {
-						Type:             file.Binary,
-						Owner:            file.OwnerRoot,
-						OwnerPermission:  file.Write,
-						CommonPermission: file.Read,
-						Data:             "ls",
-					},
-					"grep": {
-						Type:             file.Binary,
-						Owner:            file.OwnerRoot,
-						OwnerPermission:  file.Write,
-						CommonPermission: file.Read,
-						Data:             "grep",
-					},
-					"rm": {
-						Type:             file.Binary,
-						Owner:            file.OwnerRoot,
-						OwnerPermission:  file.Write,
-						CommonPermission: file.Read,
-						Data:             "rm",
-					},
-					"cat": {
-						Type:             file.Binary,
-						Owner:            file.OwnerRoot,
-						OwnerPermission:  file.Write,
-						CommonPermission: file.Read,
-						Data:             "cat",
-					},
-				},
-			},
-			"home": {
-				Type:             file.Folder,
-				Owner:            file.OwnerRoot,
-				OwnerPermission:  file.Write,
-				CommonPermission: file.Read,
-				Files: map[string]*file.F{
-					"user": {
-						Type:             file.Folder,
-						Owner:            "user",
-						OwnerPermission:  file.Write,
-						CommonPermission: file.Read,
-						Files:            map[string]*file.F{},
-					},
-				},
-			},
-		},
-	}
 	sim := simulation.New()
-	err := sim.Boot("test", fs)
-	if err != nil {
+	if err := sim.Boot("test", testFS()); err != nil {
 		t.Fatal(err)
 	}
 	p, err := sim.Launch("test", "user", "shell", nil, []string{})
@@ -403,7 +373,9 @@ func TestShellNextInvariant_GrepInPipeAllowsPatternOnly(t *testing.T) {
 // TestShellNextInvariant_EveryEnterStateTerminates is the structural
 // guardian for the "no mistakes" invariant: for every keyboard state
 // where Enter is in the valid set, pressing Enter must result in a
-// terminating execution. The test walks the keyboard space (BFS from
+// terminating execution with no error other than permission denied.
+// (TestKeyboardWalk_NoMistakes in pkg/session runs the same check over
+// the real game worlds.) The test walks the keyboard space (BFS from
 // empty buffer, Chars-only edges) and at each Enter-valid state replays
 // those keystrokes on a fresh shell, presses Enter, and confirms the
 // shell recovers.
@@ -497,18 +469,37 @@ func verifyEnterTerminates(t *testing.T, prefix string, maxPolls int) {
 	}
 	_, _ = p.Stdin(process.Data{process.TermEnter})
 
-	for i := 0; i < maxPolls; i++ {
-		_, eof, _ := p.Stdout()
-		_, _, _ = p.Stderr()
-		if eof { // shell exited — correct termination for `exit`
-			return
+	var stderr strings.Builder
+	for i := 0; ; i++ {
+		if i >= maxPolls {
+			t.Fatalf("hang: shell did not recover after %q + Enter within %d polls", prefix, maxPolls)
 		}
-		if isFreshPrompt(p.Next()) {
-			return
+		_, eof, _ := p.Stdout()
+		errOut, _, _ := p.Stderr()
+		for _, d := range errOut {
+			if c, ok := d.(process.Chars); ok {
+				stderr.WriteString(string(c))
+			}
+		}
+		// eof: the shell exited — correct termination for `exit`.
+		if eof || isFreshPrompt(p.Next()) {
+			break
 		}
 	}
-	t.Fatalf("hang: shell did not recover after %q + Enter within %d polls", prefix, maxPolls)
+	// Permission denied is a real consequence; any other error means the
+	// keyboard let the player type something the command rejects.
+	if msg := stderr.String(); msg != "" && !strings.Contains(msg, "permission denied") {
+		t.Errorf("mistake: %q + Enter wrote %q", prefix, msg)
+	}
 }
+
+type stubNx struct{}
+
+func (stubNx) NxQuest() string { return "quest\n" }
+func (stubNx) NxLog() string   { return "log\n" }
+func (stubNx) NxPanic() string { return "panic\n" }
+
+func init() { DefaultNxHandler = stubNx{} }
 
 // isFreshPrompt reports whether the shell looks like it's at an empty
 // prompt (childProcess nil, currentCommand empty). At that point Next()
@@ -775,4 +766,120 @@ func TestShellEmptyEnter(t *testing.T) {
 	if errOut != "" {
 		t.Fatalf("expected no error for empty enter, got %q", errOut)
 	}
+}
+
+// typeable reports whether every key of line is offered as it is typed.
+func typeable(p process.P, line string) bool {
+	for _, r := range line {
+		if !containsDatum(p.Next(), process.Chars(string(r))) {
+			return false
+		}
+		_, _ = p.Stdin(process.Data{process.Chars(string(r))})
+	}
+	return true
+}
+
+func canRun(p process.P, line string) bool {
+	return typeable(p, line) && containsDatum(p.Next(), process.TermEnter)
+}
+
+// TestShellNextInvariant_Lines pins which whole command lines can and
+// can't be typed and run, one per bug class the validators guard.
+func TestShellNextInvariant_Lines(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		ok   bool
+	}{
+		// Pipes take spaces on either side, as in a real shell.
+		{"ls | grep note", true},
+		{"ls|grep note", true},
+		{"cat /etc/hosts | cat", true},
+		{"pwd | cat", true},
+		{"ls | cat | grep x", true},
+		// Builtins and interactive commands don't go in pipelines.
+		{"ls | cd", false},
+		{"cd /home | ls", false},
+		{"exit | ls", false},
+		{"ssh test", true},
+		{"ls | ssh test", false},
+		{"ssh test | cat", false},
+		// grep's pattern can't swallow the pipe.
+		{"ls | grep a|b", false},
+		// cat, grep and rm take files, not folders.
+		{"cat /home/user/notes.txt", true},
+		{"cat /home", false},
+		{"cat .", false},
+		{"cat /", false},
+		{"grep note /home/user/notes.txt", true},
+		{"grep note /home", false},
+		{"rm /home/user/notes.txt", true},
+		{"rm /home/user/docs", false},
+		{"rm .", false},
+		{"rm ..", false},
+		{"rm /", false},
+		// Commands that take no args take none.
+		{"pwd", true},
+		{"pwd x", false},
+		{"exit x", false},
+		// Subcommands are a fixed set.
+		{"nx quest", true},
+		{"nx foo", false},
+		{"nx", false},
+		{"apt list", true},
+		{"apt install grep", false}, // already installed
+		{"apt frob", false},
+		{"apt", false},
+		// sudo takes a command from /bin and that command's args.
+		{"sudo touch /etc/config", true},
+		{"sudo ls", true},
+		{"sudo cd /", false},
+		{"sudo ssh test", false},
+		{"sudo frob", false},
+		{"sudo", false},
+		// touch takes a name in an existing folder.
+		{"touch /home/user/new.txt", true},
+		{"touch /home/user/notes.txt", true},
+		{"touch /nowhere/new.txt", false},
+		{"touch /", false},
+		{"touch /home/", false},
+		{"touch -x", false},
+		// mv takes an existing file and a destination.
+		{"mv /home/user/notes.txt /home/user/n.txt", true},
+		{"mv /home/user/notes.txt /home", true},
+		{"mv /home/user/notes.txt /home/", true},
+		{"mv /home/user/notes.txt /home/user", false}, // same place
+		{"mv /home/user/notes.txt /home/user/notes.txt", false},
+		{"mv /home/user/notes.txt", false},
+		{"mv /home/user/docs /tmp", false},
+	} {
+		_, p := testSetup(t)
+		if got := canRun(p, tc.line); got != tc.ok {
+			t.Errorf("%q: runnable=%v, want %v", tc.line, got, tc.ok)
+		}
+	}
+}
+
+// TestShellNextInvariant_StrandedCwd: if the cwd is deleted from under
+// the player, absolute paths still work, as in a real shell.
+func TestShellNextInvariant_StrandedCwd(t *testing.T) {
+	sim, p := testSetup(t)
+	writeString(t, p, "cd /home/user/docs")
+	writeEnter(t, p)
+	_ = readAllStdout(t, p)
+	c, _ := sim.GetComputer("test")
+	if err := c.Filesystem.DeleteFile([]string{"home", "user"}, "docs", file.OwnerRoot); err != nil {
+		t.Fatal(err)
+	}
+	if !canRun(p, "cd /home") {
+		t.Fatal("cd /home must be typeable from a deleted cwd")
+	}
+}
+
+func TestRegisterRequiresValidArgs(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Register without ValidArgs must panic")
+		}
+	}()
+	simulation.Register("no-validator", &simulation.Binary{Launch: launch})
 }

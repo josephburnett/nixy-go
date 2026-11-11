@@ -9,8 +9,35 @@ import (
 
 func init() {
 	simulation.Register("sudo", &simulation.Binary{
-		Launch: launch,
+		Launch:    launch,
+		ValidArgs: validArgs,
 	})
+}
+
+// validArgs is `sudo COMMAND ARGS...`: a non-interactive command from
+// /bin other than sudo itself, then whatever that command's own
+// validator accepts.
+func validArgs(ctx simulation.ArgContext, partial string) simulation.Suggestion {
+	return command.ValidCommand(ctx, partial, sudoable(ctx), func(name string) (simulation.ValidArgs, bool) {
+		b, err := ctx.Sim.LookupBinary(ctx.Hostname, name)
+		if err != nil {
+			return nil, false
+		}
+		return b.ValidArgs, true
+	})
+}
+
+func sudoable(ctx simulation.ArgContext) []string {
+	var names []string
+	for _, name := range ctx.Sim.Commands(ctx.Hostname) {
+		if name == "sudo" {
+			continue
+		}
+		if b, err := ctx.Sim.LookupBinary(ctx.Hostname, name); err == nil && !b.Interactive {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func launch(
@@ -23,27 +50,13 @@ func launch(
 	if len(args) == 0 {
 		return command.NewErrorProcess(file.OwnerRoot, "sudo: missing command\n"), nil
 	}
-
 	cmdName := args[0]
-	cmdArgs := args[1:]
-
-	// Look up binary in /bin
-	c, err := sim.GetComputer(hostname)
+	b, err := sim.LookupBinary(hostname, cmdName)
 	if err != nil {
-		return nil, err
+		return command.NewErrorProcess(file.OwnerRoot, "sudo: "+err.Error()+"\n"), nil
 	}
-	f, err := c.Filesystem.Navigate([]string{"bin", cmdName})
-	if err != nil {
-		return command.NewErrorProcess(file.OwnerRoot, "sudo: command not found: "+cmdName+"\n"), nil
+	if b.Interactive {
+		return command.NewErrorProcess(file.OwnerRoot, "sudo: "+cmdName+": interactive commands are not supported\n"), nil
 	}
-	if f.Type != file.Binary {
-		return command.NewErrorProcess(file.OwnerRoot, "sudo: not executable: "+cmdName+"\n"), nil
-	}
-	b, err := simulation.GetBinary(f.Data)
-	if err != nil {
-		return nil, err
-	}
-
-	// Launch as root
-	return b.Launch(sim, file.OwnerRoot, hostname, cwd, cmdArgs)
+	return b.Launch(sim, file.OwnerRoot, hostname, cwd, args[1:])
 }

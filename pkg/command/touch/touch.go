@@ -10,11 +10,9 @@ import (
 )
 
 func init() {
-	// No ValidArgs: touch creates new files, so its argument is by definition
-	// not yet in the filesystem. Falling back to the shell's default (any
-	// printable + enter) lets the player type any new name they want.
 	simulation.Register("touch", &simulation.Binary{
-		Launch: launch,
+		Launch:    launch,
+		ValidArgs: command.Positional{Args: []command.Arg{command.NewPath}, Required: 1}.Validate,
 	})
 }
 

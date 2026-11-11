@@ -10,41 +10,18 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
-var _ simulation.ValidArgs = validArgs
-
 func init() {
 	simulation.Register("grep", &simulation.Binary{
-		Launch:       launch,
-		ValidArgs:    validArgs,
-		PipeReceiver: true, // `ls | grep PATTERN` is valid; `grep PATTERN` standalone hangs.
-		// OptionalArgs is false: bare grep errors with "missing pattern",
-		// and grep with one arg standalone returns stdinGrep which hangs.
-		// The validator only adds Enter at the standalone "pattern + file"
-		// state. Pipe-receiver Enter (after just pattern) is added by the
-		// shell when there's a preceding `|`.
+		Launch: launch,
+		// `grep PATTERN FILE`, or `grep PATTERN` reading an upstream
+		// pipe. Standalone `grep PATTERN` would hang: no terminal stdin.
+		ValidArgs: command.Positional{
+			Args:         []command.Arg{command.Pattern, command.FilePath},
+			Required:     2,
+			ReadsStdin:   true,
+			PipeRequired: 1,
+		}.Validate,
 	})
-}
-
-// validArgs gates grep input to "<pattern> <file>" — both required.
-// Pattern phase: any printable except space; once any pattern char is
-// typed, space advances to the file phase. File phase: delegates to
-// ValidArgsFile, which only marks Complete on exact-match against an
-// existing file. Pattern alone is never Complete — bare grep with a
-// pattern hangs (the shell adds pipe-receiver Enter separately).
-func validArgs(sim *simulation.S, hostname string, cwd []string, partial string) simulation.Suggestion {
-	pattern, fileSpec, hasSpace := strings.Cut(partial, " ")
-	if !hasSpace {
-		// Pattern phase.
-		chars := make([]rune, 0, 127-33+1)
-		for c := byte(33); c < 127; c++ { // 33 skips space (0x20)
-			chars = append(chars, rune(c))
-		}
-		if pattern != "" {
-			chars = append(chars, ' ')
-		}
-		return simulation.Suggestion{Chars: chars}
-	}
-	return command.ValidArgsFile(sim, hostname, cwd, fileSpec)
 }
 
 func launch(

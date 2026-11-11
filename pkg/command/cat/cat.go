@@ -12,12 +12,14 @@ import (
 
 func init() {
 	simulation.Register("cat", &simulation.Binary{
-		Launch:       launch,
-		ValidArgs:    command.ValidArgsFile,
-		PipeReceiver: true, // `ls | cat` is valid; `cat` standalone hangs (no terminal stdin)
-		// OptionalArgs is false: standalone `cat<Enter>` hangs because
-		// the game has no terminal stdin to drain. Enter is allowed only
-		// in pipe-receiver position (gated by PipeReceiver above).
+		Launch: launch,
+		// `cat FILE`, or bare `cat` reading an upstream pipe. Standalone
+		// bare cat would hang: the game has no terminal stdin.
+		ValidArgs: command.Positional{
+			Args:       []command.Arg{command.FilePath},
+			Required:   1,
+			ReadsStdin: true,
+		}.Validate,
 	})
 }
 

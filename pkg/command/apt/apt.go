@@ -13,8 +13,32 @@ import (
 func init() {
 	simulation.Register("apt", &simulation.Binary{
 		Launch: launch,
+		ValidArgs: command.Subcommands(map[string]simulation.ValidArgs{
+			"install": command.Positional{Args: []command.Arg{installable}, Required: 1}.Validate,
+			"list":    command.NoArgs,
+		}),
 	})
 }
+
+// installable accepts a known package not yet in /bin. When every
+// package is installed, `apt install` isn't offered at all.
+var installable = command.OneOf(func(ctx simulation.ArgContext) []string {
+	c, err := ctx.Sim.GetComputer(ctx.Hostname)
+	if err != nil {
+		return nil
+	}
+	bin, err := c.Filesystem.Navigate([]string{"bin"})
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, pkg := range packageNames() {
+		if _, installed := bin.Files[pkg]; !installed {
+			out = append(out, pkg)
+		}
+	}
+	return out
+})
 
 // PackageRegistry maps package names to the binary name they provide.
 // Commands must be registered in the simulation binary registry separately.

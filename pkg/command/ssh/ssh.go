@@ -11,8 +11,9 @@ import (
 
 func init() {
 	simulation.Register("ssh", &simulation.Binary{
-		Launch:    launch,
-		ValidArgs: command.ValidArgsHostname,
+		Launch:      launch,
+		ValidArgs:   command.Positional{Args: []command.Arg{command.Hostname}, Required: 1}.Validate,
+		Interactive: true, // opens a remote shell
 	})
 }
 

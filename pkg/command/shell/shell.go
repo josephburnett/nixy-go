@@ -13,7 +13,9 @@ import (
 
 func init() {
 	simulation.Register("shell", &simulation.Binary{
-		Launch: launch,
+		Launch:      launch,
+		ValidArgs:   command.NoArgs,
+		Interactive: true,
 	})
 }
 
@@ -31,8 +33,6 @@ func launch(
 		currentDirectory: cwd,
 	}, nil
 }
-
-var builtins = []string{"cd", "exit", "nx"}
 
 // NxHandler handles nx builtin subcommands. Set by the game layer.
 type NxHandler interface {
@@ -204,18 +204,7 @@ func (s *shell) executeSingle(seg command.Segment) error {
 }
 
 func (s *shell) launchBinary(seg command.Segment) (process.P, error) {
-	c, err := s.simulation.GetComputer(s.hostname)
-	if err != nil {
-		return nil, err
-	}
-	f, err := c.Filesystem.Navigate([]string{"bin", seg.Name})
-	if err != nil {
-		return nil, fmt.Errorf("command not found: %v", seg.Name)
-	}
-	if f.Type != file.Binary {
-		return nil, fmt.Errorf("not executable: %v", seg.Name)
-	}
-	b, err := simulation.GetBinary(f.Data)
+	b, err := s.simulation.LookupBinary(s.hostname, seg.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -357,13 +346,15 @@ func (s *shell) builtinCd(args []string) error {
 
 // Next returns the keystrokes that lead to a correct, executable action
 // at the current cursor position. The invariant: a player can never type
-// something the shell would refuse to run cleanly. Enter and `|` are
-// shell-level "execute this segment" keys, valid only when the current
-// segment is complete.
+// something the shell would refuse to run cleanly.
 //
-// Pipes are handled structurally: command.Parse splits on `|` and we
-// validate only the last segment. Earlier segments are committed —
-// typing `|` was only allowed when the previous segment was complete.
+// Pipes are handled structurally: command.Parse splits on `|` and only
+// the last segment is validated. Earlier segments are committed — `|`
+// was only offered when the previous segment was complete. Everything
+// about the segment itself (which names, which args, when it's complete)
+// comes from the command's ValidArgs, found the same way the shell runs
+// it. The shell adds only the segment-completion keys (Enter, `|`) and
+// the optional space after `|`.
 func (s *shell) Next() []process.Datum {
 	if s.exited {
 		return nil
@@ -373,182 +364,89 @@ func (s *shell) Next() []process.Datum {
 	}
 
 	var valid []process.Datum
-
 	if len(s.currentCommand) > 0 {
 		valid = append(valid, process.TermBackspace)
 	}
 
 	p := command.Parse(s.currentCommand)
 	last := p.Last()
-	// inPipe: at least one earlier segment exists, so the current segment
-	// runs as a pipe receiver. Commands marked PipeReceiver can execute
-	// with fewer args when piped (cat with zero args, grep with just a
-	// pattern) because their stdin comes from upstream rather than
-	// terminal input.
-	inPipe := p.InPipe()
-
-	cmdNames := s.availableCommands()
-
-	if last.Name == "" {
-		// Fresh prompt or fresh segment after a pipe.
-		firstChars := map[byte]bool{}
-		for _, name := range cmdNames {
-			if len(name) > 0 {
-				firstChars[name[0]] = true
-			}
-		}
-		for ch := range firstChars {
-			valid = append(valid, process.Chars(string(ch)))
-		}
-		return valid
+	ctx := simulation.ArgContext{
+		Sim:      s.simulation,
+		Hostname: s.hostname,
+		Cwd:      s.currentDirectory,
+		InPipe:   p.InPipe(),
 	}
-
+	text := last.Name
 	if last.HasArgs {
-		// Args mode for the current segment.
-		canSubmit := false
-		argValidator := s.getArgValidator(last.Name)
-		if argValidator != nil {
-			sug := argValidator(s.simulation, s.hostname, s.currentDirectory, last.PartialArgs)
-			for _, r := range sug.Chars {
-				valid = append(valid, process.Chars(string(r)))
-			}
-			canSubmit = sug.Complete
-		} else {
-			// No validator: any printable is allowed and the arg is always
-			// considered complete (we have no way to know otherwise).
-			for c := byte(32); c < 127; c++ {
-				valid = append(valid, process.Chars(string(c)))
-			}
-			canSubmit = true
-		}
-		// Commands with optional args (ls, pwd) can run as-is when the
-		// partial arg is empty.
-		if last.PartialArgs == "" && commandOptionalArgs(last.Name) {
-			canSubmit = true
-		}
-		// Pipe-receiver position: command reads from upstream pipe, so
-		// fewer args are needed. e.g. `ls | grep target<Enter>` runs
-		// stdinGrep on ls's output.
-		if inPipe && commandReadyInPipe(last.Name, last.PartialArgs) {
-			canSubmit = true
-		}
-		if canSubmit {
-			valid = append(valid, process.TermEnter, process.Chars("|"))
-		}
-		return valid
+		text += " " + last.PartialArgs
 	}
-
-	// Mid-command-name for the current segment.
-	continuations := map[byte]bool{}
-	exactMatch := false
-	for _, name := range cmdNames {
-		if strings.HasPrefix(name, last.Name) {
-			if name == last.Name {
-				exactMatch = true
-			}
-			if len(name) > len(last.Name) {
-				continuations[name[len(last.Name)]] = true
-			}
-		}
+	sug := command.ValidCommand(ctx, text, s.commandNames(ctx.InPipe), s.validator)
+	for _, r := range sug.Chars {
+		valid = append(valid, process.Chars(string(r)))
 	}
-	for ch := range continuations {
-		valid = append(valid, process.Chars(string(ch)))
+	if last.Name == "" && strings.HasSuffix(s.currentCommand, "|") {
+		valid = append(valid, process.Chars(" ")) // `ls | grep`
 	}
-	if exactMatch {
-		valid = append(valid, process.Chars(" ")) // can always type args
-		// Enter and `|` only when the segment is executable as-is. Two cases:
-		// - OptionalArgs (e.g. `ls<Enter>` standalone)
-		// - PipeReceiver in pipe position (e.g. `ls | cat<Enter>` — cat
-		//   runs as stdinCat reading ls's output).
-		// Otherwise the binary itself would reject zero args ("missing
-		// operand"), violating the "no mistakes" invariant.
-		if commandOptionalArgs(last.Name) || (inPipe && commandReadyInPipe(last.Name, "")) {
-			valid = append(valid, process.TermEnter, process.Chars("|"))
+	if sug.Complete {
+		valid = append(valid, process.TermEnter)
+		if s.pipeable(last.Name) {
+			valid = append(valid, process.Chars("|"))
 		}
 	}
 	return valid
 }
 
-// commandReadyInPipe reports whether a command segment is ready to
-// execute as a pipe receiver, given its current partial args.
-//
-//   - cat: always ready in pipe context — bare cat reads stdin from
-//     upstream.
-//   - grep: ready when at least one non-space char of pattern has been
-//     typed; without a pattern, grep errors ("missing pattern").
-//   - others: not ready in pipe context.
-//
-// This is the per-command rule the keyboard uses to decide when Enter
-// is valid in pipe-receiver position.
-func commandReadyInPipe(cmdName, partialArgs string) bool {
-	b, err := simulation.GetBinary(cmdName)
-	if err != nil || !b.PipeReceiver {
-		return false
-	}
-	switch cmdName {
-	case "cat":
-		return true // any args (or none) are fine in pipe context
-	case "grep":
-		// Need at least one pattern char (non-space).
-		return strings.TrimSpace(partialArgs) != ""
-	}
-	return false
+// builtinArgs are the validators for the shell's builtins.
+var builtinArgs = map[string]simulation.ValidArgs{
+	"cd":   command.Positional{Args: []command.Arg{command.CdTarget}}.Validate,
+	"exit": command.NoArgs,
+	"nx": command.Subcommands(map[string]simulation.ValidArgs{
+		"quest": command.NoArgs,
+		"log":   command.NoArgs,
+		"panic": command.NoArgs,
+	}),
 }
 
-// commandOptionalArgs reports whether the named command (binary or
-// builtin) can run with zero args. Used to gate Enter/| at exact-match
-// points so the player can never execute a command that would error on
-// zero args.
-func commandOptionalArgs(name string) bool {
-	switch name {
-	case "cd", "exit": // builtins that take no args (cd → /, exit terminates)
-		return true
-	case "nx": // requires subcommand
-		return false
+// commandNames lists what may be typed in command position: builtins
+// and /bin, or in a pipe segment only the binaries that can be piped.
+func (s *shell) commandNames(inPipe bool) []string {
+	var names []string
+	if !inPipe {
+		for name := range builtinArgs {
+			names = append(names, name)
+		}
 	}
-	if b, err := simulation.GetBinary(name); err == nil {
-		return b.OptionalArgs
-	}
-	return false
-}
-
-func (s *shell) getArgValidator(cmdName string) simulation.ValidArgs {
-	// Check builtins first
-	switch cmdName {
-	case "cd":
-		return command.ValidArgsCd
-	}
-	// Check binary registry
-	c, err := s.simulation.GetComputer(s.hostname)
-	if err != nil {
-		return nil
-	}
-	f, err := c.Filesystem.Navigate([]string{"bin", cmdName})
-	if err != nil {
-		return nil
-	}
-	b, err := simulation.GetBinary(f.Data)
-	if err != nil {
-		return nil
-	}
-	return b.ValidArgs
-}
-
-func (s *shell) availableCommands() []string {
-	names := append([]string{}, builtins...)
-	c, err := s.simulation.GetComputer(s.hostname)
-	if err != nil {
-		return names
-	}
-	binDir, err := c.Filesystem.Navigate([]string{"bin"})
-	if err != nil {
-		return names
-	}
-	for name := range binDir.Files {
-		names = append(names, name)
+	for _, name := range s.simulation.Commands(s.hostname) {
+		if !inPipe || s.pipeable(name) {
+			names = append(names, name)
+		}
 	}
 	sort.Strings(names)
 	return names
+}
+
+// validator finds a command's args validator: builtins first, then the
+// binary at /bin/<name>.
+func (s *shell) validator(name string) (simulation.ValidArgs, bool) {
+	if va, ok := builtinArgs[name]; ok {
+		return va, true
+	}
+	b, err := s.simulation.LookupBinary(s.hostname, name)
+	if err != nil {
+		return nil, false
+	}
+	return b.ValidArgs, true
+}
+
+// pipeable reports whether a command can sit on either side of `|`: a
+// binary that doesn't take over the terminal. Builtins change the shell
+// itself, which a pipeline segment can't do.
+func (s *shell) pipeable(name string) bool {
+	if _, ok := builtinArgs[name]; ok {
+		return false
+	}
+	b, err := s.simulation.LookupBinary(s.hostname, name)
+	return err == nil && !b.Interactive
 }
 
 func (s *shell) Owner() string {

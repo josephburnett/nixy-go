@@ -21,6 +21,12 @@ func testSetup(t *testing.T) *simulation.S {
 					"old.txt": {Type: file.Text, Owner: "user",
 						OwnerPermission: file.Write, CommonPermission: file.Read,
 						Data: "content"},
+					"other.txt": {Type: file.Text, Owner: "user",
+						OwnerPermission: file.Write, CommonPermission: file.Read,
+						Data: "other"},
+					"dir": {Type: file.Folder, Owner: "user",
+						OwnerPermission: file.Write, CommonPermission: file.Read,
+						Files: map[string]*file.F{}},
 				}},
 		},
 	}
@@ -79,5 +85,51 @@ func TestMvNoArgs(t *testing.T) {
 	errOut := stderr(t, p)
 	if !strings.Contains(errOut, "missing operand") {
 		t.Fatalf("expected missing operand, got %q", errOut)
+	}
+}
+
+func TestMvIntoFolder(t *testing.T) {
+	for _, dst := range []string{"home/dir", "home/dir/"} {
+		sim := testSetup(t)
+		p, _ := launch(sim, "user", "test", []string{}, []string{"home/old.txt", dst})
+		if errOut := stderr(t, p); errOut != "" {
+			t.Fatalf("mv into %q: unexpected error %q", dst, errOut)
+		}
+		c, _ := sim.GetComputer("test")
+		if _, err := c.Filesystem.Navigate([]string{"home", "dir", "old.txt"}); err != nil {
+			t.Fatalf("mv into %q: file should be in dir", dst)
+		}
+		if _, err := c.Filesystem.Navigate([]string{"home", "old.txt"}); err == nil {
+			t.Fatalf("mv into %q: source should be gone", dst)
+		}
+	}
+}
+
+func TestMvOverwritesFile(t *testing.T) {
+	sim := testSetup(t)
+	p, _ := launch(sim, "user", "test", []string{"home"}, []string{"old.txt", "other.txt"})
+	if errOut := stderr(t, p); errOut != "" {
+		t.Fatalf("unexpected error: %q", errOut)
+	}
+	c, _ := sim.GetComputer("test")
+	f, err := c.Filesystem.Navigate([]string{"home", "other.txt"})
+	if err != nil || f.Data != "content" {
+		t.Fatal("other.txt should now hold old.txt's content")
+	}
+}
+
+func TestMvSameFile(t *testing.T) {
+	sim := testSetup(t)
+	p, _ := launch(sim, "user", "test", []string{"home"}, []string{"old.txt", "."})
+	if errOut := stderr(t, p); !strings.Contains(errOut, "same file") {
+		t.Fatalf("expected same file error, got %q", errOut)
+	}
+}
+
+func TestMvTrailingSlashNotADirectory(t *testing.T) {
+	sim := testSetup(t)
+	p, _ := launch(sim, "user", "test", []string{"home"}, []string{"old.txt", "nope/"})
+	if errOut := stderr(t, p); !strings.Contains(errOut, "not a directory") {
+		t.Fatalf("expected not a directory, got %q", errOut)
 	}
 }

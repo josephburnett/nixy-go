@@ -12,6 +12,7 @@ func init() {
 		Launch: func(_ *S, owner, hostname string, cwd, args []string) (process.P, error) {
 			return &testProcess{owner: owner}, nil
 		},
+		ValidArgs: func(ArgContext, string) Suggestion { return Suggestion{Complete: true} },
 	})
 }
 

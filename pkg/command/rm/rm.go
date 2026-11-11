@@ -11,8 +11,9 @@ import (
 
 func init() {
 	simulation.Register("rm", &simulation.Binary{
-		Launch:    launch,
-		ValidArgs: command.ValidArgsFile,
+		Launch: launch,
+		// Files only: real rm refuses folders without -r.
+		ValidArgs: command.Positional{Args: []command.Arg{command.FilePath}, Required: 1}.Validate,
 	})
 }
 
