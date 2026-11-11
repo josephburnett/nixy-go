@@ -17,10 +17,6 @@ func New(filesystem *file.F) *C {
 	}
 }
 
-func (c *C) Boot() error {
-	return nil
-}
-
 // Add puts a process started by command in the process table and
 // returns its PID. It leaves the table when it exits.
 func (c *C) Add(p process.P, command string) int {

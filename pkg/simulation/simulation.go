@@ -240,12 +240,7 @@ func (s *S) Boot(hostname string, filesystem *file.F) error {
 	if _, present := s.computers[hostname]; present {
 		return fmt.Errorf("host %v already present", hostname)
 	}
-	c := computer.New(filesystem)
-	err := c.Boot()
-	if err != nil {
-		return err
-	}
-	s.computers[hostname] = c
+	s.computers[hostname] = computer.New(filesystem)
 	return nil
 }
 

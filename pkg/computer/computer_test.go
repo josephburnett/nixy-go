@@ -23,16 +23,6 @@ func TestNewComputer(t *testing.T) {
 	}
 }
 
-func TestComputerBoot(t *testing.T) {
-	fs := &file.F{Type: file.Folder, Owner: file.OwnerRoot,
-		OwnerPermission: file.Write, CommonPermission: file.Read}
-	c := New(fs)
-	err := c.Boot()
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestComputerKillNeedsOwnerOrRoot(t *testing.T) {
 	c := New(&file.F{Type: file.Folder, Owner: file.OwnerRoot})
 	pid := c.Add(&mockProcess{}, "cat") // owned by "user"
