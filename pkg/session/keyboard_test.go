@@ -343,20 +343,28 @@ func (w *walkWorld) typeable(line string) bool {
 	return ok
 }
 
-// next returns the valid keys after typing line (which must be typeable).
+// next returns the valid keys after typing line. The walk only reaches
+// a line through keys the keyboard offered (or checks it with
+// typeable), so it is typed straight into the shell, without the
+// guide re-validating every key: that replay was most of the walk's
+// time.
 func (w *walkWorld) next(t *testing.T, line string) []process.Datum {
 	t.Helper()
-	for _, r := range line {
-		if err := w.g.Stdin(process.Data{process.Chars(string(r))}); err != nil {
-			t.Fatalf("replaying %q: %q rejected", line, string(r))
-		}
-	}
+	typeRaw(t, w.shell, line)
 	next := w.g.Next()
-	for range line {
-		_ = w.g.Stdin(process.Data{process.TermBackspace})
-	}
+	_ = w.shell.Stdin(process.Data{process.TermClear})
 	drain(w.g)
 	return next
+}
+
+// typeRaw types line into p key by key, as the guide would pass it.
+func typeRaw(t *testing.T, p process.P, line string) {
+	t.Helper()
+	for _, r := range line {
+		if err := p.Stdin(process.Data{process.Chars(string(r))}); err != nil {
+			t.Fatalf("typing %q: %v", line, err)
+		}
+	}
 }
 
 // checkEnter types line on a fresh world, presses Enter, and verifies the
@@ -368,21 +376,15 @@ func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 	t.Helper()
 	g := w.freshShell(t)
 	before := w.dumpWorld()
-	for _, r := range line {
-		if err := g.Stdin(process.Data{process.Chars(string(r))}); err != nil {
-			if strings.Contains(line, "kill ") {
-				// An earlier check killed that process; files are
-				// restored between checks, the process table isn't.
-				return
-			}
-			t.Errorf("%q can't be typed on a fresh shell (%q rejected)", line, string(r))
-			return
-		}
-	}
+	// The walk typed line key by key in this same world, so it is typed
+	// raw here; the guide still has to accept Enter.
+	typeRaw(t, w.shell, line)
 	drain(g)
 	if err := g.Stdin(process.Data{process.TermEnter}); err != nil {
 		if strings.Contains(line, "kill ") {
-			return // as above: the PID typed is a prefix of a live one
+			// An earlier check killed that process; files are
+			// restored between checks, the process table isn't.
+			return
 		}
 		t.Errorf("%q + Enter is rejected on a fresh shell", line)
 		return
