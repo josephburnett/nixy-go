@@ -4,35 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
-
-// yes writes a line on every read and never exits: a pipe source that
-// never sends EOF.
-type yes struct {
-	process.Written
-	owner string
-}
-
-func (y *yes) Read() []process.Output {
-	return []process.Output{{Stream: process.Stdout, Data: process.CharsData("y\n")}}
-}
-func (y *yes) Stdin(process.Data) error { return process.ErrNoInput }
-func (y *yes) Next() []process.Datum    { return nil }
-func (y *yes) Owner() string            { return y.owner }
-
-func init() {
-	simulation.Register("yes", &simulation.Binary{
-		Launch: func(_ *simulation.S, owner, _ string, _, _ []string) (process.P, error) {
-			return &yes{owner: owner}, nil
-		},
-		ValidArgs: func(simulation.ArgContext, string) simulation.Suggestion {
-			return simulation.Suggestion{Complete: true}
-		},
-	})
-}
 
 // run types line and Enter into the shell, without the keyboard's
 // checks, and returns everything written until the shell goes quiet.
@@ -163,10 +137,7 @@ func TestExitStatusWhileRunning(t *testing.T) {
 // TestPipelineNeverEndingSourceDoesNotHang: a source that never sends
 // EOF makes each read return, a step at a time.
 func TestPipelineNeverEndingSourceDoesNotHang(t *testing.T) {
-	sim, p := loginSetup(t)
-	c, _ := sim.GetComputer("test")
-	c.Filesystem.Files["bin"].Files["yes"] = &file.F{Type: file.Binary, Owner: file.OwnerRoot,
-		OwnerPermission: file.Write, CommonPermission: file.Read, Data: "yes"}
+	_, p := loginSetup(t)
 	writeString(t, p, "yes | cat")
 	writeEnter(t, p)
 	for range 100 {

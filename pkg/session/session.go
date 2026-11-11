@@ -388,6 +388,12 @@ func (s *Session) updatePlayingTerminal(t *terminal.T) {
 	t.SetPromptTarget(s.Game.GetPlannedCommand(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 	valid := s.Guide.Next()
 	hint := s.Game.GetHint(s.Shell.Hostname(), s.Shell.CurrentDirectory(), s.Shell.CurrentCommand())
+	if !slices.Contains(valid, hint) {
+		// The planner plans command lines; while one runs (only ^C
+		// is offered), or if its plan has gone stale, a hint on a key
+		// that does nothing is worse than none.
+		hint = nil
+	}
 	t.SetKeyboard(valid, hint)
 	t.SetThought(s.Game.GetThought(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 }

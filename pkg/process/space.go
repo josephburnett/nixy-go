@@ -63,15 +63,16 @@ func (ps *Space) Get(pid int) (P, bool) {
 	return e.p, ok
 }
 
-// Kill kills the process with pid. Who may do so is the caller's
-// check (see computer.C.Kill).
-func (ps *Space) Kill(pid int) error {
+// Signal sends sig to the process with pid. Who may do so is the
+// caller's check (see computer.C.Signal). A process that dies of it
+// leaves the table.
+func (ps *Space) Signal(pid int, sig Signal) error {
 	p, ok := ps.Get(pid)
 	if !ok {
 		return ErrNoProcess
 	}
-	p.Kill()
-	delete(ps.processes, pid)
+	p.Signal(sig)
+	ps.prune()
 	return nil
 }
 

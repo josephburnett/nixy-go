@@ -3,21 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	_ "github.com/josephburnett/nixy-go/pkg/command/apt"
-	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
-	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
-	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
-	_ "github.com/josephburnett/nixy-go/pkg/command/mv"
-	_ "github.com/josephburnett/nixy-go/pkg/command/pwd"
-	_ "github.com/josephburnett/nixy-go/pkg/command/rm"
-	_ "github.com/josephburnett/nixy-go/pkg/command/shell"
-	_ "github.com/josephburnett/nixy-go/pkg/command/ssh"
-	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
-	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
+	_ "github.com/josephburnett/nixy-go/pkg/command/all"
 
 	"github.com/josephburnett/nixy-go/pkg/debug"
 	"github.com/josephburnett/nixy-go/pkg/process"
@@ -83,6 +74,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.Type {
 		case tea.KeyCtrlC:
+			// With a command running, Ctrl+C interrupts it (SIGINT).
+			// At a prompt it is the double-press quit.
+			if slices.Contains(m.terminal.State.ValidKeys, process.Datum(process.SigInt)) {
+				m.lastCtrlC = time.Time{}
+				m.terminal.Notify("")
+				datum = process.SigInt
+				break
+			}
 			if time.Since(m.lastCtrlC) < ctrlCWindow {
 				m.quitting = true
 				return m, tea.Quit

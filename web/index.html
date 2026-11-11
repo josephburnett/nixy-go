@@ -68,6 +68,14 @@
                     e.preventDefault();
                     return;
                 }
+                // Ctrl+C interrupts a running command, unless there is
+                // text selected to copy.
+                if (e.ctrlKey && !e.altKey && !e.metaKey && e.key === "c"
+                    && String(window.getSelection()) === "") {
+                    show(nixyKeystroke("^C"));
+                    e.preventDefault();
+                    return;
+                }
                 if (e.ctrlKey || e.altKey || e.metaKey) {
                     return;
                 }

@@ -260,7 +260,7 @@ func layoutKeyboard(valid []process.Datum, hint process.Datum, width int) []Rend
 			if i > 0 {
 				line = append(line, Segment{Text: " "})
 			}
-			line = append(line, layoutKey(key, process.Chars(key), validSet, hint))
+			line = append(line, layoutKey(key, KeyDatum(key), validSet, hint))
 		}
 		lines = append(lines, line)
 	}

@@ -32,9 +32,9 @@ func (c *C) Processes() []process.Info {
 	return c.processes.List()
 }
 
-// Kill kills process pid on behalf of user, which only its owner and
-// root may do, as with kill(2).
-func (c *C) Kill(pid int, user string) error {
+// Signal sends sig to process pid on behalf of user, which only its
+// owner and root may do, as with kill(2).
+func (c *C) Signal(pid int, user string, sig process.Signal) error {
 	p, ok := c.processes.Get(pid)
 	if !ok {
 		return process.ErrNoProcess
@@ -42,5 +42,10 @@ func (c *C) Kill(pid int, user string) error {
 	if user != file.OwnerRoot && user != p.Owner() {
 		return process.ErrNotPermitted
 	}
-	return c.processes.Kill(pid)
+	return c.processes.Signal(pid, sig)
+}
+
+// Kill is Signal with SIGKILL.
+func (c *C) Kill(pid int, user string) error {
+	return c.Signal(pid, user, process.SigKill)
 }

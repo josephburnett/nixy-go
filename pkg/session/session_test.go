@@ -4,17 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/josephburnett/nixy-go/pkg/command/apt"
-	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
-	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
-	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
-	_ "github.com/josephburnett/nixy-go/pkg/command/mv"
-	_ "github.com/josephburnett/nixy-go/pkg/command/pwd"
-	_ "github.com/josephburnett/nixy-go/pkg/command/rm"
-	_ "github.com/josephburnett/nixy-go/pkg/command/shell"
-	_ "github.com/josephburnett/nixy-go/pkg/command/ssh"
-	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
-	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
+	_ "github.com/josephburnett/nixy-go/pkg/command/all"
 
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/game"

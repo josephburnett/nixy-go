@@ -59,7 +59,10 @@ type shell struct {
 	// job is the command line running in the foreground: a command, a
 	// pipeline, or the remote shell of an ssh. Keys go to it until it
 	// exits.
-	job              process.P
+	job process.P
+	// jobInteractive: the job takes over the terminal (ssh), so every
+	// key, Ctrl+C included, is its to handle.
+	jobInteractive   bool
 	currentDirectory []string
 	currentCommand   string
 	status           int  // $?: the last command line's exit status
@@ -74,10 +77,27 @@ func (s *shell) Read() []process.Output {
 		if status, done := s.job.Exit(); done {
 			s.writeAll(s.job.Read())
 			s.job = nil
+			if msg := signalMessage(status); msg != "" {
+				s.Write(process.Stderr, process.CharsData(msg+"\n"))
+			}
 			s.setStatus(status)
 		}
 	}
 	return s.Written.Read()
+}
+
+// signalMessage is what bash reports when a foreground job dies of a
+// signal. SIGINT (the ^C is already on screen) and SIGPIPE are silent.
+func signalMessage(status int) string {
+	switch status {
+	case process.SigKill.Status():
+		return "Killed"
+	case process.SigTerm.Status():
+		return "Terminated"
+	case process.SigHup.Status():
+		return "Hangup"
+	}
+	return ""
 }
 
 func (s *shell) writeAll(outs []process.Output) {
@@ -101,6 +121,12 @@ func (s *shell) Stdin(d process.Data) error {
 		return process.ErrNoInput
 	}
 	if s.job != nil {
+		if len(d) == 1 && d[0] == process.SigInt && !s.jobInteractive {
+			// Ctrl+C: the terminal echoes ^C and the job gets SIGINT.
+			s.Write(process.Stdout, process.CharsData("^C\n"))
+			s.job.Signal(process.SigInt)
+			return nil
+		}
 		return s.job.Stdin(d)
 	}
 
@@ -193,7 +219,7 @@ func (s *shell) executeCommand(cmd string) {
 		}
 		stages = append(stages, p)
 	}
-	s.job = &pipeline{stages: stages, closed: make([]bool, len(stages))}
+	s.job, s.jobInteractive = &pipeline{stages: stages, closed: make([]bool, len(stages))}, false
 }
 
 // lookupStatus is the shell's status for a command it couldn't start:
@@ -235,7 +261,7 @@ func (s *shell) executeSingle(seg command.Segment) {
 		s.fail(1, err.Error())
 		return
 	}
-	s.job = p
+	s.job, s.jobInteractive = p, b.Interactive
 }
 
 func (s *shell) builtinNx(args []string) {
@@ -339,6 +365,12 @@ func (p *pipeline) Read() []process.Output {
 			p.closed[i] = true
 			p.stages[i+1].CloseStdin()
 		}
+		if !exited && i < last {
+			if _, readerDone := p.stages[i+1].Exit(); readerDone {
+				// Writing to a pipe nobody reads: SIGPIPE (`yes | head`).
+				st.Signal(process.SigPipe)
+			}
+		}
 	}
 	return out
 }
@@ -360,6 +392,14 @@ func (p *pipeline) Owner() string               { return p.stages[0].Owner() }
 func (p *pipeline) Kill() {
 	for _, st := range p.stages {
 		st.Kill()
+	}
+}
+
+// Signal goes to every stage, as Ctrl+C reaches the whole foreground
+// process group.
+func (p *pipeline) Signal(sig process.Signal) {
+	for _, st := range p.stages {
+		st.Signal(sig)
 	}
 }
 
@@ -410,7 +450,12 @@ func (s *shell) Next() []process.Datum {
 		return nil
 	}
 	if s.job != nil {
-		return s.job.Next()
+		next := s.job.Next()
+		if !s.jobInteractive {
+			// Ctrl+C is always a way out of a running command.
+			next = append(next, process.SigInt)
+		}
+		return next
 	}
 
 	var valid []process.Datum
@@ -526,6 +571,22 @@ func (s *shell) pipeable(name string) bool {
 
 func (s *shell) Owner() string {
 	return s.owner
+}
+
+// Signal: an interactive shell ignores SIGINT and SIGTERM, as bash
+// does (Ctrl+C at a prompt, or `kill` of the shell, does nothing).
+// SIGHUP ends it and its job; SIGKILL kills it.
+func (s *shell) Signal(sig process.Signal) {
+	switch sig {
+	case process.SigKill:
+		s.Kill()
+	case process.SigHup:
+		if s.job != nil {
+			s.job.Signal(process.SigHup)
+			s.job = nil
+		}
+		s.Finish(sig.Status())
+	}
 }
 
 // Kill ends the shell and its job.

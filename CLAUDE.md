@@ -86,8 +86,10 @@ Implementation:
   - `TestKeyboardWalk_NoMistakes` (`pkg/session/`) walks the keyboard
     (`|` included) over the real worlds at several world states and
     checks every reachable state: never a dead end (some key besides
-    Backspace), every Enter terminates with no stderr but permission
-    denied, and a pipeline leaves every file as it was.
+    Backspace), every Enter terminates (by itself, or a command that
+    never ends, like `yes`, by Ctrl+C, which must then be offered)
+    with no stderr but permission denied, and a pipeline leaves every
+    file as it was.
     Reaching each scenario types the planner's commands key by key.
   - `TestShellNextInvariant_EveryEnterStateTerminates` does the same on
     a small fixture with every command; `TestShellNextInvariant_Lines`
@@ -188,6 +190,25 @@ Concrete implications (these all flow from this single principle):
   data one step per `Read`, and the session reads a bounded number of
   times per keystroke, so a source that never ends can't freeze the
   game.
+- **Signals are real.** `P.Signal(sig)` delivers one; the default
+  (`Written.Signal`) is to die of it with status 128+n (`SigInt` 130,
+  `SigPipe` 141, `SigTerm` 143; `SigKill` is `Kill`, 137).
+  `computer.C.Signal(pid, user, sig)` is kill(2): owner or root only.
+  Interactive shells ignore SIGINT and SIGTERM like bash (SIGHUP and
+  SIGKILL end them). A pipeline signals every stage, and a stage whose
+  reader has exited gets SIGPIPE, so `yes | head` ends. When a
+  foreground job dies of SIGKILL/SIGTERM/SIGHUP the shell prints
+  `Killed`/`Terminated`/`Hangup` on stderr, as bash does.
+- **Ctrl+C is SIGINT to the foreground job.** While a command runs,
+  the shell offers `process.SigInt` as a key (on top of whatever the
+  job offers), echoes `^C` and signals the job; `$?` is 130. It is not
+  offered at an idle prompt, nor by a shell whose job is interactive
+  (ssh): there the remote shell decides, by the same rule. So a
+  command that never ends (`yes`) always leaves a way out, and the
+  keyboard is never empty. The key is `^C` on the on-screen keyboard
+  (`terminal.KeyName`); the CLI sends it on Ctrl+C only when it is
+  offered, and the web build maps Ctrl+C to it unless text is
+  selected.
 
 When choosing how to fix a bug or add a feature, ask: *would this
 choice make sense in real Unix?* If it papers over a real concept,
@@ -277,7 +298,9 @@ suite for both.
 
 - `cmd/repl/` — CLI via Bubbletea. Handles `tea.KeyMsg` → `process.Datum`
   and `tea.WindowSizeMsg` for resize. Owns Ctrl+C double-press exit and
-  Ctrl+\ snapshot dump.
+  Ctrl+\ snapshot dump. Ctrl+C is SIGINT instead whenever the keyboard
+  offers `^C` (a command is running); only at a prompt does it count
+  toward the double-press quit.
 - `cmd/web/` — WASM via `syscall/js`. Exports `nixyInit`,
   `nixyKeystroke`, `nixyResize`, `nixyDumpState` to JavaScript.
   The on-screen keyboard is tappable: `Layout()` sets `Segment.Key` on
@@ -333,7 +356,9 @@ Fuzz and liveness tests with different goals:
   `Session.HandleKeystroke`, the same chokepoint used by both CLI and
   web. The canary for end-to-end correctness. Every key is typed
   through `pressAccepted`, which fails if the keyboard doesn't offer
-  it or if the hint key isn't itself valid.
+  it or if the hint key isn't itself valid. (The session drops a hint
+  the keyboard doesn't offer: the planner plans command lines, so
+  while one runs, with only ^C offered, it shows no hint.)
 - `TestFuzzE2ERandomKeys` (`pkg/session/`) — random valid keys (half
   the time the hint) through the same chokepoint, wandering into rm,
   mv, sudo and long pipelines, and on through logouts, logins and nx
@@ -375,4 +400,8 @@ a path" is too lenient.
   built from the parts in `pkg/command/args.go` (usually
   `Positional`), and `Interactive` if they take over the terminal.
   Add the command to `testBinaries` in `pkg/command/shell/shell_test.go`
-  so the structural walk covers it.
+  so the structural walk covers it, import it in `pkg/command/all`
+  (what the front ends and session tests import), and give it an apt
+  package in `apt.PackageRegistry` (`TestEveryPackageIsRegistered`
+  checks every package runs). Worlds ship the basics; the rest are a
+  `sudo apt install` away, which is where quests teach them.

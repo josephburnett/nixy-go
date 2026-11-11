@@ -138,7 +138,7 @@ func allKeyboardDatums() []process.Datum {
 	var all []process.Datum
 	for _, row := range keyboardRows {
 		for _, k := range row {
-			all = append(all, process.Chars(k))
+			all = append(all, KeyDatum(k))
 		}
 	}
 	for _, sk := range specialKeys {

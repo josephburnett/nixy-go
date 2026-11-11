@@ -53,6 +53,7 @@ var PackageRegistry = map[string]string{
 	"pwd":   "pwd",
 	"ssh":   "ssh",
 	"sudo":  "sudo",
+	"yes":   "yes",
 	"apt":   "apt",
 }
 

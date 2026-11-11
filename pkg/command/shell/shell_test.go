@@ -15,6 +15,7 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/ssh"
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
+	_ "github.com/josephburnett/nixy-go/pkg/command/yes"
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
@@ -22,7 +23,7 @@ import (
 
 // testBinaries are installed in the fixture's /bin: every registered
 // command, so the structural tests cover them all.
-var testBinaries = []string{"apt", "cat", "grep", "ls", "mv", "pwd", "rm", "ssh", "sudo", "touch"}
+var testBinaries = []string{"apt", "cat", "grep", "ls", "mv", "pwd", "rm", "ssh", "sudo", "touch", "yes"}
 
 func testFS() *file.F {
 	dir := func(owner string, files map[string]*file.F) *file.F {
@@ -136,15 +137,8 @@ func readAllStderr(t *testing.T, p process.P) string {
 
 func containsDatum(datums []process.Datum, target process.Datum) bool {
 	for _, d := range datums {
-		switch d := d.(type) {
-		case process.Chars:
-			if t, ok := target.(process.Chars); ok && d == t {
-				return true
-			}
-		case process.TermCode:
-			if t, ok := target.(process.TermCode); ok && d == t {
-				return true
-			}
+		if d == target {
+			return true
 		}
 	}
 	return false
@@ -495,9 +489,16 @@ func verifyEnterTerminates(t *testing.T, prefix string, maxPolls int) {
 	_ = p.Stdin(process.Data{process.TermEnter})
 
 	var stderr strings.Builder
+	interrupted := false
 	for i := 0; ; i++ {
 		if i >= maxPolls {
-			t.Fatalf("hang: shell did not recover after %q + Enter within %d polls", prefix, maxPolls)
+			// A command may run forever (yes), but then Ctrl+C must be
+			// offered and must end it.
+			if interrupted || !containsDatum(p.Next(), process.SigInt) {
+				t.Fatalf("hang: shell did not recover after %q + Enter within %d polls", prefix, maxPolls)
+			}
+			_ = p.Stdin(process.Data{process.SigInt})
+			interrupted, i = true, 0
 		}
 		stderr.WriteString(process.Text(p.Read(), process.Stderr))
 		// The shell exited: correct termination for `exit`.

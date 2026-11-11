@@ -42,8 +42,13 @@ type P interface {
 	// Owner returns the user who owns this process.
 	Owner() string
 	// Kill terminates the process: it exits with KilledStatus, and
-	// output it hasn't been read is lost.
+	// output it hasn't been read is lost. It is SIGKILL, which no
+	// process can catch.
 	Kill()
+	// Signal delivers sig. Unless the process handles it, it dies of
+	// it (exit status sig.Status()); SigKill is Kill. Interactive
+	// shells ignore SIGINT and SIGTERM, as bash does.
+	Signal(sig Signal)
 	// Exit reports whether the process has exited, and its exit status.
 	// Read once more after exiting to collect what it wrote last.
 	Exit() (status int, exited bool)
@@ -51,7 +56,7 @@ type P interface {
 
 // KilledStatus is the exit status of a killed process: 128 + SIGKILL,
 // as a shell reports it.
-const KilledStatus = 128 + 9
+const KilledStatus = 128 + 9 // SigKill.Status()
 
 // Text returns the characters in outs written to stream.
 func Text(outs []Output, stream Stream) string {
@@ -104,6 +109,16 @@ func (w *Written) CloseStdin() {}
 func (w *Written) Kill() {
 	w.out = nil
 	w.Finish(KilledStatus)
+}
+
+// Signal is the default action for sig: die of it, keeping what was
+// written before. SigKill is Kill.
+func (w *Written) Signal(sig Signal) {
+	if sig == SigKill {
+		w.Kill()
+		return
+	}
+	w.Finish(sig.Status())
 }
 
 // ErrNoInput is what Stdin returns for a process that takes no input.

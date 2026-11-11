@@ -6,11 +6,14 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-// keyboardRows defines the qwerty layout.
+// keyboardRows defines the qwerty layout. Each key is its KeyName.
+// Keys that don't fit the special row (it must fit a phone) go at the
+// end of the shorter letter rows: ~, and ^C, which interrupts a
+// running command.
 var keyboardRows = [][]string{
 	{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"},
 	{"a", "s", "d", "f", "g", "h", "j", "k", "l"},
-	{"z", "x", "c", "v", "b", "n", "m", "~"}, // ~ fits here; the special row is full
+	{"z", "x", "c", "v", "b", "n", "m", "~", "^C"},
 }
 
 // specialKeys are shown on the bottom row. The row is wider than the
@@ -61,12 +64,14 @@ func specialRowLabels(width int) []string {
 type datumSet struct {
 	chars     map[string]bool
 	termCodes map[process.TermCode]bool
+	signals   map[process.Signal]bool
 }
 
 func buildDatumSet(datums []process.Datum) datumSet {
 	s := datumSet{
 		chars:     map[string]bool{},
 		termCodes: map[process.TermCode]bool{},
+		signals:   map[process.Signal]bool{},
 	}
 	for _, d := range datums {
 		switch d := d.(type) {
@@ -74,6 +79,8 @@ func buildDatumSet(datums []process.Datum) datumSet {
 			s.chars[string(d)] = true
 		case process.TermCode:
 			s.termCodes[d] = true
+		case process.Signal:
+			s.signals[d] = true
 		}
 	}
 	return s
@@ -85,13 +92,16 @@ func (s datumSet) contains(d process.Datum) bool {
 		return s.chars[string(d)]
 	case process.TermCode:
 		return s.termCodes[d]
+	case process.Signal:
+		return s.signals[d]
 	}
 	return false
 }
 
 // KeyName is the name a front end uses for a keystroke: "Enter",
-// "Backspace", or the character itself. It matches DOM KeyboardEvent.key,
-// so the web build sends typed and tapped keys the same way.
+// "Backspace", "^C" (Ctrl+C), or the character itself. Apart from ^C it
+// matches DOM KeyboardEvent.key, so the web build sends typed and
+// tapped keys the same way (it maps Ctrl+C to "^C" itself).
 func KeyName(d process.Datum) string {
 	switch d := d.(type) {
 	case process.Chars:
@@ -102,6 +112,10 @@ func KeyName(d process.Datum) string {
 			return "Enter"
 		case process.TermBackspace:
 			return "Backspace"
+		}
+	case process.Signal:
+		if d == process.SigInt {
+			return "^C"
 		}
 	}
 	return ""
@@ -115,6 +129,8 @@ func KeyDatum(name string) process.Datum {
 		return process.TermEnter
 	case "Backspace":
 		return process.TermBackspace
+	case "^C":
+		return process.SigInt
 	}
 	if utf8.RuneCountInString(name) == 1 {
 		return process.Chars(name)
@@ -130,6 +146,10 @@ func datumEqual(a, b process.Datum) bool {
 		}
 	case process.TermCode:
 		if b, ok := b.(process.TermCode); ok {
+			return a == b
+		}
+	case process.Signal:
+		if b, ok := b.(process.Signal); ok {
 			return a == b
 		}
 	}

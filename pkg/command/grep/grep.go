@@ -76,23 +76,42 @@ func result(owner, matches string) process.P {
 	return command.Exited(owner, matches, "", status)
 }
 
-// stdinGrep filters stdin, matching once its input closes.
+// stdinGrep filters stdin a line at a time, as real grep does, so a
+// source that never ends (`yes | grep y`) still shows its matches.
 type stdinGrep struct {
 	process.Written
 	owner   string
 	pattern string
-	buf     strings.Builder
+	partial string // the start of a line not yet ended
+	matched bool
 }
 
 func (g *stdinGrep) Stdin(in process.Data) error {
-	g.buf.WriteString(in.String())
+	data := g.partial + in.String()
+	end := strings.LastIndex(data, "\n")
+	if end < 0 {
+		g.partial = data
+		return nil
+	}
+	g.partial = data[end+1:]
+	g.match(data[:end+1])
 	return nil
 }
 
+func (g *stdinGrep) match(lines string) {
+	if m := filterLines(lines, g.pattern); m != "" {
+		g.matched = true
+		g.Write(process.Stdout, process.CharsData(m))
+	}
+}
+
+// CloseStdin matches the last, unended line and exits: 1 when nothing
+// matched.
 func (g *stdinGrep) CloseStdin() {
-	matches := filterLines(g.buf.String(), g.pattern)
-	if matches != "" {
-		g.Write(process.Stdout, process.CharsData(matches))
+	if g.partial != "" {
+		g.match(g.partial)
+	}
+	if g.matched {
 		g.Finish(0)
 	}
 	g.Finish(1)

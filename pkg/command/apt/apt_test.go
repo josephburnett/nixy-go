@@ -1,6 +1,7 @@
 package apt
 
 import (
+	"sort"
 	"strings"
 	"testing"
 
@@ -98,8 +99,8 @@ func TestAptList(t *testing.T) {
 	sim := testSetup(t)
 	p, _ := launch(sim, "user", "test", nil, []string{"list"})
 	out := stdout(t, p)
-	want := "apt\ncat\ngrep\nls\nmv\npwd\nrm\nssh\nsudo\ntouch\n"
-	if out != want {
+	want := strings.Join(packageNames(), "\n") + "\n"
+	if out != want || !sort.StringsAreSorted(packageNames()) {
 		t.Fatalf("expected sorted package list %q, got %q", want, out)
 	}
 }
