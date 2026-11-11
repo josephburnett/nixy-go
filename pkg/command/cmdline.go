@@ -28,7 +28,23 @@ type Segment struct {
 	Args        []string
 	PartialArgs string
 	HasArgs     bool
+	// Redirect is the segment's `> FILE` or `>> FILE`, if it has one.
+	// Its args end at the operator, so PartialArgs never includes it.
+	Redirect *Redirect
 }
+
+// Redirect sends a command's stdout to a file: `>` replaces the file's
+// contents, `>>` appends. The shell opens the file, as the user,
+// before the command runs.
+type Redirect struct {
+	Append bool
+	// Raw is everything typed after the operator, spaces included:
+	// "" right after `>`, " no" while typing `> notes.txt`.
+	Raw string
+}
+
+// Target is the file named, as typed.
+func (r Redirect) Target() string { return strings.TrimSpace(r.Raw) }
 
 // Parse splits a (possibly partial) command line into a Pipeline.
 //
@@ -55,7 +71,19 @@ func Parse(line string) Pipeline {
 // the user typing `|`, so any trailing space is incidental — but preserved
 // on the last segment, where a trailing space is the signal that the user
 // has entered args mode (HasArgs=true with empty PartialArgs).
+//
+// A `>` ends the command: what follows is the redirect, and the command
+// before it is committed like a non-last segment.
 func parseSegment(raw string, isLast bool) Segment {
+	if cmd, target, ok := strings.Cut(raw, ">"); ok {
+		r := &Redirect{Raw: target}
+		if rest, ok := strings.CutPrefix(target, ">"); ok {
+			r.Append, r.Raw = true, rest
+		}
+		seg := parseSegment(cmd, false)
+		seg.Redirect = r
+		return seg
+	}
 	raw = strings.TrimLeft(raw, " ")
 	if !isLast {
 		raw = strings.TrimRight(raw, " ")
@@ -76,6 +104,15 @@ func parseSegment(raw string, isLast bool) Segment {
 		seg.Args = fields
 	}
 	return seg
+}
+
+// Text is the command as its validator sees it: the name, and the args
+// typed so far after a space.
+func (s Segment) Text() string {
+	if s.HasArgs {
+		return s.Name + " " + s.PartialArgs
+	}
+	return s.Name
 }
 
 // Argv is the segment as a program sees it: its name, then its args.

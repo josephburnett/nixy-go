@@ -397,6 +397,36 @@ func EmptyDir(ctx simulation.ArgContext, _ []string, token string) simulation.Su
 	})
 }
 
+// RedirectTarget accepts the file of a `>` or `>>` redirect: an
+// existing text file or a new name in an existing folder, never a
+// folder. It may not be a file the command line names in its args
+// (operands): the shell empties it before the command runs, so `cat
+// f > f` would read nothing, and real cat and grep refuse it ("input
+// file is output file").
+func RedirectTarget(ctx simulation.ArgContext, operands []string, token string) simulation.Suggestion {
+	var named [][]string
+	for _, o := range operands {
+		named = append(named, file.Resolve(ctx.Cwd, file.ExpandHome(o, ctx.Home)))
+	}
+	return pathArg(ctx, token, true, func(target []string, f *file.F, dir bool) bool {
+		if dir || len(target) == 0 {
+			return false
+		}
+		if f == nil {
+			return true
+		}
+		if f.Type != file.Text {
+			return false
+		}
+		for _, n := range named {
+			if pathsEqual(n, target) {
+				return false
+			}
+		}
+		return true
+	})
+}
+
 // MoveDest accepts a destination for moving the file prev[0], the way
 // real mv treats its last argument:
 //   - an existing folder: move into it, unless that is where the file

@@ -341,7 +341,7 @@ func (w *walkWorld) next(t *testing.T, line string) []process.Datum {
 // command terminates without a non-permission error. A pipeline must
 // also leave every file as it was: only commands that print can feed a
 // pipe, so no segment can change what a later one was validated
-// against.
+// against. A redirect is opened by the shell before any segment runs.
 func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 	t.Helper()
 	g := w.freshShell(t)
@@ -381,7 +381,8 @@ func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 	if msg := stderr.String(); !consequence(msg) {
 		t.Errorf("mistake: %q + Enter wrote %q", line, msg)
 	}
-	if strings.Contains(line, "|") && w.dumpWorld() != before {
+	// (A redirect changes its target, and only at the end of the line.)
+	if strings.Contains(line, "|") && !strings.Contains(line, ">") && w.dumpWorld() != before {
 		t.Errorf("pipeline %q changed the world", line)
 	}
 }

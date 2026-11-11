@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/nixy-go/pkg/file"
+	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
 // What the basic commands print and do, run through the shell as the
@@ -66,6 +67,64 @@ func TestShellPsKill(t *testing.T) {
 	writeEnter(t, p)
 	if status, exited := p.Exit(); !exited || status != 137 {
 		t.Fatalf("kill -9 of the shell: exited=%v status %d", exited, status)
+	}
+}
+
+// > writes a command's stdout to a file the shell opens as the player
+// before the command runs; >> appends.
+func TestShellRedirect(t *testing.T) {
+	sim, p := loginSetup(t)
+	c, _ := sim.GetComputer("test")
+	data := func(name string) string {
+		t.Helper()
+		f, err := c.Filesystem.Navigate([]string{"home", "user", name})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return f.Data
+	}
+	for _, tc := range []struct{ line, stderr string }{
+		{"echo hi > note.txt", ""},
+		{"echo there >> note.txt", ""},
+		{"ls > files", ""},
+		{"echo hi > /etc/motd", "/etc/motd: Permission denied\n"},
+		{"sudo ls /root > root.txt", ""},
+		{"yes | grep y > ys", ""},
+	} {
+		if !canRun(p, tc.line) {
+			t.Fatalf("%q can't be typed", tc.line)
+		}
+		writeEnter(t, p)
+		if strings.HasPrefix(tc.line, "yes") {
+			_ = p.Read()
+			if err := p.Stdin(process.Data{process.SigInt}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := strings.TrimPrefix(readAllStdout(t, p), tc.line); strings.Trim(got, "^C\n") != "" {
+			t.Errorf("%q printed %q to the terminal", tc.line, got)
+		}
+		if got := readAllStderr(t, p); got != tc.stderr {
+			t.Errorf("%q: stderr %q, want %q", tc.line, got, tc.stderr)
+		}
+	}
+	if got := data("note.txt"); got != "hi\nthere\n" {
+		t.Errorf("note.txt = %q", got)
+	}
+	// The shell made files before ls ran, so ls lists it.
+	if got := data("files"); got != "docs\nfiles\nnote.txt\nnotes.txt\n" {
+		t.Errorf("files = %q", got)
+	}
+	// sudo runs ls as root, but the shell opens the file as the player.
+	f, _ := c.Filesystem.Navigate([]string{"home", "user", "root.txt"})
+	if f.Owner != "user" || f.Data != "secret.txt\n" {
+		t.Errorf("root.txt: owner %s data %q", f.Owner, f.Data)
+	}
+	if got := data("ys"); got == "" || strings.Trim(got, "y\n") != "" {
+		t.Errorf("ys = %q", got)
+	}
+	if _, err := c.Filesystem.Navigate([]string{"etc", "motd"}); err == nil {
+		t.Error("/etc/motd was created")
 	}
 }
 

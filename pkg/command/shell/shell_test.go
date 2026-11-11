@@ -980,6 +980,32 @@ func TestShellNextInvariant_Lines(t *testing.T) {
 		{"ps -e | grep shell", true},
 		{"ps x", false},
 		{"ps -a", false},
+		// > sends stdout of a command that prints to a file the shell
+		// can create or overwrite, as the player.
+		{"echo hi > ~/note.txt", true},
+		{"echo hi >~/note.txt", true},
+		{"echo hi>>~/notes.txt", true},
+		{"ls > ~/files.txt", true},
+		{"ls | grep n > ~/found", true},
+		{"sudo ls /root > ~/list", true},
+		{"echo hi > /etc/motd", true}, // permission denied
+		{"echo hi > /root/x", false},  // can't see in, even under sudo
+		{"sudo echo hi > /root/x", false},
+		{"echo hi > ~/docs", false},
+		{"echo hi > ~/docs/", false},
+		{"echo hi > /bin/ls", false}, // not a text file
+		{"echo hi >", false},
+		{"echo hi > > x", false},
+		{"echo hi >>> x", false},
+		{"echo hi >  x", false},
+		{"echo hi > x y", false},
+		{"echo hi > x | cat", false},
+		{"echo hi > x > y", false},
+		{"cat ~/notes.txt > ~/notes.txt", false}, // input is output
+		{"grep a ~/notes.txt >> ~/notes.txt", false},
+		{"rm ~/notes.txt > x", false}, // prints nothing
+		{"cd > x", false},
+		{"> x", false},
 		// kill takes the PID of a process that exists, -9 for SIGKILL.
 		{"kill 1", true}, // root's: Operation not permitted
 		{"kill 2", true},

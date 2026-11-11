@@ -77,6 +77,15 @@ Implementation:
   the segment after the last pipe. It adds just Enter and `|` (when
   the segment is Complete and pipeable) and the optional space after
   `|`. A pipeline finds every segment's binary before launching any.
+- Output redirection (`>` replaces, `>>` appends) is the shell's, like
+  `|`: `command.Parse` puts it on the segment (`Segment.Redirect`,
+  partial input included) and the args end at the operator. `>` is
+  offered exactly where `|` is (a complete command that `Writes`),
+  only on the last segment, then a second `>`, one optional space and
+  the target (`command.RedirectTarget`): a text file or a new name in
+  an existing folder, validated as the shell's owner, never a folder
+  or a file the line names as an operand (`cat f > f` would read an
+  emptied file; GNU cat refuses it). After the target only Enter.
 - A key the keyboard doesn't offer does nothing at all: the session
   returns before recording, running or redrawing anything
   (`TestFuzzE2ERejectedKeys` presses such keys during random play and
@@ -93,7 +102,7 @@ Implementation:
     Backspace), every Enter terminates (by itself, or a command that
     never ends, like `yes`, by Ctrl+C, which must then be offered)
     with no stderr but permission denied, and a pipeline leaves every
-    file as it was.
+    file as it was (except a redirect's target).
     Reaching each scenario types the planner's commands key by key.
   - `TestShellNextInvariant_EveryEnterStateTerminates` does the same on
     a small fixture with every command; `TestShellNextInvariant_Lines`
@@ -196,6 +205,15 @@ Concrete implications (these all flow from this single principle):
   (ssh is not yet a process of its own: its table entry is the remote
   shell, so `kill -9` of it reports "Killed", not a closed
   connection.)
+- **Redirection is done by the shell, as the player.** Before any
+  command runs the shell opens the target (`shell.openRedirect`):
+  creating it owned by the player, or emptying it for `>`, so `ls >
+  files` lists `files`, and a redirect that fails (`echo hi >
+  /etc/motd` → `/etc/motd: Permission denied`) runs nothing. Under
+  `sudo` the command is root but the file is still opened as the
+  player, the classic real-Unix lesson. The job's stdout goes to the
+  file it opened (like a file descriptor, it follows the file, not the
+  name); stderr still reaches the terminal.
 - **Nothing hangs.** Processes act only when called. A pipeline moves
   data one step per `Read`, and the session reads a bounded number of
   times per keystroke, so a source that never ends can't freeze the

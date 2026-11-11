@@ -186,6 +186,21 @@ func (s *shell) executeCommand(cmd string) {
 		}
 	}
 
+	// A redirect is opened first, as the shell itself: a command that
+	// then fails to start still leaves the file created or emptied.
+	if r := p.Last().Redirect; r != nil {
+		f, err := s.openRedirect(file.ExpandHome(r.Target(), s.home), r.Append)
+		if err != nil {
+			s.fail(1, fmt.Sprintf("%s: %v", r.Target(), err))
+			return
+		}
+		defer func() {
+			if s.job != nil {
+				s.job = &redirected{P: s.job, f: f}
+			}
+		}()
+	}
+
 	if !p.IsPipeline() {
 		s.executeSingle(p.Segments[0])
 		return
@@ -473,11 +488,15 @@ func (s *shell) Next() []process.Datum {
 		Home:     s.home,
 		InPipe:   p.InPipe(),
 	}
-	text := last.Name
-	if last.HasArgs {
-		text += " " + last.PartialArgs
+	sug := command.ValidCommand(ctx, last.Text(), s.commandNames(ctx.InPipe), s.validator)
+	printsOut := sug.Complete && sug.Writes && s.pipeable(last.Name)
+	if r := last.Redirect; r != nil {
+		// The command before `>` was committed when `>` was typed.
+		if !printsOut {
+			return valid
+		}
+		return append(valid, s.redirectKeys(ctx, p, *r)...)
 	}
-	sug := command.ValidCommand(ctx, text, s.commandNames(ctx.InPipe), s.validator)
 	for _, r := range sug.Chars {
 		valid = append(valid, process.Chars(string(r)))
 	}
@@ -486,11 +505,111 @@ func (s *shell) Next() []process.Datum {
 	}
 	if sug.Complete {
 		valid = append(valid, process.TermEnter)
-		if sug.Writes && s.pipeable(last.Name) {
+		if printsOut {
 			valid = append(valid, process.Chars("|"))
+			if live(redirectTarget(ctx, p, "")) {
+				valid = append(valid, process.Chars(">"))
+			}
 		}
 	}
 	return valid
+}
+
+// redirectKeys are the keys after `>`: a second `>` (append), one
+// optional space, then the target file, and Enter on a valid one.
+func (s *shell) redirectKeys(ctx simulation.ArgContext, p command.Pipeline, r command.Redirect) []process.Datum {
+	var keys []process.Datum
+	tok := strings.TrimPrefix(r.Raw, " ")
+	if strings.Contains(tok, " ") {
+		return nil
+	}
+	if r.Raw == "" {
+		if !r.Append {
+			keys = append(keys, process.Chars(">"))
+		}
+		keys = append(keys, process.Chars(" "))
+	}
+	sug := redirectTarget(ctx, p, tok)
+	for _, c := range sug.Chars {
+		keys = append(keys, process.Chars(string(c)))
+	}
+	if sug.Complete {
+		keys = append(keys, process.TermEnter)
+	}
+	return keys
+}
+
+// redirectTarget validates the file after `>`. The shell opens it as
+// itself (not as root under sudo), and it can't be a file the line
+// reads.
+func redirectTarget(ctx simulation.ArgContext, p command.Pipeline, tok string) simulation.Suggestion {
+	ctx.InPipe = false
+	var operands []string
+	for _, seg := range p.Segments {
+		operands = append(operands, seg.Args...)
+	}
+	return command.RedirectTarget(ctx, operands, tok)
+}
+
+func live(s simulation.Suggestion) bool { return s.Complete || len(s.Chars) > 0 }
+
+// openRedirect opens the target of `>` (truncating it) or `>>` as the
+// shell's owner, creating it if need be, before the command runs.
+func (s *shell) openRedirect(target string, appendTo bool) (*file.F, error) {
+	c, err := s.simulation.GetComputer(s.hostname)
+	if err != nil {
+		return nil, err
+	}
+	path := file.Resolve(s.currentDirectory, target)
+	if len(path) == 0 {
+		return nil, file.ErrIsDir
+	}
+	f, err := c.Filesystem.Lookup(path, s.owner)
+	switch {
+	case err == nil:
+		if f.Type == file.Folder {
+			return nil, file.ErrIsDir
+		}
+		if !f.CanWrite(s.owner) {
+			return nil, file.ErrPermission
+		}
+		if !appendTo {
+			f.Data = ""
+		}
+		return f, nil
+	case errors.Is(err, file.ErrNotExist):
+		f = &file.F{
+			Type:             file.Text,
+			Owner:            s.owner,
+			OwnerPermission:  file.Write,
+			CommonPermission: file.Read,
+		}
+		if err := c.Filesystem.CreateFile(path[:len(path)-1], path[len(path)-1], f, s.owner); err != nil {
+			return nil, err
+		}
+		return f, nil
+	}
+	return nil, err
+}
+
+// redirected is a job whose stdout goes to a file. It holds the file
+// itself, like an open file descriptor: moving or deleting the file
+// doesn't stop the writes.
+type redirected struct {
+	process.P
+	f *file.F
+}
+
+func (r *redirected) Read() []process.Output {
+	var out []process.Output
+	for _, o := range r.P.Read() {
+		if o.Stream == process.Stdout {
+			r.f.Data += o.Data.String()
+			continue
+		}
+		out = append(out, o)
+	}
+	return out
 }
 
 // builtinArgs are the validators for the shell's builtins.

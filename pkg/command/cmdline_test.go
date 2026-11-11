@@ -32,6 +32,23 @@ func TestParse(t *testing.T) {
 			want: Pipeline{Segments: []Segment{{Name: "l"}}},
 		},
 		{
+			name: "redirect just typed",
+			in:   "echo hi >",
+			want: Pipeline{Segments: []Segment{{Name: "echo", HasArgs: true, PartialArgs: "hi",
+				Args: []string{"hi"}, Redirect: &Redirect{}}}},
+		},
+		{
+			name: "redirect target being typed",
+			in:   "ls > no",
+			want: Pipeline{Segments: []Segment{{Name: "ls", Redirect: &Redirect{Raw: " no"}}}},
+		},
+		{
+			name: "append redirect after a pipe",
+			in:   "ls | cat>>f",
+			want: Pipeline{Segments: []Segment{{Name: "ls"},
+				{Name: "cat", Redirect: &Redirect{Append: true, Raw: "f"}}}},
+		},
+		{
 			name: "command with trailing space (in args mode, no args)",
 			in:   "ls ",
 			want: Pipeline{Segments: []Segment{{Name: "ls", HasArgs: true, PartialArgs: ""}}},

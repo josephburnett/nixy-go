@@ -8,11 +8,11 @@ import (
 
 // keyboardRows defines the qwerty layout. Each key is its KeyName.
 // Keys that don't fit the special row (it must fit a phone) go at the
-// end of the shorter letter rows: ~, and ^C, which interrupts a
-// running command.
+// end of the shorter letter rows: `>` (redirection), ~, and ^C, which
+// interrupts a running command.
 var keyboardRows = [][]string{
 	{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"},
-	{"a", "s", "d", "f", "g", "h", "j", "k", "l"},
+	{"a", "s", "d", "f", "g", "h", "j", "k", "l", ">"},
 	{"z", "x", "c", "v", "b", "n", "m", "~", "^C"},
 }
 
