@@ -61,7 +61,11 @@ type shell struct {
 
 func (s *shell) Stdout() (process.Data, bool, error) {
 	if s.exited {
-		return nil, true, nil
+		// Flush what was written before exiting (the echoed Enter, nx
+		// panic's message) along with EOF, or it's lost.
+		data := s.echoOut
+		s.echoOut = nil
+		return data, true, nil
 	}
 	data := s.echoOut
 	s.echoOut = nil
@@ -92,7 +96,9 @@ func (s *shell) Stdout() (process.Data, bool, error) {
 
 func (s *shell) Stderr() (process.Data, bool, error) {
 	if s.exited {
-		return nil, true, nil
+		data := s.echoErr
+		s.echoErr = nil
+		return data, true, nil
 	}
 	data := s.echoErr
 	s.echoErr = nil
