@@ -173,8 +173,38 @@ func NewCommandTracker() *CommandTracker {
 	return &CommandTracker{}
 }
 
-func (t *CommandTracker) Record(r CommandRecord) {
+// Record adds a command line and returns its index, for Finish.
+func (t *CommandTracker) Record(r CommandRecord) int {
 	t.commands = append(t.commands, r)
+	return len(t.commands) - 1
+}
+
+// Finish records how a command line that was still running when it
+// was recorded ended: `yes` stopped by Ctrl+C (130), an ssh session
+// closed.
+func (t *CommandTracker) Finish(i, status int) {
+	t.commands[i].Running = false
+	t.commands[i].Status = status
+}
+
+// Running is the command line still running in the foreground of the
+// player's shell, if any: the last one recorded, when it hasn't
+// finished and doesn't take over the terminal (an ssh session is a
+// shell to type into, not a job to wait for).
+func (t *CommandTracker) Running() (CommandRecord, bool) {
+	if len(t.commands) == 0 {
+		return CommandRecord{}, false
+	}
+	r := t.commands[len(t.commands)-1]
+	if !r.Running {
+		return CommandRecord{}, false
+	}
+	for _, inv := range r.Invocations() {
+		if b, err := simulation.GetBinary(inv.Name); err == nil && b.Interactive {
+			return CommandRecord{}, false
+		}
+	}
+	return r, true
 }
 
 // Records returns a copy of all recorded commands, oldest first.

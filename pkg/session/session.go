@@ -39,6 +39,16 @@ type Session struct {
 	accounts []string  // existing users, which the player can't log in as
 	lastUser string    // who logged in last, to tell a resume from a switch
 	loginSh  process.P // the laptop login shell; Guide wraps it
+	// running are the tracker records of command lines still running
+	// (ssh, yes), with the shell running each, to record how they end.
+	running []runningLine
+}
+
+// runningLine is a recorded command line that hadn't finished: the
+// record's index in the tracker and the shell it runs in.
+type runningLine struct {
+	record int
+	shell  shellpkg.Info
 }
 
 const (
@@ -274,6 +284,7 @@ func (s *Session) startLoginShell() error {
 // logout ends the login shell and returns to the login prompt. The game
 // stays in s.games for when this user logs back in.
 func (s *Session) logout(t *terminal.T) {
+	s.hangUp()
 	t.Write(process.Data{process.Chars("logout\n")})
 	if s.loginSh != nil {
 		s.loginSh.Kill()
@@ -356,26 +367,33 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 	// ssh shell goes, and so does the laptop shell (which the panic may
 	// have exited), replaced by a fresh one. It never logs the player out.
 	if s.Game.TakePanic() {
+		s.hangUp()
 		if err := s.startLoginShell(); err != nil {
 			t.Notify("nx panic: " + err.Error())
 		}
 		loggedOut = false
 	}
 
-	if _, ok := datum.(process.TermCode); ok && datum == process.TermEnter {
-		if cmdLine != "" {
-			// Same host? use post-execution cwd (so cd counts as a visit).
-			// Different host? keep pre-command cwd (ssh/exit attribution).
-			cwd := cmdCwd
-			if s.Shell.Hostname() == cmdHost {
-				cwd = s.Shell.CurrentDirectory()
-			}
-			status, done := typedIn.LastStatus()
-			s.Game.Manager.Tracker.Record(game.CommandRecord{
-				Hostname: cmdHost, User: s.Username, Dir: cmdCwd, Cwd: cwd, Command: cmdLine,
-				Status: status, Running: !done, Programs: programs,
-			})
+	// A line that was still running may have ended with this key (^C,
+	// or exit closing an ssh session): record how.
+	ended := s.reapRunning()
+	if datum == process.TermEnter && cmdLine != "" {
+		// Same host? use post-execution cwd (so cd counts as a visit).
+		// Different host? keep pre-command cwd (ssh/exit attribution).
+		cwd := cmdCwd
+		if s.Shell.Hostname() == cmdHost {
+			cwd = s.Shell.CurrentDirectory()
 		}
+		status, done := typedIn.LastStatus()
+		i := s.Game.Manager.Tracker.Record(game.CommandRecord{
+			Hostname: cmdHost, User: s.Username, Dir: cmdCwd, Cwd: cwd, Command: cmdLine,
+			Status: status, Running: !done, Programs: programs,
+		})
+		if !done {
+			s.running = append(s.running, runningLine{record: i, shell: typedIn})
+		}
+	}
+	if datum == process.TermEnter || ended {
 		s.Game.AfterCommand()
 		dialog := s.Game.Manager.Dialog.Drain()
 		if len(dialog) > 0 {
@@ -390,18 +408,41 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 	s.updatePlayingTerminal(t)
 }
 
+// reapRunning records the end of every running line whose shell has
+// finished it, and reports whether any had.
+func (s *Session) reapRunning() bool {
+	ended := false
+	still := s.running[:0]
+	for _, r := range s.running {
+		if status, done := r.shell.LastStatus(); done {
+			s.Game.Manager.Tracker.Finish(r.record, status)
+			ended = true
+		} else {
+			still = append(still, r)
+		}
+	}
+	s.running = still
+	return ended
+}
+
+// hangUp records every running line as ended by SIGHUP: their shells
+// are going away (logout, nx panic), and the jobs with them.
+func (s *Session) hangUp() {
+	for _, r := range s.running {
+		s.Game.Manager.Tracker.Finish(r.record, process.SigHup.Status())
+	}
+	s.running = nil
+}
+
 func (s *Session) updatePlayingTerminal(t *terminal.T) {
 	t.SetPrompt(s.promptFor(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
-	t.SetPromptTarget(s.Game.GetPlannedCommand(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
+	plan := s.Game.GetPlannedCommand(s.Shell.Hostname(), s.Shell.CurrentDirectory())
+	if plan == game.Interrupt {
+		plan = "" // a key, not a line to type at the prompt
+	}
+	t.SetPromptTarget(plan)
 	valid := s.Guide.Next()
 	hint := s.Game.GetHint(s.Shell.Hostname(), s.Shell.CurrentDirectory(), s.Shell.CurrentCommand())
-	if slices.Contains(valid, process.Datum(process.SigInt)) {
-		// A job is running (^C is offered), so there's no line to type.
-		// The planner plans command lines; don't hint one now. Any other
-		// hint the keyboard rejects is a planner bug, and the fuzz must
-		// see it, so it isn't filtered here.
-		hint = nil
-	}
 	t.SetKeyboard(valid, hint)
 	t.SetThought(s.Game.GetThought(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 }

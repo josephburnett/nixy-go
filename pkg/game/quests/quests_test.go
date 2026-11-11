@@ -5,23 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/josephburnett/nixy-go/pkg/command/apt"
-	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
-	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
-	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
-	_ "github.com/josephburnett/nixy-go/pkg/command/mv"
-	_ "github.com/josephburnett/nixy-go/pkg/command/pwd"
-	_ "github.com/josephburnett/nixy-go/pkg/command/rm"
-	_ "github.com/josephburnett/nixy-go/pkg/command/shell"
-	_ "github.com/josephburnett/nixy-go/pkg/command/ssh"
-	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
-	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
+	_ "github.com/josephburnett/nixy-go/pkg/command/all"
+	"github.com/josephburnett/nixy-go/pkg/command/shell"
 
 	"github.com/josephburnett/nixy-go/pkg/character"
-	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/game"
 	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/process"
+	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
 
 func allQuests() []game.Quest { return All() }
@@ -43,155 +34,105 @@ func newGame(t *testing.T) *game.Game {
 	return g
 }
 
-// shellState tracks the current shell context through SSH chains.
+// shellState drives a real login shell on the laptop the way the
+// session does (types the line, reads until it finishes, records it in
+// the tracker as resolved), but without the keyboard: the planner's
+// lines are typed whole, so it catches quest-logic bugs, not
+// keystroke-level ones. hostname and cwd are the innermost shell's.
 type shellState struct {
 	game     *game.Game
-	shell    process.P // current foreground shell
-	hostname string
-	cwd      []string
-	shells   []shellFrame // SSH stack
-}
-
-type shellFrame struct {
 	shell    process.P
 	hostname string
 	cwd      []string
+	running  []runningLine
+}
+
+type runningLine struct {
+	record int
+	shell  shell.Info
 }
 
 func newShellState(t *testing.T, g *game.Game) *shellState {
 	t.Helper()
-	p, err := g.Sim.Launch("laptop", "user", "shell", []string{"-l"}, nil)
+	s := &shellState{game: g}
+	s.login(t)
+	return s
+}
+
+func (s *shellState) login(t *testing.T) {
+	t.Helper()
+	p, err := s.game.Sim.Launch("laptop", "user", "shell", []string{"-l"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &shellState{
-		game:     g,
-		shell:    p,
-		hostname: "laptop",
-		cwd:      file.Home("user"),
-	}
+	s.shell = p
+	s.where()
 }
 
+func (s *shellState) info() shell.Info { return s.shell.(shell.Info) }
+
+func (s *shellState) where() {
+	s.hostname = s.info().Hostname()
+	s.cwd = s.info().CurrentDirectory()
+}
+
+// executeCommand types cmd and Enter (or, for game.Interrupt, sends
+// Ctrl+C), runs it to completion as the session does, and records it.
 func (s *shellState) executeCommand(t *testing.T, cmd string) {
 	t.Helper()
-	rec := game.CommandRecord{Hostname: s.hostname, User: "user", Dir: s.cwd, Cwd: s.cwd, Command: cmd,
-		Programs: game.Resolve(s.game.Sim, s.hostname, "user", cmd)}
-	record := func(status int) {
-		rec.Status = status
-		s.game.Manager.Tracker.Record(rec)
-		s.game.AfterCommand()
-	}
-
-	// Handle builtins directly (bypass shell for reliability)
-	if strings.HasPrefix(cmd, "cd ") {
-		s.handleCd(cmd)
-		rec.Cwd = s.cwd
-		record(0)
-		return
-	}
-	if cmd == "exit" {
-		s.handleExit(t)
-		record(0)
-		return
-	}
-	if cmd == "nx panic" {
-		s.game.NxPanic()
-		s.game.TakePanic()
-		for len(s.shells) > 0 {
-			s.handleExit(t)
-		}
-		record(0)
-		return
-	}
-	if strings.HasPrefix(cmd, "ssh ") {
-		targetHost := strings.TrimPrefix(cmd, "ssh ")
-		s.shells = append(s.shells, shellFrame{shell: s.shell, hostname: s.hostname, cwd: s.cwd})
-		remoteShell, err := s.game.Sim.Launch(targetHost, "user", "shell", []string{"-l"}, nil)
-		if err != nil {
-			t.Fatalf("ssh failed: %v", err)
-		}
-		s.shell = remoteShell
-		s.hostname = targetHost
-		s.cwd = file.Home("user")
-		rec.Running = true
-		record(0)
-		return
-	}
-	// Parse and execute command through the simulation directly
-	fields := strings.Fields(cmd)
-	name := fields[0]
-	args := fields[1:]
-	status := 0
-	if name == "sudo" && len(args) > 0 {
-		status = s.launchAndDrain(args[0], args[1:], "root")
-	} else if strings.Contains(cmd, "|") {
-		// Handle pipe: execute each segment, pipe data
-		segments := strings.Split(cmd, "|")
-		var data string
-		for i, seg := range segments {
-			seg = strings.TrimSpace(seg)
-			segFields := strings.Fields(seg)
-			p, err := s.game.Sim.Launch(s.hostname, "user", segFields[0], segFields[1:], s.cwd)
-			if err != nil {
-				status = 127
-				break
-			}
-			if i > 0 {
-				p.Stdin(process.CharsData(data))
-				p.CloseStdin()
-			}
-			data = process.Text(p.Read(), process.Stdout)
-			status, _ = p.Exit()
-		}
+	host, dir, typedIn := s.hostname, s.cwd, s.info().Active()
+	if cmd == game.Interrupt {
+		_ = s.shell.Stdin(process.Data{process.SigInt})
 	} else {
-		status = s.launchAndDrain(name, args, "user")
-	}
-	record(status)
-}
-
-func (s *shellState) launchAndDrain(name string, args []string, owner string) int {
-	p, err := s.game.Sim.Launch(s.hostname, owner, name, args, s.cwd)
-	if err != nil {
-		return 127
-	}
-	p.Read()
-	status, _ := p.Exit()
-	return status
-}
-
-func (s *shellState) handleCd(cmd string) {
-	target := strings.TrimPrefix(cmd, "cd ")
-	if strings.HasPrefix(target, "/") {
-		parts := strings.Split(strings.TrimPrefix(target, "/"), "/")
-		var clean []string
-		for _, p := range parts {
-			if p != "" {
-				clean = append(clean, p)
-			}
+		for _, r := range cmd {
+			_ = s.shell.Stdin(process.Data{process.Chars(string(r))})
 		}
-		s.cwd = clean
-	} else {
-		for _, p := range strings.Split(target, "/") {
-			if p == ".." {
-				if len(s.cwd) > 0 {
-					s.cwd = s.cwd[:len(s.cwd)-1]
-				}
-			} else if p != "" && p != "." {
-				s.cwd = append(s.cwd, p)
-			}
+		_ = s.shell.Stdin(process.Data{process.TermEnter})
+	}
+	programs := game.Resolve(s.game.Sim, host, "user", cmd)
+	exited := false
+	for range 50 {
+		outs := s.shell.Read()
+		if _, done := s.shell.Exit(); done {
+			exited = true
+			break
+		}
+		if _, done := s.info().Active().LastStatus(); len(outs) == 0 && done {
+			break
 		}
 	}
-}
-
-func (s *shellState) handleExit(t *testing.T) {
-	t.Helper()
-	if len(s.shells) > 0 {
-		frame := s.shells[len(s.shells)-1]
-		s.shells = s.shells[:len(s.shells)-1]
-		s.shell = frame.shell
-		s.hostname = frame.hostname
-		s.cwd = frame.cwd
+	tracker := s.game.Manager.Tracker
+	if s.game.TakePanic() || exited {
+		s.shell.Kill()
+		for _, r := range s.running {
+			tracker.Finish(r.record, process.SigHup.Status())
+		}
+		s.running = nil
+		s.login(t)
 	}
+	still := s.running[:0]
+	for _, r := range s.running {
+		if status, done := r.shell.LastStatus(); done {
+			tracker.Finish(r.record, status)
+		} else {
+			still = append(still, r)
+		}
+	}
+	s.running = still
+	if cmd != game.Interrupt {
+		cwd := dir
+		if s.info().Hostname() == host {
+			cwd = s.info().CurrentDirectory()
+		}
+		status, done := typedIn.LastStatus()
+		i := tracker.Record(game.CommandRecord{Hostname: host, User: "user", Dir: dir, Cwd: cwd,
+			Command: cmd, Status: status, Running: !done, Programs: programs})
+		if !done {
+			s.running = append(s.running, runningLine{record: i, shell: typedIn})
+		}
+	}
+	s.where()
+	s.game.AfterCommand()
 }
 
 // followHintsToCompletion follows planner hints until the quest completes.
@@ -233,8 +174,9 @@ func TestDeterministicConnect(t *testing.T) {
 
 // TestPlannedCommandsAreTaught plays the quest line by the planner and
 // checks that every program a plan runs was introduced in Nixy's
-// dialog, in backticks, before it is planned, and that the thought
-// line explains every plan. A quest must build on what has been
+// dialog, in backticks, before it is planned, that the thought line
+// explains every plan, and that every key of every plan is on the
+// on-screen keyboard. A quest must build on what has been
 // taught, not leap ahead.
 func TestPlannedCommandsAreTaught(t *testing.T) {
 	g := newGame(t)
@@ -250,6 +192,18 @@ func TestPlannedCommandsAreTaught(t *testing.T) {
 		}
 		if game.PlanThought(target) == "" {
 			t.Errorf("plan %q has no thought", target)
+		}
+		if target == game.Interrupt {
+			if !strings.Contains(said.String(), "`^C`") {
+				t.Errorf("quest %q plans ^C before Nixy has taught it", g.Manager.ActiveQuest().ID())
+			}
+			ss.executeCommand(t, target)
+			continue
+		}
+		for _, r := range target {
+			if !terminal.OnScreen(process.Chars(string(r))) {
+				t.Errorf("plan %q has %q, which isn't on the on-screen keyboard", target, r)
+			}
 		}
 		for _, inv := range (game.CommandRecord{Command: target}).Invocations() {
 			names := []string{inv.Name}

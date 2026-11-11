@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/josephburnett/nixy-go/pkg/game"
 	"strings"
 	"testing"
 
@@ -78,5 +79,27 @@ func TestSessionCtrlC(t *testing.T) {
 	}
 	if status, ok := sess.Shell.Active().LastStatus(); !ok || status != 130 {
 		t.Fatalf("$? = %d %v, want 130", status, ok)
+	}
+}
+
+// While a command runs, whatever the quest, the hint is ^C (there is
+// nothing else to do), and the tracker records how the line ended.
+func TestSessionHintsCtrlCWhileAJobRuns(t *testing.T) {
+	sess, term := buildScenario(t, keyboardScenario{
+		name:       "hint-ctrl-c",
+		untilQuest: "inspection",
+		install:    map[string][]string{"nixy": {"yes"}},
+	})
+	typeCommand(t, sess, term, "yes")
+	if term.State.HintKey != process.Datum(process.SigInt) || term.State.Thought == "" {
+		t.Fatalf("while yes runs: hint %v, thought %q", term.State.HintKey, term.State.Thought)
+	}
+	pressAccepted(t, sess, term, process.SigInt)
+	last := sess.Game.Manager.Tracker.LastN(1)[0]
+	if last.Command != "yes" || last.Running || last.Status != 130 {
+		t.Fatalf("yes recorded as %+v", last)
+	}
+	if plannedCommand(sess) == game.Interrupt {
+		t.Fatal("still planning ^C after it")
 	}
 }

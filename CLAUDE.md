@@ -201,8 +201,10 @@ Concrete implications (these all flow from this single principle):
   ignores that and still prints. Every stage's stderr reaches the
   terminal; a pipeline's status is its last stage's. The shell keeps
   `$?` (`shell.Info.LastStatus`), and the tracker records it on every
-  command line (`CommandRecord.Status`, `Running` for one still going,
-  like ssh), so quests can check what a command did. Embed
+  command line (`CommandRecord.Status`; `Running` for one still going,
+  like ssh or `yes`, until the session sees it end and calls
+  `Tracker.Finish`: ^C makes `yes` 130, logout and nx panic hang up
+  whatever still runs, 129), so quests can check what a command did. Embed
   `process.Written` to get the output queue and exit status for free.
 - **Every process is in a process table.** Everything starts through
   `sim.Start` (or `sim.Launch` by binary name), which puts it in its
@@ -251,7 +253,10 @@ Concrete implications (these all flow from this single principle):
   keyboard is never empty. The key is `^C` on the on-screen keyboard
   (`terminal.KeyName`); the CLI sends it on Ctrl+C only when it is
   offered, and the web build maps Ctrl+C to it unless text is
-  selected.
+  selected. While the player's last line is still running (and isn't
+  an ssh session), `Game.GetPlannedCommand` plans `game.Interrupt`
+  whatever the quest, and the hint is the ^C key: nothing else can
+  be typed until it ends.
 
 When choosing how to fix a bug or add a feature, ask: *would this
 choice make sense in real Unix?* If it papers over a real concept,
@@ -394,16 +399,15 @@ suite for both.
 
 Fuzz and liveness tests with different goals:
 
-- `TestFuzzQuests` (`pkg/game/quests/`) — bypasses the real shell,
-  drives quests via `shellState`. Catches quest-logic bugs but
-  **cannot** catch shell-level regressions.
+- `TestFuzzQuests` (`pkg/game/quests/`) — drives quests via
+  `shellState`, which types whole lines into a real login shell and
+  records them as the session does, but bypasses the keyboard. Catches
+  quest-logic bugs but **cannot** catch keystroke-level regressions.
 - `TestFuzzE2EHintGuided` (`pkg/session/`) — drives keystrokes through
   `Session.HandleKeystroke`, the same chokepoint used by both CLI and
   web. The canary for end-to-end correctness. Every key is typed
   through `pressAccepted`, which fails if the keyboard doesn't offer
-  it or if the hint key isn't itself valid. (The session drops a hint
-  the keyboard doesn't offer: the planner plans command lines, so
-  while one runs, with only ^C offered, it shows no hint.)
+  it or if the hint key isn't itself valid.
 - `TestFuzzE2ERandomKeys` (`pkg/session/`) — random valid keys (half
   the time the hint) through the same chokepoint, wandering into rm,
   mv, sudo and long pipelines, and on through logouts, logins and nx

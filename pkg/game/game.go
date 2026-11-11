@@ -69,11 +69,16 @@ func (g *Game) GetThought(hostname string, cwd []string) string {
 }
 
 // GetPlannedCommand returns the literal next command the planner suggests,
-// or "" if no quest is active.
+// or "" if no quest is active. While a command runs in the foreground
+// (`yes`), nothing can be typed until it ends, so the plan is
+// Interrupt, whatever the quest.
 func (g *Game) GetPlannedCommand(hostname string, cwd []string) string {
 	active := g.Manager.ActiveQuest()
 	if active == nil {
 		return ""
+	}
+	if _, running := g.Manager.Tracker.Running(); running {
+		return Interrupt
 	}
 	return active.PlanNextCommand(g.planContext(hostname, cwd))
 }

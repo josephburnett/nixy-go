@@ -7,6 +7,10 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
+// Interrupt is the plan "press Ctrl+C": stop the command running in the
+// foreground. It is a key, not a command line.
+const Interrupt = "^C"
+
 // PlanHint returns the next Datum the player should type to reach the
 // planned command line target. If the player's partial line matches the
 // plan, it is the next character (or Enter at exact match). If the
@@ -16,6 +20,9 @@ import (
 func PlanHint(target, partialLine string) process.Datum {
 	if target == "" {
 		return nil
+	}
+	if target == Interrupt {
+		return process.SigInt
 	}
 	if partialLine == target {
 		return process.TermEnter
@@ -34,6 +41,9 @@ func PlanHint(target, partialLine string) process.Datum {
 // dialog and the keyboard hint. Every command a planner can plan has
 // one.
 func PlanThought(target string) string {
+	if target == Interrupt {
+		return "It won't stop by itself. Ctrl+C (the ^C key) interrupts it"
+	}
 	p := command.Parse(target)
 	if len(p.Segments) == 0 {
 		return ""
