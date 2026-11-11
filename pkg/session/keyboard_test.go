@@ -182,22 +182,21 @@ func TestKeyboardWalk_NoMistakes(t *testing.T) {
 								picks = append(picks, chars[i*step])
 							}
 							for _, c := range chars {
-								if c == " " || c == "/" || c == "~" {
+								if c == " " || c == "/" || c == "~" || c == "|" {
 									picks = append(picks, c)
 								}
 							}
 						}
 						for _, c := range picks {
 							ns := cur + c
-							// Skipped: `|` (pipe receivers have their
-							// own "ls | NAME" seeds) and `.`/`..` after
-							// the first path component (aliases of paths
-							// already walked).
-							if c == "|" || strings.Contains(ns, "/.") || seen[ns] {
+							// Skipped: `.`/`..` after the first path
+							// component (aliases of paths already
+							// walked).
+							if strings.Contains(ns, "/.") || seen[ns] {
 								continue
 							}
 							seen[ns] = true
-							if c == " " || c == "/" {
+							if c == " " || c == "/" || c == "|" {
 								seeds = append(seeds, ns)
 							}
 							if c == " " {
@@ -338,10 +337,14 @@ func (w *walkWorld) next(t *testing.T, line string) []process.Datum {
 }
 
 // checkEnter types line on a fresh world, presses Enter, and verifies the
-// command terminates without a non-permission error.
+// command terminates without a non-permission error. A pipeline must
+// also leave every file as it was: only commands that print can feed a
+// pipe, so no segment can change what a later one was validated
+// against.
 func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 	t.Helper()
 	g := w.freshShell(t)
+	before := w.dumpWorld()
 	for _, r := range line {
 		_ = g.Stdin(process.Data{process.Chars(string(r))})
 	}
@@ -363,6 +366,19 @@ func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 	if msg := stderr.String(); msg != "" && !strings.Contains(msg, "Permission denied") {
 		t.Errorf("mistake: %q + Enter wrote %q", line, msg)
 	}
+	if strings.Contains(line, "|") && w.dumpWorld() != before {
+		t.Errorf("pipeline %q changed the world", line)
+	}
+}
+
+func (w *walkWorld) dumpWorld() string {
+	var sb strings.Builder
+	for _, h := range []string{"laptop", "nixy", "server"} {
+		if c, err := w.sess.Game.Sim.GetComputer(h); err == nil {
+			dumpFS(&sb, c.Filesystem, h+":/")
+		}
+	}
+	return sb.String()
 }
 
 func copyFS(f *file.F) *file.F {

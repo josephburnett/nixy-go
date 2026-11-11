@@ -17,6 +17,7 @@ func init() {
 		ValidArgs: command.Positional{
 			Args:         []command.Arg{command.Pattern, command.FilePath},
 			Required:     2,
+			Writes:       true,
 			ReadsStdin:   true,
 			PipeRequired: 1,
 		}.Validate,

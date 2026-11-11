@@ -411,8 +411,9 @@ func (s *shell) canEnter(dir []string) bool { return s.enter(dir) == nil }
 // was only offered when the previous segment was complete. Everything
 // about the segment itself (which names, which args, when it's complete)
 // comes from the command's ValidArgs, found the same way the shell runs
-// it. The shell adds only the segment-completion keys (Enter, `|`) and
-// the optional space after `|`.
+// it, including whether it writes stdout and may feed `|`. The shell
+// adds only the segment-completion keys (Enter, `|`) and the optional
+// space after `|`.
 func (s *shell) Next() []process.Datum {
 	if _, exited := s.Exit(); exited {
 		return nil
@@ -449,7 +450,7 @@ func (s *shell) Next() []process.Datum {
 	}
 	if sug.Complete {
 		valid = append(valid, process.TermEnter)
-		if s.pipeable(last.Name) {
+		if sug.Writes && s.pipeable(last.Name) {
 			valid = append(valid, process.Chars("|"))
 		}
 	}
@@ -508,9 +509,10 @@ func (s *shell) validator(name string) (simulation.ValidArgs, bool) {
 	return b.ValidArgs, true
 }
 
-// pipeable reports whether a command can sit on either side of `|`: a
-// binary that doesn't take over the terminal. Builtins change the shell
-// itself, which a pipeline segment can't do.
+// pipeable reports whether a command can sit on either side of `|` at
+// all: a binary that doesn't take over the terminal. Builtins change
+// the shell itself, which a pipeline segment can't do. Whether it
+// prints or reads stdin is up to its validator.
 func (s *shell) pipeable(name string) bool {
 	if _, ok := builtinArgs[name]; ok {
 		return false

@@ -52,10 +52,14 @@ type Binary struct {
 //     of a path, `/` to descend, the space that starts the next
 //     argument, ...). Every one must lead toward a Complete state.
 //   - Complete reports whether the command can run, as typed, without a
-//     usage error. The shell offers Enter and `|` only then.
+//     usage error. The shell offers Enter only then.
+//   - Writes reports whether the complete command writes its results to
+//     stdout, so its output can feed a pipe. The shell offers `|` only
+//     after a Complete command that Writes.
 type Suggestion struct {
 	Chars    []rune
 	Complete bool
+	Writes   bool
 }
 
 // ArgContext is what a validator sees besides the typed text.
@@ -69,16 +73,17 @@ type ArgContext struct {
 	// Home is the shell owner's home folder ($HOME). It stays the
 	// player's under sudo, as the shell expands ~ before sudo runs.
 	Home []string
-	// InPipe is true when the command reads stdin from an upstream
-	// pipe, so it may need fewer arguments (`ls | grep x`).
+	// InPipe is true when the command is a pipe receiver: only
+	// commands that read stdin are valid there, and they take their
+	// input from the pipe instead of a file argument (`ls | grep x`).
 	InPipe bool
 }
 
 // ValidArgs validates everything typed after the command name and the
-// space that follows it ("" right after `ls `). It decides both which
-// keys come next and whether the command line is complete, so zero-arg
-// commands answer Complete for "" and pipe receivers answer Complete
-// for fewer args when ctx.InPipe.
+// space that follows it ("" right after `ls `). It decides which keys
+// come next, whether the command line is complete, and whether it
+// writes stdout: zero-arg commands answer Complete for "", and under
+// ctx.InPipe only stdin readers lead anywhere.
 type ValidArgs func(ctx ArgContext, partialArgs string) Suggestion
 
 type Launch func(

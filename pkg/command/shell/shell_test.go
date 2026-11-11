@@ -820,6 +820,24 @@ func TestShellNextInvariant_Lines(t *testing.T) {
 		{"ssh test", true},
 		{"ls | ssh test", false},
 		{"ssh test | cat", false},
+		// A pipe connects a command that prints to one that reads stdin.
+		{"apt list | grep a", true},
+		{"sudo ls | grep a", true},
+		{"ls | sudo grep a", true},
+		{"ls | ls", false},
+		{"ls | pwd", false},
+		{"ls | apt list", false},
+		{"ls | sudo ls", false},
+		// A receiver reads the pipe, not a file.
+		{"ls | cat /home/user/notes.txt", false},
+		{"ls | grep a /home/user/notes.txt", false},
+		// Commands that only change files print nothing to pipe, so a
+		// pipeline can't change what a later segment was checked against.
+		{"rm /home/user/notes.txt | cat", false},
+		{"touch /home/user/x | cat", false},
+		{"mv /home/user/notes.txt /home/user/n.txt | cat", false},
+		{"sudo rm /bin/ls | cat", false},
+		{"apt install x | cat", false},
 		// grep's pattern can't swallow the pipe.
 		{"ls | grep a|b", false},
 		// cat, grep and rm take files, not folders.

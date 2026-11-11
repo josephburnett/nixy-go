@@ -32,13 +32,21 @@ Implementation:
   - Zero-arg commands answer Complete for `""` (`ls`, `pwd`). NOT
     standalone cat or grep — those hang without an upstream pipe
     because the game has no terminal stdin.
-  - `ArgContext.InPipe` lets pipe receivers complete with fewer args
-    (`ls | cat`, `ls | grep target`).
+  - A pipe connects a command that prints to one that reads stdin.
+    `Suggestion.Writes` (from `Positional.Writes`: ls, cat, grep, pwd,
+    apt list) gates `|`; commands that only change files (rm, mv,
+    touch, apt install) print nothing to pipe, so a pipeline never
+    changes the world a later segment was validated against. Under
+    `ArgContext.InPipe` only `ReadsStdin` commands lead anywhere, and
+    they take exactly `PipeRequired` args (`ls | cat`, `ls | grep
+    target`; not `ls | ls` or `ls | cat file`, which run but connect
+    nothing).
   - `Interactive` binaries (ssh, shell) take over the terminal: they
     are kept out of pipelines and out of sudo.
 - Validators are built from parts in `pkg/command/args.go`:
   - `Positional` — positional `Arg`s, how many are required standalone
-    and in a pipe (`ReadsStdin`, `PipeRequired`). It offers the space
+    and in a pipe (`ReadsStdin`, `PipeRequired`), and whether the
+    command prints (`Writes`). It offers the space
     between args and the trailing space before `|`. `NoArgs` is the
     empty one.
   - `ValidCommand` — "NAME ARGS" over a set of names, each with its
@@ -71,18 +79,17 @@ Implementation:
   missing paths and wrong file types are bugs.
 - Guards:
   - `TestKeyboardWalk_NoMistakes` (`pkg/session/`) walks the keyboard
-    over the real worlds at several world states and checks every
-    reachable state: never a dead end (some key besides Backspace),
-    and every Enter terminates with no stderr but permission denied.
+    (`|` included) over the real worlds at several world states and
+    checks every reachable state: never a dead end (some key besides
+    Backspace), every Enter terminates with no stderr but permission
+    denied, and a pipeline leaves every file as it was.
     Reaching each scenario types the planner's commands key by key.
   - `TestShellNextInvariant_EveryEnterStateTerminates` does the same on
     a small fixture with every command; `TestShellNextInvariant_Lines`
     pins whole lines per bug class.
   - The hint-guided fuzz can't catch these alone: it follows the
     planner's exact output, never exploring partial-input states.
-- Known gaps: an earlier pipeline segment can change the world under a
-  later one's already-validated args (`rm f | cat f`), as in a real
-  shell's race. `ssh` to a host listed in /etc/hosts but not booted
+- Known gaps: `ssh` to a host listed in /etc/hosts but not booted
   says "connection refused" (a real consequence; no world does that
   today, and the walk would flag it).
 

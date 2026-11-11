@@ -21,9 +21,16 @@ type Positional struct {
 	Args []Arg
 	// Required is how many args a standalone run needs.
 	Required int
+	// Writes commands print their results to stdout (ls, cat, grep),
+	// so `|` may follow them. Commands that only change the world (rm,
+	// mv, touch) print nothing; piping them is never offered, which
+	// also keeps a pipeline from changing the files a later segment
+	// was validated against.
+	Writes bool
 	// ReadsStdin commands can take their input from an upstream pipe
-	// instead of their trailing args: in a pipe they need only
-	// PipeRequired args (`ls | cat`, `ls | grep x`).
+	// instead of their trailing args: in a pipe they take exactly
+	// PipeRequired args (`ls | cat`, `ls | grep x`). Only they can be
+	// pipe receivers: `ls | ls` runs, but connects nothing.
 	ReadsStdin   bool
 	PipeRequired int
 }
@@ -36,6 +43,18 @@ var NoArgs = Positional{}.Validate
 // another argument can follow, or when the command is complete (the
 // trailing space before `|`).
 func (p Positional) Validate(ctx simulation.ArgContext, partial string) simulation.Suggestion {
+	if ctx.InPipe {
+		if !p.ReadsStdin {
+			return simulation.Suggestion{}
+		}
+		p.Args, p.Required = p.Args[:p.PipeRequired], p.PipeRequired
+	}
+	sug := p.validate(ctx, partial)
+	sug.Writes = sug.Complete && p.Writes
+	return sug
+}
+
+func (p Positional) validate(ctx simulation.ArgContext, partial string) simulation.Suggestion {
 	tokens := strings.Split(partial, " ")
 	i := len(tokens) - 1
 	prev, cur := tokens[:i], tokens[i]
@@ -49,7 +68,7 @@ func (p Positional) Validate(ctx simulation.ArgContext, partial string) simulati
 		if cur != "" {
 			return simulation.Suggestion{}
 		}
-		return simulation.Suggestion{Complete: p.enough(ctx, i)}
+		return simulation.Suggestion{Complete: p.enough(i)}
 	}
 
 	sug := p.Args[i](ctx, prev, cur)
@@ -60,12 +79,12 @@ func (p Positional) Validate(ctx simulation.ArgContext, partial string) simulati
 		}
 	}
 	if cur == "" {
-		return simulation.Suggestion{Chars: chars, Complete: p.enough(ctx, i)}
+		return simulation.Suggestion{Chars: chars, Complete: p.enough(i)}
 	}
 	if !sug.Complete {
 		return simulation.Suggestion{Chars: chars}
 	}
-	complete := p.enough(ctx, i+1)
+	complete := p.enough(i + 1)
 	if complete || (i+1 < len(p.Args) && live(p.Args[i+1](ctx, tokens, ""))) {
 		chars = append(chars, ' ')
 	}
@@ -73,11 +92,8 @@ func (p Positional) Validate(ctx simulation.ArgContext, partial string) simulati
 }
 
 // enough reports whether n complete args make a runnable command.
-func (p Positional) enough(ctx simulation.ArgContext, n int) bool {
-	if n >= p.Required {
-		return true
-	}
-	return ctx.InPipe && p.ReadsStdin && n >= p.PipeRequired
+func (p Positional) enough(n int) bool {
+	return n >= p.Required
 }
 
 // live reports whether a suggestion leads anywhere: it is complete or
@@ -106,7 +122,7 @@ func ValidCommand(
 		return va(ctx, rest)
 	}
 	var chars charSet
-	complete := false
+	complete, writes := false, false
 	for _, n := range names {
 		if !strings.HasPrefix(n, name) {
 			continue
@@ -123,10 +139,10 @@ func ValidCommand(
 			chars.add(rune(n[len(name)]))
 		} else {
 			chars.add(' ')
-			complete = s.Complete
+			complete, writes = s.Complete, s.Writes
 		}
 	}
-	return simulation.Suggestion{Chars: sortedKeys(chars), Complete: complete}
+	return simulation.Suggestion{Chars: sortedKeys(chars), Complete: complete, Writes: writes}
 }
 
 // Subcommands is the validator for `CMD SUB ARGS...`, e.g. apt install.

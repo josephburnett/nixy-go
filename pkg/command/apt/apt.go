@@ -16,7 +16,7 @@ func init() {
 		Launch: launch,
 		ValidArgs: command.Subcommands(map[string]simulation.ValidArgs{
 			"install": command.Positional{Args: []command.Arg{installable}, Required: 1}.Validate,
-			"list":    command.NoArgs,
+			"list":    command.Positional{Writes: true}.Validate,
 		}),
 	})
 }

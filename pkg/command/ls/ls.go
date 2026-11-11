@@ -15,7 +15,7 @@ func init() {
 	simulation.Register("ls", &simulation.Binary{
 		Launch: launch,
 		// `ls` lists the cwd; `ls PATH` a folder, or names a file.
-		ValidArgs: command.Positional{Args: []command.Arg{command.AnyPath}}.Validate,
+		ValidArgs: command.Positional{Args: []command.Arg{command.AnyPath}, Writes: true}.Validate,
 	})
 }
 

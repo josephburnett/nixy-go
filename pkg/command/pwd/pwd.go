@@ -12,7 +12,7 @@ import (
 func init() {
 	simulation.Register("pwd", &simulation.Binary{
 		Launch:    launch,
-		ValidArgs: command.NoArgs,
+		ValidArgs: command.Positional{Writes: true}.Validate,
 	})
 }
 
