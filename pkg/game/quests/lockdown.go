@@ -39,7 +39,7 @@ func (q *Lockdown) Setup(sim *simulation.S) error {
 	return c.Filesystem.CreateFile(nixyHome, "old.txt", &file.F{
 		Type: file.Text, Owner: "nixy",
 		OwnerPermission: file.Write, CommonPermission: file.Read,
-		Data: "Old notes. I don't need these any more.",
+		Data: "Old notes. I don't need these any more.\n",
 	}, file.OwnerRoot)
 }
 

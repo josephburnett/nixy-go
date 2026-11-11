@@ -426,6 +426,13 @@ Fuzz and liveness tests with different goals:
 - `TestPlannedCommandsAreTaught` (`pkg/game/quests/`) — every program
   a plan runs appears in backticks in Nixy's dialog before it's
   planned.
+- `TestPlaythrough` (`pkg/session/`) — presses only the hint keys from
+  login to the last quest and keeps a transcript of what the player
+  sees (dialog, thoughts, terminal). `NIXY_TRANSCRIPT=FILE go test
+  ./pkg/session -run TestPlaythrough` writes it out: read it after
+  changing quests or dialog. Text files end in a newline, in the
+  worlds (`TestTextFilesEndInNewline`) and after the playthrough, so
+  `wc -l` agrees with `cat`.
 - `TestFuzzE2ERejectedKeys` (`pkg/session/`) — random play that also
   presses keys the keyboard doesn't offer, failing if any changes
   anything observable, and checks after every key that the process

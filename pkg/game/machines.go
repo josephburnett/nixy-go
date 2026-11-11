@@ -122,7 +122,10 @@ func (r *MachineRegistry) addToAllHosts(sim *simulation.S, newHost string) {
 		if already {
 			continue
 		}
-		hostsFile.Data += "\n" + newHost
+		if hostsFile.Data != "" && !strings.HasSuffix(hostsFile.Data, "\n") {
+			hostsFile.Data += "\n"
+		}
+		hostsFile.Data += newHost + "\n"
 	}
 }
 

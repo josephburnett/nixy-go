@@ -34,7 +34,7 @@ func (q *Modification) Setup(sim *simulation.S) error {
 		Owner:            "nixy",
 		OwnerPermission:  file.Write,
 		CommonPermission: file.Read,
-		Data:             "This file is junk. Please delete me!",
+		Data:             "This file is junk. Please delete me!\n",
 	}, "root")
 }
 

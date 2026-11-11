@@ -33,11 +33,11 @@ func projectsWorld() *file.F {
 		Type: file.Folder, Owner: "nixy",
 		OwnerPermission: file.Write, CommonPermission: file.Read,
 		Files: map[string]*file.F{
-			"notes.txt":  {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "some notes"},
-			"draft.txt":  {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "draft"},
-			"target.txt": {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "you found it!"},
-			"readme.txt": {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "readme"},
-			"config.txt": {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "config"},
+			"notes.txt":  {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "some notes\n"},
+			"draft.txt":  {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "draft\n"},
+			"target.txt": {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "you found it!\n"},
+			"readme.txt": {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "readme\n"},
+			"config.txt": {Type: file.Text, Owner: "nixy", OwnerPermission: file.Write, CommonPermission: file.Read, Data: "config\n"},
 		},
 	}
 	return w

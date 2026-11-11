@@ -20,7 +20,7 @@ func Nixy() *file.F {
 				Files: map[string]*file.F{
 					"hosts": {Type: file.Text, Owner: file.OwnerRoot,
 						OwnerPermission: file.Write, CommonPermission: file.Read,
-						Data: "nixy\nlaptop"},
+						Data: "nixy\nlaptop\n"},
 				}},
 			// root's home: only root may look inside.
 			"root": {Type: file.Folder, Owner: file.OwnerRoot,
@@ -38,7 +38,7 @@ func Nixy() *file.F {
 						Files: map[string]*file.F{
 							"readme.txt": {Type: file.Text, Owner: "nixy",
 								OwnerPermission: file.Write, CommonPermission: file.Read,
-								Data: "Welcome to Nixy! I'm glad you're here.\nPlease look around and help me out!"},
+								Data: "Welcome to Nixy! I'm glad you're here.\nPlease look around and help me out!\n"},
 						}},
 				}},
 			"var": {Type: file.Folder, Owner: file.OwnerRoot,
@@ -49,7 +49,7 @@ func Nixy() *file.F {
 						Files: map[string]*file.F{
 							"system.log": {Type: file.Text, Owner: file.OwnerRoot,
 								OwnerPermission: file.Write, CommonPermission: file.Read,
-								Data: "info: system started\ninfo: services running\nerror: disk space low\ninfo: backup complete\nerror: network timeout"},
+								Data: "info: system started\ninfo: services running\nerror: disk space low\ninfo: backup complete\nerror: network timeout\n"},
 						}},
 				}},
 		},
