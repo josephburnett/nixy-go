@@ -55,7 +55,7 @@ func Layout(f Frame) []RenderedLine {
 
 	// Blank gutter then keyboard.
 	lines = append(lines, nil)
-	lines = append(lines, layoutKeyboard(f.ValidKeys, f.HintKey)...)
+	lines = append(lines, layoutKeyboard(f.ValidKeys, f.HintKey, f.Width+2)...) // full screen width, not the box interior
 
 	return lines
 }
@@ -231,7 +231,7 @@ func truncateSegments(segs []Segment, width int) []Segment {
 // layoutKeyboard emits the four-row keyboard: three letter rows then a
 // special-keys row. Each key carries StyleOnPath if it's the hint,
 // StyleKeyValid if it's typeable now, StyleKeyDim otherwise.
-func layoutKeyboard(valid []process.Datum, hint process.Datum) []RenderedLine {
+func layoutKeyboard(valid []process.Datum, hint process.Datum, width int) []RenderedLine {
 	validSet := buildDatumSet(valid)
 	indents := []string{" ", "  ", "   "}
 	var lines []RenderedLine
@@ -245,12 +245,13 @@ func layoutKeyboard(valid []process.Datum, hint process.Datum) []RenderedLine {
 		}
 		lines = append(lines, line)
 	}
+	labels := specialRowLabels(width)
 	specialLine := RenderedLine{{Text: " "}}
 	for i, sk := range specialKeys {
 		if i > 0 {
 			specialLine = append(specialLine, Segment{Text: " "})
 		}
-		specialLine = append(specialLine, layoutKey("["+sk.label+"]", sk.datum, validSet, hint))
+		specialLine = append(specialLine, layoutKey(labels[i], sk.datum, validSet, hint))
 	}
 	lines = append(lines, specialLine)
 	return lines

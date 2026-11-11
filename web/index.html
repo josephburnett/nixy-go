@@ -41,6 +41,9 @@
 
             function updateSize() {
                 const cell = measureCell();
+                if (!(cell.w > 0 && cell.h > 0)) {
+                    return; // not laid out yet (e.g. hidden tab)
+                }
                 const style = getComputedStyle(container);
                 const w = container.clientWidth
                     - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);

@@ -13,18 +13,48 @@ var keyboardRows = [][]string{
 	{"z", "x", "c", "v", "b", "n", "m"},
 }
 
-// specialKeys are shown on the bottom row.
+// specialKeys are shown on the bottom row. The row is wider than the
+// letter rows, so narrow screens get shorter labels (see specialRowLabels).
 var specialKeys = []struct {
 	label string
+	short string
 	datum process.Datum
 }{
-	{"space", process.Chars(" ")},
-	{".", process.Chars(".")},
-	{"/", process.Chars("/")},
-	{"|", process.Chars("|")},
-	{"-", process.Chars("-")},
-	{"enter", process.TermEnter},
-	{"bksp", process.TermBackspace},
+	{"space", "spc", process.Chars(" ")},
+	{".", ".", process.Chars(".")},
+	{"/", "/", process.Chars("/")},
+	{"|", "|", process.Chars("|")},
+	{"-", "-", process.Chars("-")},
+	{"enter", "ent", process.TermEnter},
+	{"bksp", "bs", process.TermBackspace},
+}
+
+// specialRowLabels returns the widest special-key labels that fit in
+// width columns (including the row's one-column indent): "[space]", then
+// "[spc]", then bare "spc" at the smallest sizes.
+func specialRowLabels(width int) []string {
+	for _, tier := range []struct {
+		short    bool
+		brackets bool
+	}{{false, true}, {true, true}, {true, false}} {
+		labels := make([]string, len(specialKeys))
+		n := 1 + len(specialKeys) - 1 // indent + separators
+		for i, sk := range specialKeys {
+			l := sk.label
+			if tier.short {
+				l = sk.short
+			}
+			if tier.brackets {
+				l = "[" + l + "]"
+			}
+			labels[i] = l
+			n += utf8.RuneCountInString(l)
+		}
+		if n <= width || !tier.brackets {
+			return labels
+		}
+	}
+	return nil // unreachable: the last tier always returns
 }
 
 // datumSet is a simple set for checking datum membership.
