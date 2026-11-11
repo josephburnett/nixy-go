@@ -20,7 +20,7 @@ func init() {
 func validArgs(ctx simulation.ArgContext, partial string) simulation.Suggestion {
 	ctx.User = file.OwnerRoot // the command runs as root
 	return command.ValidCommand(ctx, partial, sudoable(ctx), func(name string) (simulation.ValidArgs, bool) {
-		b, err := ctx.Sim.LookupBinary(ctx.Hostname, name)
+		b, err := ctx.Sim.LookupBinary(ctx.Hostname, ctx.User, name)
 		if err != nil {
 			return nil, false
 		}
@@ -30,8 +30,8 @@ func validArgs(ctx simulation.ArgContext, partial string) simulation.Suggestion 
 
 func sudoable(ctx simulation.ArgContext) []string {
 	var names []string
-	for _, name := range ctx.Sim.Commands(ctx.Hostname) {
-		if b, err := ctx.Sim.LookupBinary(ctx.Hostname, name); err == nil && b != binary && !b.Interactive {
+	for _, name := range ctx.Sim.Commands(ctx.Hostname, ctx.User) {
+		if b, err := ctx.Sim.LookupBinary(ctx.Hostname, ctx.User, name); err == nil && b != binary && !b.Interactive {
 			names = append(names, name)
 		}
 	}
@@ -49,7 +49,7 @@ func launch(
 		return command.NewErrorProcess(file.OwnerRoot, "sudo: missing command\n"), nil
 	}
 	cmdName := args[0]
-	b, err := sim.LookupBinary(hostname, cmdName)
+	b, err := sim.LookupBinary(hostname, file.OwnerRoot, cmdName)
 	if err != nil {
 		return command.NewErrorProcess(file.OwnerRoot, "sudo: "+err.Error()+"\n"), nil
 	}

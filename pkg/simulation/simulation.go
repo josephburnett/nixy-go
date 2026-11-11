@@ -1,6 +1,7 @@
 package simulation
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -107,36 +108,41 @@ func GetBinary(name string) (*Binary, error) {
 	return nil, fmt.Errorf("binary %v not registered", name)
 }
 
-// LookupBinary resolves a command name the way the shell runs it:
-// through the executable at /bin/<name> on the host.
-func (s *S) LookupBinary(hostname, name string) (*Binary, error) {
+// LookupBinary resolves a command name the way the shell runs it for
+// user: through the executable at /bin/<name> on the host, which user
+// must be able to reach and read (the model's execute permission).
+func (s *S) LookupBinary(hostname, user, name string) (*Binary, error) {
 	c, err := s.GetComputer(hostname)
 	if err != nil {
 		return nil, err
 	}
-	f, err := c.Filesystem.Navigate([]string{"bin", name})
-	if err != nil {
-		return nil, fmt.Errorf("command not found: %v", name)
+	f, err := c.Filesystem.Lookup([]string{"bin", name}, user)
+	if errors.Is(err, file.ErrNotExist) || errors.Is(err, file.ErrNotDir) {
+		return nil, fmt.Errorf("%v: command not found", name)
 	}
-	if f.Type != file.Binary {
-		return nil, fmt.Errorf("not executable: %v", name)
+	if err == nil && (f.Type != file.Binary || !f.CanRead(user)) {
+		err = file.ErrPermission
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%v: %w", name, err)
 	}
 	return GetBinary(f.Data)
 }
 
-// Commands lists the names in /bin on the host, sorted.
-func (s *S) Commands(hostname string) []string {
+// Commands lists the names in /bin on the host that user can run,
+// sorted.
+func (s *S) Commands(hostname, user string) []string {
 	c, err := s.GetComputer(hostname)
 	if err != nil {
 		return nil
 	}
-	bin, err := c.Filesystem.Navigate([]string{"bin"})
+	bin, err := c.Filesystem.LookupDir([]string{"bin"}, user)
 	if err != nil {
 		return nil
 	}
 	names := make([]string, 0, len(bin.Files))
 	for name, f := range bin.Files {
-		if f.Type == file.Binary {
+		if f.Type == file.Binary && f.CanRead(user) {
 			names = append(names, name)
 		}
 	}

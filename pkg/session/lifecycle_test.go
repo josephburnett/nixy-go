@@ -225,7 +225,7 @@ func TestNxPanicRestoresShippedBin(t *testing.T) {
 
 	for host, names := range map[string][]string{"laptop": {"ssh", "ls", "cat"}, "nixy": {"apt", "mv"}} {
 		for _, n := range names {
-			if _, err := sess.Game.Sim.LookupBinary(host, n); err != nil {
+			if _, err := sess.Game.Sim.LookupBinary(host, "alice", n); err != nil {
 				t.Errorf("%s: %s missing after panic: %v", host, n, err)
 			}
 		}

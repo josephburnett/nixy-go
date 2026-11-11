@@ -240,8 +240,27 @@ func TestShellUnknownCommand(t *testing.T) {
 	_ = readAllStdout(t, p)
 	errOut := readAllStderr(t, p)
 
-	if errOut == "" {
-		t.Fatal("expected error for unknown command")
+	if errOut != "foobar: command not found\n" {
+		t.Fatalf("got %q, want bash's wording", errOut)
+	}
+}
+
+// TestShellRunNeedsReadOnBinary: running /bin/X needs the model's
+// execute permission (Read) on it, checked the same way as every other
+// file access; root still can.
+func TestShellRunNeedsReadOnBinary(t *testing.T) {
+	sim, p := testSetup(t)
+	c, _ := sim.GetComputer("test")
+	c.Filesystem.Files["bin"].Files["pwd"].CommonPermission = file.None
+	if canRunFresh(p, "pwd") {
+		t.Error("pwd offered without permission to run it")
+	}
+	if !canRunFresh(p, "sudo pwd") {
+		t.Error("root can't run pwd")
+	}
+	runLine(t, p, "pwd")
+	if got := readAllStderr(t, p); got != "pwd: Permission denied\n" {
+		t.Errorf("got %q", got)
 	}
 }
 

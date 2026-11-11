@@ -193,7 +193,7 @@ func (s *shell) executeCommand(cmd string) error {
 		if seg.Name == "" {
 			return fmt.Errorf("empty pipe segment")
 		}
-		b, err := s.simulation.LookupBinary(s.hostname, seg.Name)
+		b, err := s.simulation.LookupBinary(s.hostname, s.owner, seg.Name)
 		if err != nil {
 			return err
 		}
@@ -239,7 +239,7 @@ func (s *shell) executeSingle(seg command.Segment) error {
 }
 
 func (s *shell) launchBinary(seg command.Segment) (process.P, error) {
-	b, err := s.simulation.LookupBinary(s.hostname, seg.Name)
+	b, err := s.simulation.LookupBinary(s.hostname, s.owner, seg.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +467,7 @@ func (s *shell) commandNames(inPipe bool) []string {
 			names = append(names, name)
 		}
 	}
-	for _, name := range s.simulation.Commands(s.hostname) {
+	for _, name := range s.simulation.Commands(s.hostname, s.owner) {
 		if !inPipe || s.pipeable(name) {
 			names = append(names, name)
 		}
@@ -482,7 +482,7 @@ func (s *shell) validator(name string) (simulation.ValidArgs, bool) {
 	if va, ok := builtinArgs[name]; ok {
 		return va, true
 	}
-	b, err := s.simulation.LookupBinary(s.hostname, name)
+	b, err := s.simulation.LookupBinary(s.hostname, s.owner, name)
 	if err != nil {
 		return nil, false
 	}
@@ -496,7 +496,7 @@ func (s *shell) pipeable(name string) bool {
 	if _, ok := builtinArgs[name]; ok {
 		return false
 	}
-	b, err := s.simulation.LookupBinary(s.hostname, name)
+	b, err := s.simulation.LookupBinary(s.hostname, s.owner, name)
 	return err == nil && !b.Interactive
 }
 

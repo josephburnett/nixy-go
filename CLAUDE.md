@@ -54,7 +54,9 @@ Implementation:
     characters only — nothing a real shell would interpret (`|`, `>`,
     `*`), no leading `-`.
 - Commands are found one way: `sim.LookupBinary` via `/bin/<name>`,
-  for running, validating and sudo alike. Builtins (cd, exit, nx) have
+  for running, validating and sudo alike. It looks up as a user
+  (root under sudo) with the same permission checks as any file:
+  running needs Read on the binary. Builtins (cd, exit, nx) have
   validators in `shell.builtinArgs` and can't be piped.
 - `shell.Next()` is pipe-aware: it splits on `|` and validates only
   the segment after the last pipe. It adds just Enter and `|` (when
