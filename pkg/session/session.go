@@ -310,12 +310,16 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 
 	// Capture command + host before Enter dispatches — ssh nixy must be
 	// recorded against laptop, not the new nixy shell it spawns.
+	// What the line will run is resolved now, before it runs and can
+	// change /bin: the tracker records the program, not the name typed.
 	var cmdLine, cmdHost string
 	var cmdCwd []string
+	var programs []game.Program
 	if datum == process.TermEnter {
 		cmdLine = strings.TrimSpace(t.State.Line)
 		cmdHost = s.Shell.Hostname()
 		cmdCwd = s.Shell.CurrentDirectory()
+		programs = game.Resolve(s.Game.Sim, cmdHost, s.Username, cmdLine)
 	}
 
 	// A key the keyboard didn't offer has no effect at all: nothing is
@@ -369,7 +373,7 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 			status, done := typedIn.LastStatus()
 			s.Game.Manager.Tracker.Record(game.CommandRecord{
 				Hostname: cmdHost, User: s.Username, Dir: cmdCwd, Cwd: cwd, Command: cmdLine,
-				Status: status, Running: !done,
+				Status: status, Running: !done, Programs: programs,
 			})
 		}
 		s.Game.AfterCommand()

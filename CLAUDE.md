@@ -269,7 +269,9 @@ loop wraps it in scaffolding:
   effect checks the world (`/etc/config` exists, junk.txt is gone).
   Otherwise it asks the tracker what ran and how it ended:
   `CommandRecord.Invocations()` parses the line into programs (sudo
-  seen through, `~` expanded) whose args resolve as paths from the
+  seen through, `~` expanded, each named for the program that really
+  ran: the session resolves the line through /bin before running it,
+  `game.Resolve`, so `cat x` with /bin/cat replaced by rm is an rm) whose args resolve as paths from the
   folder the command ran in (`Invocation.HasPath`), and `OK()` /
   `Failed()` read its status. So `cat readme.txt`, `cat
   /home/nixy/readme.txt` and `cat ~/../nixy/readme.txt | grep x` all

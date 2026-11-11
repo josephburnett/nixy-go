@@ -725,6 +725,13 @@ func (s *shell) builtin(name string) (simulation.ValidArgs, bool) {
 	return va, ok
 }
 
+// IsBuiltin reports whether name is one of the shell's own commands
+// (cd, exit, help, nx), which it runs itself rather than from /bin.
+func IsBuiltin(name string) bool {
+	_, ok := builtinArgs[name]
+	return ok
+}
+
 // pipeable reports whether a command can sit on either side of `|` at
 // all: a binary that doesn't take over the terminal. Builtins change
 // the shell itself, which a pipeline segment can't do. Whether it

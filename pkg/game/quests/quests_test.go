@@ -74,7 +74,8 @@ func newShellState(t *testing.T, g *game.Game) *shellState {
 
 func (s *shellState) executeCommand(t *testing.T, cmd string) {
 	t.Helper()
-	rec := game.CommandRecord{Hostname: s.hostname, User: "user", Dir: s.cwd, Cwd: s.cwd, Command: cmd}
+	rec := game.CommandRecord{Hostname: s.hostname, User: "user", Dir: s.cwd, Cwd: s.cwd, Command: cmd,
+		Programs: game.Resolve(s.game.Sim, s.hostname, "user", cmd)}
 	record := func(status int) {
 		rec.Status = status
 		s.game.Manager.Tracker.Record(rec)

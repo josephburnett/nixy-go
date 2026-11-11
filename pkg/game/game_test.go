@@ -1,6 +1,7 @@
 package game
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/josephburnett/nixy-go/pkg/file"
@@ -304,5 +305,43 @@ func TestNxLogListsQuestsInOrderWithMachine(t *testing.T) {
 	want := "● laptop  mock quest\n  server  mock quest (locked)\n  laptop  mock quest\n"
 	if got := g.NxLog(); got != want {
 		t.Fatalf("nx log:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// The tracker records what ran, not what was typed: with /bin/cat
+// really rm, `cat x` is an rm, and `sudo cat x` an rm as root.
+func TestTrackerRecordsResolvedPrograms(t *testing.T) {
+	bin := func(data string) *file.F {
+		return &file.F{Type: file.Binary, Owner: file.OwnerRoot, OwnerPermission: file.Write, CommonPermission: file.Read, Data: data}
+	}
+	sim := simulation.New()
+	if err := sim.Boot("h", &file.F{Type: file.Folder, Owner: file.OwnerRoot,
+		OwnerPermission: file.Write, CommonPermission: file.Read,
+		Files: map[string]*file.F{"bin": {Type: file.Folder, Owner: file.OwnerRoot,
+			OwnerPermission: file.Write, CommonPermission: file.Read,
+			Files: map[string]*file.F{"cat": bin("rm"), "sudo": bin("sudo"), "ls": bin("ls")}}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		line string
+		want []Invocation
+	}{
+		{"cat x", []Invocation{{Name: "rm", Args: []string{"x"}}}},
+		{"sudo cat x", []Invocation{{Name: "rm", Args: []string{"x"}, Sudo: true}}},
+		{"ls | cat", []Invocation{{Name: "ls"}, {Name: "rm"}}},
+		{"grep x", []Invocation{{Name: "", Args: []string{"x"}}}},
+		{"cd /", []Invocation{{Name: "cd", Args: []string{"/"}}}},
+	} {
+		r := CommandRecord{User: "u", Command: c.line, Programs: Resolve(sim, "h", "u", c.line)}
+		got := r.Invocations()
+		if len(got) != len(c.want) {
+			t.Fatalf("%q: %+v, want %+v", c.line, got, c.want)
+		}
+		for i := range got {
+			g, w := got[i], c.want[i]
+			if g.Name != w.Name || g.Sudo != w.Sudo || strings.Join(g.Args, " ") != strings.Join(w.Args, " ") {
+				t.Errorf("%q: invocation %d is %+v, want %+v", c.line, i, g, w)
+			}
+		}
 	}
 }

@@ -172,21 +172,32 @@ func GetBinary(name string) (*Binary, error) {
 // user: through the executable at /bin/<name> on the host, which user
 // must be able to reach and read (the model's execute permission).
 func (s *S) LookupBinary(hostname, user, name string) (*Binary, error) {
-	c, err := s.GetComputer(hostname)
+	program, err := s.Resolve(hostname, user, name)
 	if err != nil {
 		return nil, err
 	}
+	return GetBinary(program)
+}
+
+// Resolve returns the program that running name as user on hostname
+// runs: the registered binary behind /bin/<name>, which may not be the
+// one called name (`sudo mv /bin/rm /bin/cat` makes cat run rm).
+func (s *S) Resolve(hostname, user, name string) (string, error) {
+	c, err := s.GetComputer(hostname)
+	if err != nil {
+		return "", err
+	}
 	f, err := c.Filesystem.Lookup([]string{"bin", name}, user)
 	if errors.Is(err, file.ErrNotExist) || errors.Is(err, file.ErrNotDir) {
-		return nil, fmt.Errorf("%v: command not found", name)
+		return "", fmt.Errorf("%v: command not found", name)
 	}
 	if err == nil && (f.Type != file.Binary || !f.CanRead(user)) {
 		err = file.ErrPermission
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%v: %w", name, err)
+		return "", fmt.Errorf("%v: %w", name, err)
 	}
-	return GetBinary(f.Data)
+	return f.Data, nil
 }
 
 // Commands lists the names in /bin on the host that user can run,

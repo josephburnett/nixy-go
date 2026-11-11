@@ -69,3 +69,24 @@ func TestBrokenPrerequisitesRecover(t *testing.T) {
 		})
 	}
 }
+
+// The tracker records the program that ran: with /bin/cat replaced by
+// rm, `cat readme.txt` deletes the readme, and must not count as
+// reading it.
+func TestTrackerRecordsWhatRan(t *testing.T) {
+	sess, term := newLoggedIn(t, "user")
+	followHints(t, sess, term, hintFinishKeys, func() bool { return activeQuestID(sess) == "inspection" })
+	for term.State.Line != "" {
+		pressAccepted(t, sess, term, process.TermBackspace)
+	}
+	for _, l := range []string{"sudo apt install mv", "sudo rm /bin/cat", "sudo mv /bin/rm /bin/cat", "cat /home/nixy/readme.txt"} {
+		typeCommand(t, sess, term, l)
+	}
+	last := sess.Game.Manager.Tracker.LastN(1)[0]
+	if invs := last.Invocations(); len(invs) != 1 || invs[0].Name != "rm" {
+		t.Fatalf("`cat readme.txt` with cat replaced by rm recorded as %+v", invs)
+	}
+	if activeQuestID(sess) != "inspection" {
+		t.Fatalf("running rm completed %q", "inspection")
+	}
+}

@@ -4,7 +4,9 @@ import (
 	"slices"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
+	"github.com/josephburnett/nixy-go/pkg/command/shell"
 	"github.com/josephburnett/nixy-go/pkg/file"
+	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
 // CommandTracker records the command lines the player ran, for quests
@@ -35,6 +37,51 @@ type CommandRecord struct {
 	// (ssh, until the connection closes), and Status means nothing.
 	Status  int
 	Running bool
+	// Programs is what each segment of the line really ran, resolved
+	// through /bin when it was typed (see Resolve): `cat x` where
+	// /bin/cat is rm ran rm. Nil means "as typed" (test fixtures).
+	Programs []Program
+}
+
+// Program is the program a segment of a command line ran. Name is the
+// registered binary (or the shell builtin), "" when there was none to
+// run. Sudo means the segment was sudo running Name as root.
+type Program struct {
+	Name string
+	Sudo bool
+}
+
+// Resolve finds the programs a command line typed as user on hostname
+// will run, segment by segment, the way the shell and sudo look them
+// up: builtins are the shell's, everything else is whatever /bin/<name>
+// holds, and sudo's command is looked up as root.
+func Resolve(sim *simulation.S, hostname, user, line string) []Program {
+	var out []Program
+	for _, seg := range command.Parse(line).Segments {
+		out = append(out, resolveSegment(sim, hostname, user, seg))
+	}
+	return out
+}
+
+func resolveSegment(sim *simulation.S, hostname, user string, seg command.Segment) Program {
+	if seg.Name == "" {
+		return Program{}
+	}
+	if shell.IsBuiltin(seg.Name) {
+		return Program{Name: seg.Name}
+	}
+	name, err := sim.Resolve(hostname, user, seg.Name)
+	if err != nil {
+		return Program{}
+	}
+	if name == "sudo" && len(seg.Args) > 0 {
+		inner, err := sim.Resolve(hostname, file.OwnerRoot, seg.Args[0])
+		if err != nil {
+			inner = ""
+		}
+		return Program{Name: inner, Sudo: true}
+	}
+	return Program{Name: name}
 }
 
 // OK reports whether the command line finished and succeeded.
@@ -77,11 +124,12 @@ func (i Invocation) HasPath(from int, path []string) bool {
 }
 
 // Invocations parses the command line into the programs it ran, in
-// pipeline order.
+// pipeline order. Each is named for the program that really ran (see
+// Programs), not the name typed.
 func (r CommandRecord) Invocations() []Invocation {
 	home := file.Home(r.User)
 	var out []Invocation
-	for _, seg := range command.Parse(r.Command).Segments {
+	for i, seg := range command.Parse(r.Command).Segments {
 		if seg.Name == "" {
 			continue
 		}
@@ -89,8 +137,17 @@ func (r CommandRecord) Invocations() []Invocation {
 		for _, a := range seg.Args {
 			inv.Args = append(inv.Args, file.ExpandHome(a, home))
 		}
-		if inv.Name == "sudo" && len(inv.Args) > 0 {
-			inv = Invocation{Name: inv.Args[0], Args: inv.Args[1:], Sudo: true, dir: r.Dir}
+		sudo := inv.Name == "sudo" && len(inv.Args) > 0
+		if i < len(r.Programs) {
+			sudo = r.Programs[i].Sudo
+			inv.Name = r.Programs[i].Name
+		}
+		if sudo {
+			name := inv.Args[0]
+			if i < len(r.Programs) {
+				name = r.Programs[i].Name
+			}
+			inv = Invocation{Name: name, Args: inv.Args[1:], Sudo: true, dir: r.Dir}
 		}
 		out = append(out, inv)
 	}
