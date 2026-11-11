@@ -7,16 +7,16 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/simulation"
 )
 
+var binary = &simulation.Binary{Launch: launch}
+
 func init() {
-	simulation.Register("sudo", &simulation.Binary{
-		Launch:    launch,
-		ValidArgs: validArgs,
-	})
+	binary.ValidArgs = validArgs
+	simulation.Register("sudo", binary)
 }
 
 // validArgs is `sudo COMMAND ARGS...`: a non-interactive command from
-// /bin other than sudo itself, then whatever that command's own
-// validator accepts.
+// /bin other than sudo itself (under any name: /bin entries can be
+// renamed), then whatever that command's own validator accepts.
 func validArgs(ctx simulation.ArgContext, partial string) simulation.Suggestion {
 	return command.ValidCommand(ctx, partial, sudoable(ctx), func(name string) (simulation.ValidArgs, bool) {
 		b, err := ctx.Sim.LookupBinary(ctx.Hostname, name)
@@ -30,10 +30,7 @@ func validArgs(ctx simulation.ArgContext, partial string) simulation.Suggestion 
 func sudoable(ctx simulation.ArgContext) []string {
 	var names []string
 	for _, name := range ctx.Sim.Commands(ctx.Hostname) {
-		if name == "sudo" {
-			continue
-		}
-		if b, err := ctx.Sim.LookupBinary(ctx.Hostname, name); err == nil && !b.Interactive {
+		if b, err := ctx.Sim.LookupBinary(ctx.Hostname, name); err == nil && b != binary && !b.Interactive {
 			names = append(names, name)
 		}
 	}

@@ -883,3 +883,16 @@ func TestRegisterRequiresValidArgs(t *testing.T) {
 	}()
 	simulation.Register("no-validator", &simulation.Binary{Launch: launch})
 }
+
+// TestShellPipelineFindsBinariesFirst: every segment's binary is found
+// before any segment runs, so an earlier segment removing a later one's
+// binary doesn't break the pipeline halfway.
+func TestShellPipelineFindsBinariesFirst(t *testing.T) {
+	_, p := testSetup(t)
+	writeString(t, p, "sudo rm /bin/pwd | pwd")
+	writeEnter(t, p)
+	_ = readAllStdout(t, p)
+	if errOut := readAllStderr(t, p); errOut != "" {
+		t.Fatalf("unexpected error: %q", errOut)
+	}
+}

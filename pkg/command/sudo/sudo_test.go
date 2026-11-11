@@ -82,3 +82,17 @@ func TestSudoUnknownCommand(t *testing.T) {
 		t.Fatalf("expected command not found, got %q", errOut)
 	}
 }
+
+// A renamed sudo must not make sudo's validator recurse into itself.
+func TestSudoValidArgsSkipsRenamedSudo(t *testing.T) {
+	sim := testSetup(t)
+	c, _ := sim.GetComputer("test")
+	bin, _ := c.Filesystem.Navigate([]string{"bin"})
+	bin.Files["s2"] = bin.Files["sudo"]
+	ctx := simulation.ArgContext{Sim: sim, Hostname: "test", Cwd: []string{}}
+	for _, r := range validArgs(ctx, "").Chars {
+		if r == 's' {
+			t.Fatal("sudo must not offer itself (s2, sudo) as the command")
+		}
+	}
+}

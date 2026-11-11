@@ -160,13 +160,23 @@ func (s *shell) executeCommand(cmd string) error {
 		return s.executeSingle(p.Segments[0])
 	}
 
-	// Pipeline: launch each segment, wire stdout->stdin
-	var processes []process.P
-	for _, seg := range p.Segments {
+	// Pipeline: find every binary before launching any, the way a real
+	// shell starts all segments together. Our commands act at launch, so
+	// `sudo rm /bin/ls | ls` would otherwise lose ls halfway through.
+	binaries := make([]*simulation.Binary, len(p.Segments))
+	for i, seg := range p.Segments {
 		if seg.Name == "" {
 			return fmt.Errorf("empty pipe segment")
 		}
-		p, err := s.launchBinary(seg)
+		b, err := s.simulation.LookupBinary(s.hostname, seg.Name)
+		if err != nil {
+			return err
+		}
+		binaries[i] = b
+	}
+	var processes []process.P
+	for i, seg := range p.Segments {
+		p, err := binaries[i].Launch(s.simulation, s.owner, s.hostname, s.currentDirectory, seg.Args)
 		if err != nil {
 			for _, proc := range processes {
 				proc.Kill()
