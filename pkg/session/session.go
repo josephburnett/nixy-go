@@ -75,6 +75,12 @@ func (s *Session) InitTerminal(t *terminal.T) {
 // never ends on its own: logging out returns to the login prompt, and
 // quitting is up to the front end (double Ctrl+C in the CLI).
 func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) {
+	if datum == process.TermClear {
+		// Ctrl+L clears the screen and keeps what's typed, like readline.
+		// It's the terminal's job, so the shell never sees it.
+		t.State.Lines = nil
+		return
+	}
 	if s.Mode == ModeLogin {
 		s.handleLoginKeystroke(datum, t)
 		return

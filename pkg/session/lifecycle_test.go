@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/nixy-go/pkg/game"
+	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
 
@@ -160,6 +161,25 @@ func TestNxPanicOnLaptopStaysLoggedIn(t *testing.T) {
 	typeLine(t, sess, term, "ssh nixy")
 	if got := sess.Shell.Hostname(); got != "nixy" {
 		t.Fatalf("shell after panic should be usable, hostname=%q", got)
+	}
+}
+
+func TestCtrlLClearsScreenKeepsInput(t *testing.T) {
+	sess, term := newLoggedIn(t, "alice")
+	typeLine(t, sess, term, "ls")
+	for _, r := range "ssh" {
+		sess.HandleKeystroke(process.Chars(string(r)), term)
+	}
+	sess.HandleKeystroke(process.TermClear, term)
+	if len(term.State.Lines) != 0 {
+		t.Fatalf("Ctrl+L should clear the scrollback, have %d lines", len(term.State.Lines))
+	}
+	if term.State.Line != "ssh" || sess.Shell.CurrentCommand() != "ssh" {
+		t.Fatalf("Ctrl+L should keep the typed input, line=%q shell=%q", term.State.Line, sess.Shell.CurrentCommand())
+	}
+	typeLine(t, sess, term, " nixy")
+	if got := sess.Shell.Hostname(); got != "nixy" {
+		t.Fatalf("command typed across Ctrl+L should still run, hostname=%q", got)
 	}
 }
 
