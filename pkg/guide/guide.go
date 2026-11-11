@@ -2,6 +2,7 @@ package guide
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
@@ -26,33 +27,12 @@ func (g *G) Stdin(in process.Data) error {
 	if len(in) != 1 {
 		return fmt.Errorf("guide: expected 1 datum, got %v", len(in))
 	}
-	valid := g.process.Next()
-	for _, v := range valid {
-		if datumEqual(in[0], v) {
-			return g.process.Stdin(in)
-		}
+	if !slices.Contains(g.process.Next(), in[0]) {
+		return fmt.Errorf("invalid input")
 	}
-	return fmt.Errorf("invalid input")
+	return g.process.Stdin(in)
 }
 
 func (g *G) Next() []process.Datum {
 	return g.process.Next()
-}
-
-func datumEqual(a, b process.Datum) bool {
-	switch a := a.(type) {
-	case process.Chars:
-		if b, ok := b.(process.Chars); ok {
-			return a == b
-		}
-	case process.TermCode:
-		if b, ok := b.(process.TermCode); ok {
-			return a == b
-		}
-	case process.Signal:
-		if b, ok := b.(process.Signal); ok {
-			return a == b
-		}
-	}
-	return false
 }

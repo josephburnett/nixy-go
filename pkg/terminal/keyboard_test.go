@@ -121,22 +121,3 @@ func TestRenderKeyboardContainsAllLetters(t *testing.T) {
 		}
 	}
 }
-
-func TestDatumSetContains(t *testing.T) {
-	s := buildDatumSet([]process.Datum{
-		process.Chars("a"),
-		process.TermEnter,
-	})
-	if !s.contains(process.Chars("a")) {
-		t.Fatal("should contain 'a'")
-	}
-	if !s.contains(process.TermEnter) {
-		t.Fatal("should contain TermEnter")
-	}
-	if s.contains(process.Chars("b")) {
-		t.Fatal("should not contain 'b'")
-	}
-	if s.contains(process.TermBackspace) {
-		t.Fatal("should not contain TermBackspace")
-	}
-}

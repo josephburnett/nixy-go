@@ -67,53 +67,15 @@ func specialRowLabels(width int) []string {
 func OnScreen(d process.Datum) bool {
 	for _, row := range keyboardRows {
 		for _, k := range row {
-			if datumEqual(KeyDatum(k), d) {
+			if KeyDatum(k) == d {
 				return true
 			}
 		}
 	}
 	for _, sk := range specialKeys {
-		if datumEqual(sk.datum, d) {
+		if sk.datum == d {
 			return true
 		}
-	}
-	return false
-}
-
-// datumSet is a simple set for checking datum membership.
-type datumSet struct {
-	chars     map[string]bool
-	termCodes map[process.TermCode]bool
-	signals   map[process.Signal]bool
-}
-
-func buildDatumSet(datums []process.Datum) datumSet {
-	s := datumSet{
-		chars:     map[string]bool{},
-		termCodes: map[process.TermCode]bool{},
-		signals:   map[process.Signal]bool{},
-	}
-	for _, d := range datums {
-		switch d := d.(type) {
-		case process.Chars:
-			s.chars[string(d)] = true
-		case process.TermCode:
-			s.termCodes[d] = true
-		case process.Signal:
-			s.signals[d] = true
-		}
-	}
-	return s
-}
-
-func (s datumSet) contains(d process.Datum) bool {
-	switch d := d.(type) {
-	case process.Chars:
-		return s.chars[string(d)]
-	case process.TermCode:
-		return s.termCodes[d]
-	case process.Signal:
-		return s.signals[d]
 	}
 	return false
 }
@@ -161,22 +123,4 @@ func KeyDatum(name string) process.Datum {
 		return process.Chars(name)
 	}
 	return nil
-}
-
-func datumEqual(a, b process.Datum) bool {
-	switch a := a.(type) {
-	case process.Chars:
-		if b, ok := b.(process.Chars); ok {
-			return a == b
-		}
-	case process.TermCode:
-		if b, ok := b.(process.TermCode); ok {
-			return a == b
-		}
-	case process.Signal:
-		if b, ok := b.(process.Signal); ok {
-			return a == b
-		}
-	}
-	return false
 }

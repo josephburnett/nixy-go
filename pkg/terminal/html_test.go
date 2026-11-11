@@ -3,6 +3,7 @@ package terminal
 import (
 	"html"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -174,9 +175,8 @@ func TestHTMLKeyboardTappableKeysMatchValidSet(t *testing.T) {
 		if len(got) != len(valid) {
 			t.Fatalf("valid=%v: %d tappable keys, want %d\n%s", valid, len(got), len(valid), out)
 		}
-		gotSet := buildDatumSet(got)
 		for _, d := range valid {
-			if !gotSet.contains(d) {
+			if !slices.Contains(got, d) {
 				t.Errorf("valid key %v is not tappable", d)
 			}
 		}
@@ -186,7 +186,7 @@ func TestHTMLKeyboardTappableKeysMatchValidSet(t *testing.T) {
 func TestKeyNameRoundTrip(t *testing.T) {
 	for _, d := range allKeyboardDatums() {
 		name := KeyName(d)
-		if back := KeyDatum(name); !datumEqual(back, d) {
+		if back := KeyDatum(name); back != d {
 			t.Errorf("KeyDatum(KeyName(%v)) = %v", d, back)
 		}
 	}

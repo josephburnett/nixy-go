@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -251,7 +252,6 @@ func truncateSegments(segs []Segment, width int) []Segment {
 // special-keys row. Each key carries StyleOnPath if it's the hint,
 // StyleKeyValid if it's typeable now, StyleKeyDim otherwise.
 func layoutKeyboard(valid []process.Datum, hint process.Datum, width int) []RenderedLine {
-	validSet := buildDatumSet(valid)
 	indents := []string{" ", " ", "  ", "   "}
 	var lines []RenderedLine
 	for row, keys := range keyboardRows {
@@ -260,7 +260,7 @@ func layoutKeyboard(valid []process.Datum, hint process.Datum, width int) []Rend
 			if i > 0 {
 				line = append(line, Segment{Text: " "})
 			}
-			line = append(line, layoutKey(key, KeyDatum(key), validSet, hint))
+			line = append(line, layoutKey(key, KeyDatum(key), valid, hint))
 		}
 		lines = append(lines, line)
 	}
@@ -270,7 +270,7 @@ func layoutKeyboard(valid []process.Datum, hint process.Datum, width int) []Rend
 		if i > 0 {
 			specialLine = append(specialLine, Segment{Text: " "})
 		}
-		specialLine = append(specialLine, layoutKey(labels[i], sk.datum, validSet, hint))
+		specialLine = append(specialLine, layoutKey(labels[i], sk.datum, valid, hint))
 	}
 	lines = append(lines, specialLine)
 	return lines
@@ -279,15 +279,15 @@ func layoutKeyboard(valid []process.Datum, hint process.Datum, width int) []Rend
 // layoutKey styles one keyboard key. Keys the player can press right now
 // also carry their KeyName so a front end can make them tappable; dim
 // keys carry none, so tapping them does nothing.
-func layoutKey(label string, datum process.Datum, validSet datumSet, hint process.Datum) Segment {
+func layoutKey(label string, datum process.Datum, valid []process.Datum, hint process.Datum) Segment {
 	seg := Segment{Text: label, Style: StyleKeyDim}
 	switch {
-	case hint != nil && datumEqual(datum, hint):
+	case hint != nil && datum == hint:
 		seg.Style = StyleOnPath
-	case validSet.contains(datum):
+	case slices.Contains(valid, datum):
 		seg.Style = StyleKeyValid
 	}
-	if validSet.contains(datum) {
+	if slices.Contains(valid, datum) {
 		seg.Key = KeyName(datum)
 	}
 	return seg
