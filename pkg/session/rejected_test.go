@@ -126,18 +126,18 @@ func TestFuzzE2ERejectedKeys(t *testing.T) {
 		term := terminal.New(terminal.NewANSI())
 		term.Resize(80, 24)
 		sess.InitTerminal(term)
+		var script []process.Datum
 		for step := 0; step < steps; step++ {
 			bad := invalidKeys(term)
 			for i := 0; i < rejected && len(bad) > 0; i++ {
 				assertRejectedNoop(t, sess, term, bad[rng.Intn(len(bad))])
 			}
-			valid := term.State.ValidKeys
-			if len(valid) == 0 {
+			if len(term.State.ValidKeys) == 0 {
 				t.Fatalf("seed %d step %d: no valid keys at %q", seed, step, term.State.Line)
 			}
-			d := valid[rng.Intn(len(valid))]
-			if hint := term.State.HintKey; hint != nil && rng.Intn(2) == 0 {
-				d = hint
+			d := randomKey(rng, sess, term, &script)
+			if !containsKey(term.State.ValidKeys, d) {
+				continue
 			}
 			pressAccepted(t, sess, term, d)
 			assertProcessTable(t, sess)

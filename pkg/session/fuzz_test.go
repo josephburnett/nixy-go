@@ -241,6 +241,8 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 		runs  = 30
 		steps = 2000
 	)
+	logins := 0
+	defer func() { t.Logf("%d logins", logins) }()
 	for seed := int64(0); seed < runs; seed++ {
 		rng := rand.New(rand.NewSource(seed))
 		sess, err := New()
@@ -255,21 +257,21 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 		tapped := guide.New(tap)
 		sess.Guide = tapped
 
+		var script []process.Datum // keys of a scripted line being typed
 		for step := 0; step < steps; step++ {
 			valid := term.State.ValidKeys
 			if len(valid) == 0 {
 				t.Fatalf("seed %d step %d: no valid keys at %q", seed, step, term.State.Line)
 			}
-			var d process.Datum
-			if hint := term.State.HintKey; hint != nil && rng.Intn(2) == 0 {
-				d = hint
-			} else {
-				d = valid[rng.Intn(len(valid))]
-			}
+			d := randomKey(rng, sess, term, &script)
 			line := term.State.Line
 			if !containsKey(valid, d) {
-				continue // random play can break a plan (e.g. delete its file), leaving a stale hint
+				// A stale hint (random play can break a plan, e.g. by
+				// deleting its file), or a scripted line that can't
+				// be typed here.
+				continue
 			}
+			wasLogin := sess.Mode == ModeLogin
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
@@ -282,16 +284,49 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 				t.Fatalf("seed %d step %d: %q + %s wrote %q", seed, step, line, keyName(d), msg)
 			}
 			if sess.Mode != ModePlaying {
-				break // exit on the laptop logs out
+				continue // logged out: play on at the login prompt
+			}
+			if wasLogin {
+				logins++
 			}
 			if sess.Guide != tapped {
-				// nx panic replaced the shell stack; keep watching stderr.
+				// nx panic or a login replaced the shell; keep watching stderr.
 				tap = &stderrTap{P: sess.Shell.(process.P)}
 				tapped = guide.New(tap)
 				sess.Guide = tapped
 			}
 		}
 	}
+}
+
+// randomKey picks the next key for random play: half the time the hint
+// (when there is one), otherwise any valid key. Now and then, at an
+// empty line, it starts typing a line that leaves (exit, ssh), panics or
+// logs in again, so random play keeps going through those transitions;
+// script holds the rest of that line. The key may not be valid.
+func randomKey(rng *rand.Rand, sess *Session, term *terminal.T, script *[]process.Datum) process.Datum {
+	if len(*script) == 0 && term.State.Line == "" && rng.Intn(8) == 0 {
+		line := []string{"exit", "nx panic", "ssh nixy"}[rng.Intn(3)]
+		if sess.Mode == ModeLogin {
+			line = []string{"user", fuzzLogin(rng)}[rng.Intn(2)]
+		}
+		for _, r := range line {
+			*script = append(*script, process.Chars(string(r)))
+		}
+		*script = append(*script, process.TermEnter)
+	}
+	if len(*script) > 0 {
+		d := (*script)[0]
+		*script = (*script)[1:]
+		if !containsKey(term.State.ValidKeys, d) {
+			*script = nil
+		}
+		return d
+	}
+	if hint := term.State.HintKey; hint != nil && rng.Intn(2) == 0 {
+		return hint
+	}
+	return term.State.ValidKeys[rng.Intn(len(term.State.ValidKeys))]
 }
 
 // stderrTap wraps the player's shell and keeps a copy of its stderr.
