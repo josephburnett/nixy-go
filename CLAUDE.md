@@ -17,38 +17,68 @@ them. When a fix violates one, it's the wrong fix.
 At every keystroke, the keyboard's valid set must contain only keys
 that lead toward a correct, executable action. The player can never
 type a command the shell would then reject (`missing operand`, `no
-such file`). Errors that come from invalid typing are bugs in
-`shell.Next()`, not runtime concerns.
+such file`). Errors that come from invalid typing are bugs in a
+command's `ValidArgs` or in `shell.Next()`, not runtime concerns.
 
 This is what makes exploration safe. A beginner mashing keys learns,
 not panics.
 
 Implementation:
-- `simulation.Binary` declares two flags:
-  - `OptionalArgs` — command runs cleanly with zero args *standalone*
-    (`ls`, `pwd`). NOT cat or grep — those hang without an upstream
-    pipe because the game has no terminal stdin.
-  - `PipeReceiver` — command can read from an upstream pipe (`cat`
-    with no args, `grep` with just a pattern). Enter is valid in
-    pipe-receiver position even when standalone Enter wouldn't be.
-- `Enter` and `|` are valid only at *segment-completion points*:
-  - exact-match of an optional-args command (`ls<Enter>`),
-  - exact-match of a complete argument (`cat readme.txt<Enter>`),
-  - or pipe-receiver position with the per-command minimum (e.g.
-    `ls | cat<Enter>` or `ls | grep target<Enter>`).
+- Every `simulation.Binary` must have a `ValidArgs` (`Register` panics
+  without one). It is the single answer to "what may be typed after
+  this command name": which chars come next (`Suggestion.Chars`) and
+  whether the line can run as typed (`Suggestion.Complete`). There is
+  no "anything goes" fallback.
+  - Zero-arg commands answer Complete for `""` (`ls`, `pwd`). NOT
+    standalone cat or grep — those hang without an upstream pipe
+    because the game has no terminal stdin.
+  - `ArgContext.InPipe` lets pipe receivers complete with fewer args
+    (`ls | cat`, `ls | grep target`).
+  - `Interactive` binaries (ssh, shell) take over the terminal: they
+    are kept out of pipelines and out of sudo.
+- Validators are built from parts in `pkg/command/args.go`:
+  - `Positional` — positional `Arg`s, how many are required standalone
+    and in a pipe (`ReadsStdin`, `PipeRequired`). It offers the space
+    between args and the trailing space before `|`. `NoArgs` is the
+    empty one.
+  - `ValidCommand` — "NAME ARGS" over a set of names, each with its
+    own validator. Used for the shell's command position, sudo (any
+    non-interactive /bin command, then that command's validator) and
+    `Subcommands` (apt install|list, nx quest|log|panic). It offers a
+    name only if its args can lead somewhere.
+  - Path args (`FilePath`, `AnyPath`, `CdTarget`, `NewPath`,
+    `MoveDest`) offer only keys that lead to an accepted path: a
+    folder is offered for descent only if something accepted lies
+    below. File args never complete on folders (`cat .`, `rm ..`).
+  - Free-form words (new names, grep patterns) use portable filename
+    characters only — nothing a real shell would interpret (`|`, `>`,
+    `*`), no leading `-`.
+- Commands are found one way: `sim.LookupBinary` via `/bin/<name>`,
+  for running, validating and sudo alike. Builtins (cd, exit, nx) have
+  validators in `shell.builtinArgs` and can't be piped.
 - `shell.Next()` is pipe-aware: it splits on `|` and validates only
-  the segment after the last pipe, so typing `|` resets to fresh-prompt
-  state for the next segment. The `inPipe` flag (any `|` in the
-  current input) gates `PipeReceiver` execution.
-- The structural property test
-  `TestShellNextInvariant_EveryEnterStateTerminates` walks the keyboard
-  space (BFS from empty buffer, capped) and verifies every Enter-valid
-  state terminates. This is the deterministic guard against the
-  cat-hang / grep-hang class of bug — the hint-guided E2E fuzz can't
-  catch these since it follows the planner's exact output, never
-  exploring partial-input states.
-- Other invariants pinned by `TestShellNextInvariant_*` in
-  `pkg/command/shell/shell_test.go`.
+  the segment after the last pipe. It adds just Enter and `|` (when
+  the segment is Complete and pipeable) and the optional space after
+  `|`. A pipeline finds every segment's binary before launching any.
+- Permission denied is not a principle-1 violation: it is a real
+  consequence (principle 2) and the guards allow it. Usage errors,
+  missing paths and wrong file types are bugs.
+- Guards:
+  - `TestKeyboardWalk_NoMistakes` (`pkg/session/`) walks the keyboard
+    over the real worlds at several world states and checks every
+    reachable state: never a dead end (some key besides Backspace),
+    and every Enter terminates with no stderr but permission denied.
+    Reaching each scenario types the planner's commands key by key.
+  - `TestShellNextInvariant_EveryEnterStateTerminates` does the same on
+    a small fixture with every command; `TestShellNextInvariant_Lines`
+    pins whole lines per bug class.
+  - The hint-guided fuzz can't catch these alone: it follows the
+    planner's exact output, never exploring partial-input states.
+- Known gaps: an earlier pipeline segment can change the world under a
+  later one's already-validated args (`rm f | cat f`), as in a real
+  shell's race. `ssh` to a host listed in /etc/hosts but not booted
+  says "connection refused" (a real consequence; no world does that
+  today, and the walk would flag it).
 
 ### 2. Real Unix, not a toy (simulation layer)
 
@@ -141,7 +171,7 @@ suite for both.
 
 - `pkg/process/` — `Process` interface and Datum types.
 - `pkg/simulation/` — Binary registry, computer management, process
-  launching. `Binary.OptionalArgs` gates Enter at zero-args.
+  launching. `Binary.ValidArgs` (required) drives the keyboard.
 - `pkg/command/shell/` — Shell with builtins, pipeline support, and
   the pipe-aware `Next()` that enforces principle #1.
 - `pkg/guide/` — Wraps a process, validates input against `Next()`
@@ -157,20 +187,27 @@ suite for both.
 
 - `make test` — full suite, requires `-p 1` due to the global binary
   registry.
-- `make fuzz` — runs both fuzz tests 10× each.
+- `make fuzz` — runs the fuzz tests 10× each.
 - `make check-wasm` — confirms the web build still compiles (no
   Bubbletea or other non-WASM imports leaked into `pkg/`).
 
 ### Fuzz strategy
 
-Two fuzz tests with different goals:
+Three fuzz tests with different goals:
 
 - `TestFuzzQuests` (`pkg/game/quests/`) — bypasses the real shell,
   drives quests via `shellState`. Catches quest-logic bugs but
   **cannot** catch shell-level regressions.
 - `TestFuzzE2EHintGuided` (`pkg/session/`) — drives keystrokes through
   `Session.HandleKeystroke`, the same chokepoint used by both CLI and
-  web. The canary for end-to-end correctness.
+  web. The canary for end-to-end correctness. Every key is typed
+  through `pressAccepted`, which fails if the keyboard doesn't offer
+  it or if the hint key isn't itself valid.
+- `TestFuzzE2ERandomKeys` (`pkg/session/`) — random valid keys (half
+  the time the hint) through the same chokepoint, wandering into rm,
+  mv, sudo and long pipelines. Fails on panics, an empty keyboard, or
+  stderr other than permission denied. No liveness demand: random play
+  can strand a quest.
 
 Liveness in the E2E fuzz is keyed on quest progression
 (`activeQuestID + numCompletedQuests + hostname + cwd`). Tracker
@@ -187,6 +224,8 @@ a path" is too lenient.
   break WASM compilation).
 - `web/nixy.wasm` and `web/wasm_exec.js` are build artifacts
   (`.gitignored`).
-- New commands registered via `simulation.Register` should set
-  `OptionalArgs` appropriately. Default false is correct for anything
-  that requires arguments.
+- New commands registered via `simulation.Register` need a `ValidArgs`
+  built from the parts in `pkg/command/args.go` (usually
+  `Positional`), and `Interactive` if they take over the terminal.
+  Add the command to `testBinaries` in `pkg/command/shell/shell_test.go`
+  so the structural walk covers it.
