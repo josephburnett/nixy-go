@@ -67,6 +67,6 @@ func (q *Composition) PlanNextCommand(ctx game.PlanContext) string {
 
 // Repair puts back the projects folder and any of its files, so there
 // is a target.txt to find.
-func (q *Composition) Repair(sim *simulation.S, _ *game.CommandTracker) []string {
+func (q *Composition) Repair(sim *simulation.S, _ *game.CommandTracker, _ string) []string {
 	return restore(sim, "nixy", projectsWorld(), projects, true)
 }

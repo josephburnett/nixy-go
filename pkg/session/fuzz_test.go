@@ -166,8 +166,13 @@ func runE2EFuzzIteration(t *testing.T, rng *rand.Rand, iter int) {
 		}
 
 		// Key by key, failing if the keyboard doesn't offer a key the
-		// planner asked for, or hints a key it doesn't offer.
-		typeCommand(t, sess, term, cmd)
+		// planner asked for, or hints a key it doesn't offer. While a
+		// line runs (yes) only ^C can be pressed, and it is the plan.
+		if _, running := sess.Game.Manager.Tracker.Running(); running || cmd == game.Interrupt {
+			pressAccepted(t, sess, term, process.SigInt)
+		} else {
+			typeCommand(t, sess, term, cmd)
+		}
 
 		// Invariants
 		if sess.Mode != ModePlaying {

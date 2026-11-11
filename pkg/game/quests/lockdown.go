@@ -28,7 +28,7 @@ var oldFile = []string{"home", "nixy", "old.txt"}
 // Setup locks Nixy's home (others may read it, not change it) and
 // leaves old.txt in it to delete.
 func (q *Lockdown) Setup(sim *simulation.S) error {
-	q.Repair(sim, nil)
+	q.Repair(sim, nil, "")
 	c, err := sim.GetComputer("nixy")
 	if err != nil {
 		return err
@@ -68,7 +68,7 @@ func triedRm(t *game.CommandTracker) bool {
 }
 
 // Repair keeps Nixy's home there and locked.
-func (q *Lockdown) Repair(sim *simulation.S, _ *game.CommandTracker) []string {
+func (q *Lockdown) Repair(sim *simulation.S, _ *game.CommandTracker, _ string) []string {
 	lines := restore(sim, "nixy", worlds.Nixy(), nixyHome, false)
 	if home, ok := lookup(sim, "nixy", nixyHome); ok {
 		home.CommonPermission = file.Read

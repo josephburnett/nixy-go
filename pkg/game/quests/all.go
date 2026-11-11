@@ -12,5 +12,11 @@ func All() []game.Quest {
 		&Composition{},
 		&Permissions{},
 		&Lockdown{},
+		&Identity{},
+		&Notes{},
+		&Manual{},
+		&Counting{},
+		&Interrupt{},
+		&Processes{},
 	}
 }

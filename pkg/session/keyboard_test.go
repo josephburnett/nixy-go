@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/josephburnett/nixy-go/pkg/game"
 	"sort"
 	"strings"
 	"testing"
@@ -51,6 +52,13 @@ var keyboardScenarios = []keyboardScenario{
 			"sudo apt install mv", "sudo apt install grep",
 		},
 	},
+	{
+		// Nixy's runaway yes is in the table, wc and yes installed,
+		// and a to-do list in the player's notes.
+		name:       "nixy-processes",
+		untilQuest: "processes",
+		commands:   []string{"cd ~/notes"},
+	},
 }
 
 // buildScenario creates a session in the scenario's world state. Every
@@ -83,7 +91,7 @@ func buildScenario(t *testing.T, sc keyboardScenario) (*Session, *terminal.T) {
 			if cmd == "" {
 				t.Fatalf("%s: planner has no command for %q", sc.name, a.ID())
 			}
-			typeCommand(t, sess, term, cmd)
+			runPlan(t, sess, term, cmd)
 		}
 	}
 	for host, names := range sc.install {
@@ -447,6 +455,17 @@ func isFreshPrompt(next []process.Datum) bool {
 
 // typeCommand types cmd key by key and presses Enter, failing if any key
 // is not in the valid set when it is pressed.
+// runPlan carries out one plan: types the line and Enter, or for
+// game.Interrupt presses ^C.
+func runPlan(t *testing.T, s *Session, term *terminal.T, plan string) {
+	t.Helper()
+	if plan == game.Interrupt {
+		pressAccepted(t, s, term, process.SigInt)
+		return
+	}
+	typeCommand(t, s, term, plan)
+}
+
 func typeCommand(t *testing.T, s *Session, term *terminal.T, cmd string) {
 	t.Helper()
 	typeAccepted(t, s, term, cmd)

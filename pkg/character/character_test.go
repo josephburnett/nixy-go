@@ -79,7 +79,8 @@ func TestFindDialogNotFound(t *testing.T) {
 
 func TestAllDialogCoversAllQuests(t *testing.T) {
 	entries := AllDialog()
-	questIDs := []string{"connect", "orientation", "inspection", "modification", "composition", "permissions", "lockdown"}
+	questIDs := []string{"connect", "orientation", "inspection", "modification", "composition", "permissions", "lockdown",
+		"identity", "notes", "manual", "counting", "interrupt", "processes"}
 
 	for _, id := range questIDs {
 		activate := FindDialog(entries, OnQuestActivate, id)

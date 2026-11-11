@@ -147,26 +147,33 @@ func TestFuzzE2ERejectedKeys(t *testing.T) {
 
 // assertProcessTable checks that the machines' process tables hold
 // exactly the player's live shells: the login shell, and for each ssh
-// the ssh on one side and the remote shell on the other. Nothing that
-// has exited stays, and no old shell leaks across ssh, exit, logout or
-// nx panic.
+// the ssh on one side and the remote shell on the other, plus the job
+// of a line still running (yes) and processes of other users (Nixy's
+// runaway yes, which a quest starts). Nothing that has exited stays,
+// and no old shell leaks across ssh, exit, logout or nx panic.
 func assertProcessTable(t *testing.T, sess *Session) {
 	t.Helper()
 	for user, g := range sess.games {
 		shells, sshs := 0, 0
 		var all []string
+		_, jobRunning := g.Manager.Tracker.Running()
 		for _, h := range []string{"laptop", "nixy", "server"} {
 			c, err := g.Sim.GetComputer(h)
 			if err != nil {
 				continue
 			}
 			for _, p := range c.Processes() {
+				if p.Owner != user && p.Owner != "root" {
+					continue // someone else's: not the player's to leak
+				}
 				all = append(all, fmt.Sprintf("%s:%d %s %q", h, p.PID, p.Owner, p.Command))
 				switch {
 				case p.Command == "shell -l":
 					shells++
 				case strings.HasPrefix(p.Command, "ssh "):
 					sshs++
+				case jobRunning && user == sess.Username:
+					// the running line's processes, whatever they are
 				default:
 					t.Fatalf("%s: unexpected process %s", user, all[len(all)-1])
 				}

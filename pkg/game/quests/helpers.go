@@ -197,3 +197,76 @@ func ranOK(t *game.CommandTracker, hostname, name string) bool {
 		return inv.Name == name
 	})
 }
+
+// ranOKAs reports whether name ran and succeeded on hostname, under
+// sudo or not.
+func ranOKAs(t *game.CommandTracker, hostname, name string, sudo bool) bool {
+	return t.AnyInvocation(hostname, game.CommandRecord.OK, func(inv game.Invocation) bool {
+		return inv.Name == name && inv.Sudo == sudo
+	})
+}
+
+// planCdHome is planCd for a folder in the player's home, written with
+// `~` as a person would: `cd ~`, `cd ~/notes`.
+func planCdHome(ctx game.PlanContext, rel ...string) string {
+	dir := append(file.Home(ctx.User), rel...)
+	if slices.Equal(ctx.Cwd, dir) {
+		return ""
+	}
+	return "cd " + strings.Join(append([]string{"~"}, rel...), "/")
+}
+
+// planRemove returns the next step in deleting whatever is at path on
+// the current host, "" when nothing is there: an rm of a file, or an
+// rmdir of an empty folder, working from the deepest entry up. It uses
+// sudo when the player can't do it themselves (a folder root made).
+func planRemove(ctx game.PlanContext, path []string) string {
+	f, ok := lookup(ctx.Sim, ctx.Hostname, path)
+	if !ok {
+		return ""
+	}
+	path = slices.Clone(path)
+	for f.Type == file.Folder && len(f.Files) > 0 {
+		names := make([]string, 0, len(f.Files))
+		for n := range f.Files {
+			names = append(names, n)
+		}
+		slices.Sort(names)
+		path = append(path, names[0])
+		f = f.Files[names[0]]
+	}
+	cmd := "rm"
+	if f.Type == file.Folder {
+		cmd = "rmdir"
+	}
+	line := cmd + " /" + strings.Join(path, "/")
+	c, err := ctx.Sim.GetComputer(ctx.Hostname)
+	if err != nil {
+		return ""
+	}
+	parent, err := c.Filesystem.Lookup(path[:len(path)-1], ctx.User)
+	if err == nil && parent.CanWrite(ctx.User) && (f.Type != file.Folder || f.CanRead(ctx.User)) {
+		return firstOf(need(ctx, cmd), line)
+	}
+	return firstOf(need(ctx, "sudo"), need(ctx, cmd), "sudo "+line)
+}
+
+// restoreHome puts the player's home back on hostname if it's gone (or
+// isn't a folder), as the machine provisioned it.
+func restoreHome(sim *simulation.S, hostname, user string) []string {
+	if user == "" {
+		return nil
+	}
+	home := file.Home(user)
+	world := &file.F{Type: file.Folder, Files: map[string]*file.F{
+		"home": {Type: file.Folder, Files: map[string]*file.F{
+			user: {Type: file.Folder, Owner: user,
+				OwnerPermission: file.Write, CommonPermission: file.Read,
+				Files: map[string]*file.F{}},
+		}},
+	}}
+	if f, ok := lookup(sim, hostname, home[:1]); !ok || f.Type != file.Folder {
+		return nil // no /home to put it in: that's the world's to repair
+	}
+	return restore(sim, hostname, world, home, false)
+}

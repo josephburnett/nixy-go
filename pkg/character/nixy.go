@@ -84,6 +84,74 @@ func AllDialog() []DialogEntry {
 		{OnQuestComplete, "lockdown",
 			[]string{
 				"Locked, but not locked out: that's what `sudo` is for.",
+			}},
+		// Identity quest
+		{OnQuestActivate, "identity",
+			[]string{
+				"Here's a question: who are you, as far as my computer knows?",
+				"Your prompt starts with your username. `whoami` asks the system directly.",
+				"Then try `sudo whoami`. Who does sudo make you?",
+			}},
+		{OnQuestComplete, "identity",
+			[]string{
+				"root! sudo runs one command as root, the user who may do anything.",
+				"Your prompt still shows you: the shell is yours, only that one command was root's.",
+			}},
+		// Notes quest
+		{OnQuestActivate, "notes",
+			[]string{
+				"My log says the disk is low and the network keeps timing out. Let's keep a to-do list, in your home here.",
+				"`mkdir notes` makes a folder for it.",
+				"In there, `echo` prints words, and `>` sends them into a file instead of the screen: `echo check the disk > todo.txt`.",
+				"`>>` adds to the end of a file instead: `echo fix the network >> todo.txt`. Then `cat` it to check.",
+			}},
+		{OnQuestComplete, "notes",
+			[]string{
+				"A to-do list! Careful with `>`: it empties the file first. `>>` is the safe way to add.",
+			}},
+		// Manual quest
+		{OnQuestActivate, "manual",
+			[]string{
+				"I'd like to know how many errors are in my log. `wc` counts things, but I don't have it.",
+				"Install it the way you did on the server: `sudo apt install wc`.",
+				"Nobody remembers every option, so commands come with a manual: `man wc` shows wc's.",
+				"(The shell's own commands, like cd, aren't in /bin: `help` lists those.)",
+			}},
+		{OnQuestComplete, "manual",
+			[]string{
+				"So `wc -l` counts lines. When you're unsure what a command does, `man` it.",
+			}},
+		// Counting quest
+		{OnQuestActivate, "counting",
+			[]string{
+				"Let's count. In /var/log, `wc -l system.log` counts every line in my log.",
+				"To count only the errors, send grep's output into wc: `grep error system.log | wc -l`.",
+			}},
+		{OnQuestComplete, "counting",
+			[]string{
+				"Two errors. Small commands joined by pipes answer real questions: that's the Unix way.",
+			}},
+		// Interrupt quest
+		{OnQuestActivate, "interrupt",
+			[]string{
+				"Some commands never stop on their own. `yes` prints y, over and over, forever.",
+				"Install it (`sudo apt install yes`) and run it.",
+				"When you've seen enough, press Ctrl+C: the `^C` key. It interrupts whatever is running.",
+			}},
+		{OnQuestComplete, "interrupt",
+			[]string{
+				"Stopped! When something won't end, `^C` is the first thing to try.",
+			}},
+		// Processes quest
+		{OnQuestActivate, "processes",
+			[]string{
+				"Oh no. I started a `yes` hours ago to test something, and it's still running. It's slowing my whole machine down!",
+				"`ps -e` lists every process here: its PID (process ID), who owns it, and its command.",
+				"Find my yes, then stop it with `kill` and its PID. It's my process, though, not yours...",
+			}},
+		{OnQuestComplete, "processes",
+			[]string{
+				"My machine can breathe again! Processes belong to users, like files do, and only the owner or root may stop them.",
 				"Thanks for all your help. The systems are running smoothly.",
 			}},
 	}

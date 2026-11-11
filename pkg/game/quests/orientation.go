@@ -51,6 +51,6 @@ func (q *Orientation) PlanNextCommand(ctx game.PlanContext) string {
 }
 
 // Repair puts Nixy's home back, so there's somewhere to visit.
-func (q *Orientation) Repair(sim *simulation.S, _ *game.CommandTracker) []string {
+func (q *Orientation) Repair(sim *simulation.S, _ *game.CommandTracker, _ string) []string {
 	return restore(sim, "nixy", worlds.Nixy(), nixyHome, false)
 }

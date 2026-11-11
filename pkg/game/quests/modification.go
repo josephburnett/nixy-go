@@ -62,6 +62,6 @@ func (q *Modification) PlanNextCommand(ctx game.PlanContext) string {
 }
 
 // Repair puts Nixy's home back, as the quest's files live there.
-func (q *Modification) Repair(sim *simulation.S, _ *game.CommandTracker) []string {
+func (q *Modification) Repair(sim *simulation.S, _ *game.CommandTracker, _ string) []string {
 	return restore(sim, "nixy", worlds.Nixy(), nixyHome, false)
 }

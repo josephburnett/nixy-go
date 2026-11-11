@@ -57,6 +57,9 @@ func PlanThought(target string) string {
 	}
 	seg := p.Segments[0]
 	if seg.Name == "sudo" && len(seg.Args) > 0 {
+		if seg.Args[0] == "whoami" {
+			return "I need to see who sudo makes me"
+		}
 		inner := command.Segment{Name: seg.Args[0], Args: seg.Args[1:]}
 		if what := intent(inner); what != "" {
 			return "I need root to " + what
@@ -134,6 +137,44 @@ func intent(seg command.Segment) string {
 	case "mv":
 		if len(args) >= 2 {
 			return "move " + args[0] + " to " + args[1]
+		}
+	case "whoami":
+		return "check who I am"
+	case "mkdir":
+		if len(args) > 0 {
+			return "make a folder called " + args[0]
+		}
+	case "rmdir":
+		if len(args) > 0 {
+			return "delete the empty folder " + args[0]
+		}
+	case "echo":
+		words := strings.Join(args, " ")
+		if r := seg.Redirect; r != nil {
+			if r.Append {
+				return "add \"" + words + "\" to the end of " + r.Target()
+			}
+			return "write \"" + words + "\" into " + r.Target()
+		}
+		return "print \"" + words + "\""
+	case "man":
+		if len(args) > 0 {
+			return "read the manual for " + args[len(args)-1]
+		}
+	case "wc":
+		if flags, files := command.Options(args); strings.Contains(flags, "l") && len(files) > 0 {
+			return "count the lines in " + files[0]
+		}
+	case "yes":
+		return "run yes and see what it does"
+	case "ps":
+		if flags, _ := command.Options(args); strings.Contains(flags, "e") {
+			return "see every process on this machine"
+		}
+		return "see my processes"
+	case "kill":
+		if _, pids := command.Options(args); len(pids) > 0 {
+			return "stop process " + pids[0]
 		}
 	}
 	return ""

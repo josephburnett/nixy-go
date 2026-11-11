@@ -70,7 +70,7 @@ func (m *Manager) AfterCommand(sim *simulation.S) {
 
 	// Put back what the active quest needs, if the player broke it.
 	if r, ok := m.ActiveQuest().(Repairer); ok {
-		if lines := r.Repair(sim, m.Tracker); len(lines) > 0 {
+		if lines := r.Repair(sim, m.Tracker, m.machines.Username()); len(lines) > 0 {
 			m.Dialog.Enqueue(lines)
 		}
 	}

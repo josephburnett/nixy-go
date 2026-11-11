@@ -58,6 +58,6 @@ func triedAptInstall(t *game.CommandTracker, pkg string) bool {
 }
 
 // Repair puts /etc back, for the config to go in.
-func (q *Permissions) Repair(sim *simulation.S, _ *game.CommandTracker) []string {
+func (q *Permissions) Repair(sim *simulation.S, _ *game.CommandTracker, _ string) []string {
 	return restore(sim, "server", worlds.Server(), []string{"etc"}, false)
 }

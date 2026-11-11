@@ -63,7 +63,7 @@ func (q *Inspection) PlanNextCommand(ctx game.PlanContext) string {
 }
 
 // Repair puts back whichever of the two files is still to be read.
-func (q *Inspection) Repair(sim *simulation.S, tracker *game.CommandTracker) []string {
+func (q *Inspection) Repair(sim *simulation.S, tracker *game.CommandTracker, _ string) []string {
 	var lines []string
 	if !readOK(tracker, "nixy", readme) {
 		lines = append(lines, restore(sim, "nixy", worlds.Nixy(), readme, false)...)

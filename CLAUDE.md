@@ -429,7 +429,8 @@ Fuzz and liveness tests with different goals:
 - `TestFuzzE2ERejectedKeys` (`pkg/session/`) — random play that also
   presses keys the keyboard doesn't offer, failing if any changes
   anything observable, and checks after every key that the process
-  tables hold exactly the live shells.
+  tables hold exactly the live shells (plus the job of a line still
+  running, and other users' processes, like Nixy's runaway yes).
 
 Liveness in the E2E fuzz is keyed on quest progression
 (`activeQuestID + numCompletedQuests + hostname + cwd`). Tracker

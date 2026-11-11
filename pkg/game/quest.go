@@ -47,8 +47,8 @@ type PlanContext struct {
 // Repairer is a quest that can put back what it needs from the world
 // when the player has broken it (deleted or moved a file the quest is
 // about). The manager calls Repair after every command while the quest
-// is active. It returns what Nixy says about it, or nil when nothing
-// needed repair.
+// is active. user is the player. It returns what Nixy says about it,
+// or nil when nothing needed repair.
 type Repairer interface {
-	Repair(sim *simulation.S, tracker *CommandTracker) []string
+	Repair(sim *simulation.S, tracker *CommandTracker, user string) []string
 }

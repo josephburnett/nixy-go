@@ -42,6 +42,19 @@ func TestBrokenPrerequisitesRecover(t *testing.T) {
 			"sudo apt install rm", "sudo rm /etc/hosts"}},
 		{"nixy sudo deleted", "lockdown", "nixy", []string{"sudo rm /bin/sudo"}},
 		{"nixy rm deleted", "lockdown", "nixy", []string{"sudo rm /bin/rm"}},
+		{"whoami deleted", "identity", "nixy", []string{"sudo rm /bin/whoami"}},
+		{"file in the way of notes", "notes", "nixy", []string{"touch /home/user/notes"}},
+		{"root's notes folder", "notes", "nixy", []string{
+			"sudo mkdir /home/user/notes", "sudo touch /home/user/notes/todo.txt"}},
+		{"root's to-do list", "notes", "nixy", []string{
+			"mkdir /home/user/notes", "sudo touch /home/user/notes/todo.txt"}},
+		{"home deleted", "notes", "nixy", []string{"sudo apt install rmdir", "sudo rmdir /home/user"}},
+		{"echo and mkdir deleted", "notes", "nixy", []string{"sudo rm /bin/echo", "sudo rm /bin/mkdir"}},
+		{"man deleted", "manual", "nixy", []string{"sudo rm /bin/man"}},
+		{"wc deleted", "counting", "nixy", []string{"sudo rm /bin/wc"}},
+		{"log deleted before counting", "counting", "nixy", []string{"sudo rm /var/log/system.log"}},
+		{"sudo deleted before yes", "interrupt", "nixy", []string{"sudo rm /bin/sudo"}},
+		{"ps and kill deleted", "processes", "nixy", []string{"sudo rm /bin/ps", "sudo rm /bin/kill"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
