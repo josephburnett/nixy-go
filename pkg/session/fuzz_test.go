@@ -2,6 +2,7 @@ package session
 
 import (
 	"math/rand"
+	"slices"
 	"strings"
 	"testing"
 
@@ -75,14 +76,20 @@ func pressKey(t *testing.T, s *Session, term *terminal.T, d process.Datum) {
 	_ = term.Render()
 }
 
-// fuzzLogin generates a 1-8 char username that satisfies the login filter.
+// fuzzLogin generates a 1-8 char username the login prompt accepts:
+// lowercase letters, and not an existing account.
 func fuzzLogin(rng *rand.Rand) string {
-	n := 1 + rng.Intn(8)
-	out := make([]byte, n)
-	for i := range out {
-		out[i] = byte('a' + rng.Intn(26))
+	accounts := game.Accounts(worldMachines())
+	for {
+		n := 1 + rng.Intn(8)
+		out := make([]byte, n)
+		for i := range out {
+			out[i] = byte('a' + rng.Intn(26))
+		}
+		if !slices.Contains(accounts, string(out)) {
+			return string(out)
+		}
 	}
-	return string(out)
 }
 
 // TestFuzzE2EHintGuided drives keystrokes through Session.HandleKeystroke

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/file"
@@ -133,4 +134,28 @@ func (r *MachineRegistry) AllEntries() []MachineEntry {
 // IsBooted returns whether a machine has been booted.
 func (r *MachineRegistry) IsBooted(hostname string) bool {
 	return r.booted[hostname]
+}
+
+// Accounts lists the users that already exist in the world: root and
+// every owner of a file in the machines' definitions, sorted. A player
+// can't log in as one of them, as there are no passwords to prove it.
+func Accounts(entries []MachineEntry) []string {
+	seen := map[string]bool{file.OwnerRoot: true}
+	var walk func(f *file.F)
+	walk = func(f *file.F) {
+		seen[f.Owner] = true
+		for _, child := range f.Files {
+			walk(child)
+		}
+	}
+	for _, e := range entries {
+		walk(e.Filesystem())
+	}
+	delete(seen, "")
+	names := make([]string, 0, len(seen))
+	for n := range seen {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }

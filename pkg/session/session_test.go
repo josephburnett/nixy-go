@@ -16,6 +16,7 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
 
+	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/game"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/terminal"
@@ -210,5 +211,58 @@ func TestLoginLandsHome(t *testing.T) {
 	}
 	if got := strings.Join(sess.Shell.CurrentDirectory(), "/"); got != "home/alice" {
 		t.Fatalf("ssh cwd = %q, want home/alice", got)
+	}
+}
+
+// TestLoginRefusesExistingAccounts: every user that owns something in
+// the world, once every quest has set its world up, is an account the
+// player can't take at the login prompt. Root and nixy are the ones
+// today; a new world user is covered without touching this test.
+func TestLoginRefusesExistingAccounts(t *testing.T) {
+	played, _ := buildScenario(t, keyboardScenario{name: "all", untilQuest: "permissions",
+		commands: []string{"exit", "ssh server"}})
+	owners := map[string]bool{"root": true}
+	for _, h := range []string{"laptop", "nixy", "server"} {
+		c, err := played.Game.Sim.GetComputer(h)
+		if err != nil {
+			t.Fatalf("%s not booted: %v", h, err)
+		}
+		var walk func(f *file.F)
+		walk = func(f *file.F) {
+			owners[f.Owner] = true
+			for _, child := range f.Files {
+				walk(child)
+			}
+		}
+		walk(c.Filesystem)
+	}
+	delete(owners, played.Username)
+	if !owners["nixy"] {
+		t.Fatal("expected nixy among the world's users")
+	}
+	for name := range owners {
+		sess, err := New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		term := terminal.New(terminal.NewANSI())
+		term.Resize(80, 24)
+		sess.InitTerminal(term)
+		typeAccepted(t, sess, term, name)
+		if containsKey(term.State.ValidKeys, process.TermEnter) {
+			t.Errorf("login offers Enter on existing account %q", name)
+		}
+		if !strings.Contains(term.State.Thought, "someone else's") {
+			t.Errorf("thought for %q should explain the name is taken, got %q", name, term.State.Thought)
+		}
+		sess.HandleKeystroke(process.TermEnter, term)
+		if sess.Mode != ModeLogin {
+			t.Errorf("logged in as existing account %q", name)
+		}
+		// A longer name that starts with it is fine.
+		typeAccepted(t, sess, term, "x")
+		if !containsKey(term.State.ValidKeys, process.TermEnter) {
+			t.Errorf("login refuses %q", name+"x")
+		}
 	}
 }

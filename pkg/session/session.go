@@ -43,6 +43,7 @@ type Session struct {
 	Shell    ShellInfo
 
 	games    map[string]*game.Game
+	accounts []string  // existing users, which the player can't log in as
 	lastUser string    // who logged in last, to tell a resume from a switch
 	loginSh  process.P // the laptop login shell; Guide wraps it
 }
@@ -56,7 +57,7 @@ const (
 // until login completes — we don't want quest dialog firing before the
 // player has a name.
 func New() (*Session, error) {
-	return &Session{Mode: ModeLogin}, nil
+	return &Session{Mode: ModeLogin, accounts: game.Accounts(worldMachines())}, nil
 }
 
 // InitTerminal sets up the terminal for whatever mode the session is in.
@@ -96,7 +97,7 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) {
 // (lowercase a-z, length 1-8, Backspace when non-empty, Enter when valid)
 // and bootstraps the game on a successful Enter.
 func (s *Session) handleLoginKeystroke(datum process.Datum, t *terminal.T) {
-	if !slices.Contains(loginValidKeys(t.State.Line), datum) {
+	if !slices.Contains(s.loginValidKeys(t.State.Line), datum) {
 		return // like the shell: a key not offered does nothing
 	}
 	t.Notify("")
@@ -112,7 +113,7 @@ func (s *Session) handleLoginKeystroke(datum process.Datum, t *terminal.T) {
 				t.State.Line = t.State.Line[:len(t.State.Line)-1]
 			}
 		case process.TermEnter:
-			if isValidUsername(t.State.Line) {
+			if s.canLogin(t.State.Line) {
 				name := t.State.Line
 				// Echo the login line into the scrollback like a real
 				// terminal does.
@@ -131,8 +132,8 @@ func (s *Session) handleLoginKeystroke(datum process.Datum, t *terminal.T) {
 func (s *Session) updateLoginTerminal(t *terminal.T) {
 	t.SetPrompt(terminal.PromptInfo{Raw: loginPrompt})
 	t.SetPromptTarget("") // no specific target during login
-	t.SetKeyboard(loginValidKeys(t.State.Line), loginHintKey(t.State.Line))
-	t.SetThought(loginThought(t.State.Line))
+	t.SetKeyboard(s.loginValidKeys(t.State.Line), s.loginHintKey(t.State.Line))
+	t.SetThought(s.loginThought(t.State.Line))
 }
 
 func isLoginChar(r rune) bool { return r >= 'a' && r <= 'z' }
@@ -149,44 +150,74 @@ func isValidUsername(s string) bool {
 	return true
 }
 
+// canLogin reports whether name is a username the player may take: well
+// formed and not an existing account. Real login would ask for that
+// account's password, and the game has none, so root and nixy are taken.
+func (s *Session) canLogin(name string) bool {
+	return isValidUsername(name) && !slices.Contains(s.accounts, name)
+}
+
+// canReach reports whether typing more letters after buf can still
+// reach a name the player may take.
+func (s *Session) canReach(buf string) bool {
+	if s.canLogin(buf) {
+		return true
+	}
+	if len(buf) >= loginMaxLen {
+		return false
+	}
+	for r := 'a'; r <= 'z'; r++ {
+		if s.canReach(buf + string(r)) {
+			return true
+		}
+	}
+	return false
+}
+
 // loginValidKeys returns the keys the player may press right now during
-// login, given the current buffer.
-func loginValidKeys(buf string) []process.Datum {
+// login, given the current buffer: letters that can still lead to a
+// name the player may take, and Enter on one.
+func (s *Session) loginValidKeys(buf string) []process.Datum {
 	var valid []process.Datum
 	if len(buf) < loginMaxLen {
 		for r := 'a'; r <= 'z'; r++ {
-			valid = append(valid, process.Chars(string(r)))
+			if s.canReach(buf + string(r)) {
+				valid = append(valid, process.Chars(string(r)))
+			}
 		}
 	}
 	if len(buf) > 0 {
 		valid = append(valid, process.TermBackspace)
 	}
-	if isValidUsername(buf) {
+	if s.canLogin(buf) {
 		valid = append(valid, process.TermEnter)
 	}
 	return valid
 }
 
-// loginHintKey suggests the next keystroke. Once a valid username exists
-// we hint Enter; if the buffer is full but invalid (shouldn't happen),
-// we'd hint Backspace. With an empty buffer we have no specific hint.
-func loginHintKey(buf string) process.Datum {
+// loginHintKey suggests the next keystroke: Enter once the name can be
+// taken, Backspace when nothing else is left. With an empty buffer we
+// have no specific hint.
+func (s *Session) loginHintKey(buf string) process.Datum {
 	switch {
-	case isValidUsername(buf):
+	case s.canLogin(buf):
 		return process.TermEnter
-	case len(buf) >= loginMaxLen:
+	case !s.canReach(buf):
 		return process.TermBackspace
 	default:
 		return nil
 	}
 }
 
-func loginThought(buf string) string {
-	if isValidUsername(buf) {
+func (s *Session) loginThought(buf string) string {
+	if s.canLogin(buf) {
 		return "I can press enter to log in"
 	}
 	if len(buf) == 0 {
 		return "I need to pick a username (lowercase letters, up to 8)"
+	}
+	if slices.Contains(s.accounts, buf) {
+		return buf + " is someone else's account. I need a name of my own"
 	}
 	return "I can keep typing or press enter when ready"
 }
@@ -265,6 +296,16 @@ func (s *Session) logout(t *terminal.T) {
 	s.updateLoginTerminal(t)
 }
 
+// worldMachines are the game's machines, each built fresh by its
+// Filesystem.
+func worldMachines() []game.MachineEntry {
+	return []game.MachineEntry{
+		{Hostname: "laptop", Filesystem: worlds.Laptop},
+		{Hostname: "nixy", Filesystem: worlds.Nixy},
+		{Hostname: "server", Filesystem: worlds.Server, UnlockedBy: "server-unlocked"},
+	}
+}
+
 // newGame builds a fresh world and quest line for username.
 func newGame(username string) (*game.Game, error) {
 	allQuests := []game.Quest{
@@ -275,12 +316,7 @@ func newGame(username string) (*game.Game, error) {
 		&quests.Composition{},
 		&quests.Permissions{},
 	}
-	machines := []game.MachineEntry{
-		{Hostname: "laptop", Filesystem: worlds.Laptop},
-		{Hostname: "nixy", Filesystem: worlds.Nixy},
-		{Hostname: "server", Filesystem: worlds.Server, UnlockedBy: "server-unlocked"},
-	}
-	return game.NewGame(allQuests, machines, username)
+	return game.NewGame(allQuests, worldMachines(), username)
 }
 
 // --- playing mode -------------------------------------------------------
