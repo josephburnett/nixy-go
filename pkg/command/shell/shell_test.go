@@ -9,6 +9,7 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
 	_ "github.com/josephburnett/nixy-go/pkg/command/echo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
+	_ "github.com/josephburnett/nixy-go/pkg/command/head"
 	_ "github.com/josephburnett/nixy-go/pkg/command/kill"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
 	_ "github.com/josephburnett/nixy-go/pkg/command/mkdir"
@@ -20,6 +21,7 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/ssh"
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
+	_ "github.com/josephburnett/nixy-go/pkg/command/wc"
 	_ "github.com/josephburnett/nixy-go/pkg/command/whoami"
 	_ "github.com/josephburnett/nixy-go/pkg/command/yes"
 	"github.com/josephburnett/nixy-go/pkg/file"
@@ -30,8 +32,8 @@ import (
 // testBinaries are installed in the fixture's /bin: every registered
 // command, so the structural tests cover them all.
 var testBinaries = []string{
-	"apt", "cat", "echo", "grep", "kill", "ls", "mkdir", "mv", "ps", "pwd",
-	"rm", "rmdir", "ssh", "sudo", "touch", "whoami", "yes",
+	"apt", "cat", "echo", "grep", "head", "kill", "ls", "mkdir", "mv", "ps",
+	"pwd", "rm", "rmdir", "ssh", "sudo", "touch", "wc", "whoami", "yes",
 }
 
 func testFS() *file.F {
@@ -1006,6 +1008,18 @@ func TestShellNextInvariant_Lines(t *testing.T) {
 		{"rm ~/notes.txt > x", false}, // prints nothing
 		{"cd > x", false},
 		{"> x", false},
+		// head and wc read a file, or a pipe.
+		{"head ~/notes.txt", true},
+		{"yes | head", true},
+		{"head", false},
+		{"ls | head ~/notes.txt", false},
+		{"wc ~/notes.txt", true},
+		{"wc -l ~/notes.txt", true},
+		{"ls | wc -l", true},
+		{"ls | wc -lw", true},
+		{"wc", false},
+		{"wc -l", false},
+		{"ls | wc -x", false},
 		// kill takes the PID of a process that exists, -9 for SIGKILL.
 		{"kill 1", true}, // root's: Operation not permitted
 		{"kill 2", true},

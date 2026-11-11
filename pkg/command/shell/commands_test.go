@@ -38,6 +38,33 @@ func TestShellBasicCommands(t *testing.T) {
 	}
 }
 
+// head prints the first 10 lines, and stops a source that goes on; wc
+// counts lines, words and bytes like GNU wc.
+func TestShellHeadWc(t *testing.T) {
+	_, p := loginSetup(t)
+	for _, tc := range []struct{ line, want string }{
+		{"yes | head", strings.Repeat("y\n", 10)},
+		{"head notes.txt", "a note\nanother\n"},
+		{"wc notes.txt", " 1  3 14 notes.txt\n"},
+		{"wc -l notes.txt", "1 notes.txt\n"},
+		{"ls | wc", "      2       2      15\n"},
+		{"ls | wc -l", "2\n"},
+		{"yes | head | wc -l", "10\n"},
+	} {
+		if !canRun(p, tc.line) {
+			t.Fatalf("%q can't be typed", tc.line)
+		}
+		writeEnter(t, p)
+		out, _, done := runUntilPrompt(p, 30)
+		if !done {
+			t.Fatalf("%q is still running", tc.line)
+		}
+		if got := strings.TrimPrefix(out, tc.line); got != tc.want {
+			t.Errorf("%q printed %q, want %q", tc.line, got, tc.want)
+		}
+	}
+}
+
 // ps shows the table as `ps -o pid,user,cmd` would, itself included;
 // kill signals by PID, only your own processes unless root.
 func TestShellPsKill(t *testing.T) {

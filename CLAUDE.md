@@ -217,7 +217,9 @@ Concrete implications (these all flow from this single principle):
 - **Nothing hangs.** Processes act only when called. A pipeline moves
   data one step per `Read`, and the session reads a bounded number of
   times per keystroke, so a source that never ends can't freeze the
-  game.
+  game. Within that bound it keeps reading while a command runs, even
+  through quiet reads, so a pipeline that works before it prints
+  (`yes | head | wc -l`) finishes in the keystroke that started it.
 - **Signals are real.** `P.Signal(sig)` delivers one; the default
   (`Written.Signal`) is to die of it with status 128+n (`SigInt` 130,
   `SigPipe` 141, `SigTerm` 143; `SigKill` is `Kill`, 137).

@@ -8,26 +8,29 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-// The keyboard walk also covers every command apt can install: the
-// worlds ship only some, and quests install the rest with sudo apt.
+// The keyboard walk also covers every command apt can install that no
+// world ships (quests install them with sudo apt), over nixy's world.
 func init() {
-	var all []string
-	for pkg := range apt.PackageRegistry {
-		all = append(all, pkg)
+	shipped := map[string]bool{}
+	for _, m := range worldMachines() {
+		if bin, err := m.Filesystem().Navigate([]string{"bin"}); err == nil {
+			for name := range bin.Files {
+				shipped[name] = true
+			}
+		}
 	}
-	keyboardScenarios = append(keyboardScenarios,
-		keyboardScenario{
-			name:       "nixy-every-package",
-			untilQuest: "modification",
-			install:    map[string][]string{"nixy": all},
-			commands:   []string{"cd /home/nixy", "mkdir notes", "echo hi"},
-		},
-		keyboardScenario{
-			name:     "laptop-every-package",
-			install:  map[string][]string{"laptop": all},
-			commands: []string{"mkdir empty"},
-		},
-	)
+	install := []string{"sudo"} // so the walk tries each under sudo too
+	for pkg := range apt.PackageRegistry {
+		if !shipped[pkg] {
+			install = append(install, pkg)
+		}
+	}
+	keyboardScenarios = append(keyboardScenarios, keyboardScenario{
+		name:       "nixy-every-package",
+		untilQuest: "modification",
+		install:    map[string][]string{"nixy": install},
+		commands:   []string{"cd /home/nixy", "mkdir empty", "echo hi"},
+	})
 }
 
 // consequence reports whether stderr is empty or a real consequence of
@@ -36,6 +39,19 @@ func init() {
 func consequence(stderr string) bool {
 	return stderr == "" || strings.Contains(stderr, "Permission denied") ||
 		strings.Contains(stderr, "Operation not permitted")
+}
+
+// A pipeline that works quietly before printing finishes within the
+// keystroke that started it, so the prompt comes straight back.
+func TestSessionQuietPipelineFinishes(t *testing.T) {
+	sess, term := buildScenario(t, keyboardScenario{
+		name:    "quiet-pipeline",
+		install: map[string][]string{"laptop": {"yes", "head", "wc"}},
+	})
+	typeCommand(t, sess, term, "yes | head | wc -l")
+	if status, ok := sess.Shell.Active().LastStatus(); !ok || status != 0 {
+		t.Fatalf("still running after Enter (status %d %v), keys %v", status, ok, term.State.ValidKeys)
+	}
 }
 
 // Ctrl+C reaches a command running on the far side of ssh, through the

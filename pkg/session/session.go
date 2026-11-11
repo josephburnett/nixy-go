@@ -340,7 +340,10 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 			loggedOut = true
 			break
 		}
-		if len(outs) == 0 {
+		// A quiet read means nothing more to show, unless a command is
+		// still running: a pipeline can work for a while before it
+		// prints (`yes | head | wc -l`).
+		if _, done := s.Shell.Active().LastStatus(); len(outs) == 0 && done {
 			break
 		}
 	}

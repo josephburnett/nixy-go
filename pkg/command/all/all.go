@@ -7,6 +7,7 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
 	_ "github.com/josephburnett/nixy-go/pkg/command/echo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
+	_ "github.com/josephburnett/nixy-go/pkg/command/head"
 	_ "github.com/josephburnett/nixy-go/pkg/command/kill"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
 	_ "github.com/josephburnett/nixy-go/pkg/command/mkdir"
@@ -19,6 +20,7 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/ssh"
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
+	_ "github.com/josephburnett/nixy-go/pkg/command/wc"
 	_ "github.com/josephburnett/nixy-go/pkg/command/whoami"
 	_ "github.com/josephburnett/nixy-go/pkg/command/yes"
 )

@@ -238,6 +238,7 @@ type walkWorld struct {
 	cwd       []string
 	snapshots map[string]*file.F
 	g         *guide.G
+	shell     process.P // the last fresh shell, killed by the next
 }
 
 func newWalkWorld(t *testing.T, sess *Session) *walkWorld {
@@ -258,9 +259,13 @@ func newWalkWorld(t *testing.T, sess *Session) *walkWorld {
 }
 
 // freshShell restores every filesystem and launches a new shell for the
-// player at the scenario's host and cwd.
+// player at the scenario's host and cwd, ending the previous one so
+// the process table doesn't fill with them.
 func (w *walkWorld) freshShell(t *testing.T) *guide.G {
 	t.Helper()
+	if w.shell != nil {
+		w.shell.Kill()
+	}
 	for h, snap := range w.snapshots {
 		c, _ := w.sess.Game.Sim.GetComputer(h)
 		*c.Filesystem = *copyFS(snap)
@@ -269,6 +274,7 @@ func (w *walkWorld) freshShell(t *testing.T) *guide.G {
 	if err != nil {
 		t.Fatal(err)
 	}
+	w.shell = p
 	return guide.New(p)
 }
 
