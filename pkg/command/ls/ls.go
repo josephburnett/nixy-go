@@ -1,6 +1,7 @@
 package ls
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -45,6 +46,11 @@ func launch(
 	}
 
 	f, err := c.Filesystem.Lookup(target, owner)
+	if len(args) == 0 && (errors.Is(err, file.ErrNotExist) || errors.Is(err, file.ErrNotDir)) {
+		// The cwd was removed from under the shell (`rmdir` of the
+		// folder you're in). As on Linux, it lists as empty.
+		return command.NewSingleValueProcess(owner, ""), nil
+	}
 	if err != nil {
 		return command.Fail(owner, "ls", fmt.Sprintf("cannot access '%v'", operand), err), nil
 	}

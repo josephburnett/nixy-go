@@ -53,6 +53,14 @@ var keyboardScenarios = []keyboardScenario{
 		},
 	},
 	{
+		// The player removed the folder they are in: what still works
+		// there (ls, absolute paths, cd ~) must work cleanly.
+		name:       "nixy-cwd-removed",
+		untilQuest: "notes",
+		install:    map[string][]string{"nixy": {"rmdir"}},
+		commands:   []string{"cd ~", "mkdir gone", "cd gone", "rmdir ~/gone"},
+	},
+	{
 		// Nixy's runaway yes is in the table, wc and yes installed,
 		// and a to-do list in the player's notes.
 		name:       "nixy-processes",
