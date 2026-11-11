@@ -247,12 +247,12 @@ func truncateSegments(segs []Segment, width int) []Segment {
 	return out
 }
 
-// layoutKeyboard emits the four-row keyboard: three letter rows then a
+// layoutKeyboard emits the five-row keyboard: digits, three letter rows, then a
 // special-keys row. Each key carries StyleOnPath if it's the hint,
 // StyleKeyValid if it's typeable now, StyleKeyDim otherwise.
 func layoutKeyboard(valid []process.Datum, hint process.Datum, width int) []RenderedLine {
 	validSet := buildDatumSet(valid)
-	indents := []string{" ", "  ", "   "}
+	indents := []string{" ", " ", "  ", "   "}
 	var lines []RenderedLine
 	for row, keys := range keyboardRows {
 		line := RenderedLine{{Text: indents[row]}}

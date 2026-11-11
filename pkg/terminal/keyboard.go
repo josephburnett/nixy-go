@@ -6,11 +6,13 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-// keyboardRows defines the qwerty layout. Each key is its KeyName.
-// Keys that don't fit the special row (it must fit a phone) go at the
-// end of the shorter letter rows: `>` (redirection), ~, and ^C, which
-// interrupts a running command.
+// keyboardRows defines the layout: digits (PIDs, `kill -9`, `wc -l`
+// counts), then qwerty. Each key is its KeyName. Keys that don't fit
+// the special row (it must fit a phone) go at the end of the shorter
+// letter rows: `>` (redirection), ~, and ^C, which interrupts a
+// running command.
 var keyboardRows = [][]string{
+	{"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"},
 	{"q", "w", "e", "r", "t", "y", "u", "i", "o", "p"},
 	{"a", "s", "d", "f", "g", "h", "j", "k", "l", ">"},
 	{"z", "x", "c", "v", "b", "n", "m", "~", "^C"},
@@ -58,6 +60,24 @@ func specialRowLabels(width int) []string {
 		}
 	}
 	return nil // unreachable: the last tier always returns
+}
+
+// OnScreen reports whether d is a key on the on-screen keyboard, so a
+// tap-only player (the web build on a phone) can press it.
+func OnScreen(d process.Datum) bool {
+	for _, row := range keyboardRows {
+		for _, k := range row {
+			if datumEqual(KeyDatum(k), d) {
+				return true
+			}
+		}
+	}
+	for _, sk := range specialKeys {
+		if datumEqual(sk.datum, d) {
+			return true
+		}
+	}
+	return false
 }
 
 // datumSet is a simple set for checking datum membership.

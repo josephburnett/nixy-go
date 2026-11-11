@@ -457,12 +457,14 @@ func MoveDest(ctx simulation.ArgContext, prev []string, token string) simulation
 
 // wordChars are the characters offered for free-form words (new file
 // names, grep patterns): portable filename characters, none of which
-// a real shell would interpret.
-const wordChars = "-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+// a real shell would interpret, limited to keys on the on-screen
+// keyboard (no capitals or `_`), so a player who can only tap never
+// sees a valid key they can't press.
+const wordChars = "-.0123456789abcdefghijklmnopqrstuvwxyz"
 
 // patternChars are wordChars without `.`, which real grep reads as "any
 // character" while ours matches it literally.
-const patternChars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+const patternChars = "-0123456789abcdefghijklmnopqrstuvwxyz"
 
 func validNewName(name string) bool {
 	if name == "" || name == "." || name == ".." || name[0] == '-' {

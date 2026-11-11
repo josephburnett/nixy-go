@@ -67,7 +67,16 @@ Implementation:
     is an empty folder the user can read.
   - Free-form words (new names, grep patterns, `Word` for echo) use
     portable filename characters only — nothing a real shell would
-    interpret (`|`, `>`, `*`), no leading `-`.
+    interpret (`|`, `>`, `*`), no leading `-` — and only ones on the
+    on-screen keyboard: lowercase, digits, `.` and `-` (no capitals
+    or `_`, which have no key).
+- **Every valid key is on the on-screen keyboard.** The web build on a
+  phone has no other input, so a key that's valid but has no key on
+  screen is a dead end for a tap-only player. `terminal.OnScreen(d)`
+  says whether a key is drawn (digits, letters, `>`, `~`, `^C`, the
+  special row); the session tests' `pressAccepted` and the random fuzz
+  fail if any valid key isn't, which covers every hint and every
+  planned command too.
 - Commands are found one way: `sim.LookupBinary` via `/bin/<name>`,
   for running, validating and sudo alike. It looks up as a user
   (root under sudo) with the same permission checks as any file:

@@ -272,6 +272,7 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 				t.Fatalf("seed %d step %d: hint %q is not a valid key at %q (plan %q)",
 					seed, step, keyName(hint), term.State.Line, plannedCommand(sess))
 			}
+			assertOnScreen(t, term)
 			d := randomKey(rng, sess, term, &script)
 			line := term.State.Line
 			if !containsKey(valid, d) {

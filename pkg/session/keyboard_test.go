@@ -455,10 +455,12 @@ func typeAccepted(t *testing.T, s *Session, term *terminal.T, str string) {
 }
 
 // pressAccepted presses one key after checking that the keyboard offers
-// it, and that the hint (if any) is itself offered.
+// it, that the hint (if any) is itself offered, and that every key
+// offered is on the on-screen keyboard.
 func pressAccepted(t *testing.T, s *Session, term *terminal.T, d process.Datum) {
 	t.Helper()
 	valid := term.State.ValidKeys
+	assertOnScreen(t, term)
 	if hint := term.State.HintKey; hint != nil && !containsKey(valid, hint) {
 		t.Fatalf("hint %q is not a valid key (line %q)", keyName(hint), term.State.Line)
 	}
@@ -466,6 +468,17 @@ func pressAccepted(t *testing.T, s *Session, term *terminal.T, d process.Datum) 
 		t.Fatalf("key %q not accepted at line %q", keyName(d), term.State.Line)
 	}
 	pressKey(t, s, term, d)
+}
+
+// assertOnScreen fails if the keyboard offers a key a tap-only player
+// can't press: one missing from the on-screen keyboard.
+func assertOnScreen(t *testing.T, term *terminal.T) {
+	t.Helper()
+	for _, k := range term.State.ValidKeys {
+		if !terminal.OnScreen(k) {
+			t.Fatalf("valid key %q at %q is not on the on-screen keyboard", keyName(k), term.State.Line)
+		}
+	}
 }
 
 func containsKey(keys []process.Datum, d process.Datum) bool {

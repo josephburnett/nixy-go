@@ -8,7 +8,7 @@ const (
 	// Fixed layout constants
 	boxBorders    = 3 // top border + bottom border + prompt line
 	statusLine    = 1 // below the box: notice (errors etc) or thought
-	keyboardLines = 6 // 3 letter rows + 1 special row + 1 blank + 1 trailing
+	keyboardLines = 7 // digit row + 3 letter rows + 1 special row + 1 blank + 1 trailing
 )
 
 // T is the terminal controller. It composes content state with a renderer.
