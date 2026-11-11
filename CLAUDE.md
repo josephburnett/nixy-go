@@ -60,12 +60,14 @@ Implementation:
     `Subcommands` (apt install|list, nx quest|log|panic). It offers a
     name only if its args can lead somewhere.
   - Path args (`FilePath`, `AnyPath`, `CdTarget`, `NewPath`,
-    `MoveDest`) offer only keys that lead to an accepted path: a
-    folder is offered for descent only if something accepted lies
-    below. File args never complete on folders (`cat .`, `rm ..`).
-  - Free-form words (new names, grep patterns) use portable filename
-    characters only — nothing a real shell would interpret (`|`, `>`,
-    `*`), no leading `-`.
+    `NewName`, `EmptyDir`, `MoveDest`) offer only keys that lead to an
+    accepted path: a folder is offered for descent only if something
+    accepted lies below. File args never complete on folders (`cat .`,
+    `rm ..`). `NewName` (mkdir) must not exist yet; `EmptyDir` (rmdir)
+    is an empty folder the user can read.
+  - Free-form words (new names, grep patterns, `Word` for echo) use
+    portable filename characters only — nothing a real shell would
+    interpret (`|`, `>`, `*`), no leading `-`.
 - Commands are found one way: `sim.LookupBinary` via `/bin/<name>`,
   for running, validating and sudo alike. It looks up as a user
   (root under sudo) with the same permission checks as any file:

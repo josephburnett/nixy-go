@@ -7,14 +7,18 @@ import (
 
 	_ "github.com/josephburnett/nixy-go/pkg/command/apt"
 	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
+	_ "github.com/josephburnett/nixy-go/pkg/command/echo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
+	_ "github.com/josephburnett/nixy-go/pkg/command/mkdir"
 	_ "github.com/josephburnett/nixy-go/pkg/command/mv"
 	_ "github.com/josephburnett/nixy-go/pkg/command/pwd"
 	_ "github.com/josephburnett/nixy-go/pkg/command/rm"
+	_ "github.com/josephburnett/nixy-go/pkg/command/rmdir"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ssh"
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
+	_ "github.com/josephburnett/nixy-go/pkg/command/whoami"
 	_ "github.com/josephburnett/nixy-go/pkg/command/yes"
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
@@ -23,7 +27,10 @@ import (
 
 // testBinaries are installed in the fixture's /bin: every registered
 // command, so the structural tests cover them all.
-var testBinaries = []string{"apt", "cat", "grep", "ls", "mv", "pwd", "rm", "ssh", "sudo", "touch", "yes"}
+var testBinaries = []string{
+	"apt", "cat", "echo", "grep", "ls", "mkdir", "mv", "pwd", "rm", "rmdir",
+	"ssh", "sudo", "touch", "whoami", "yes",
+}
 
 func testFS() *file.F {
 	dir := func(owner string, files map[string]*file.F) *file.F {
@@ -923,6 +930,36 @@ func TestShellNextInvariant_Lines(t *testing.T) {
 		{"sudo ls -a /root", true},
 		// Hidden files are named like any other.
 		{"cat ~/.profile", true},
+		// whoami is who the command runs as.
+		{"whoami", true},
+		{"whoami x", false},
+		{"whoami | grep user", true},
+		{"sudo whoami", true},
+		// echo takes any words, and -n, and prints them.
+		{"echo", true},
+		{"echo hello world", true},
+		{"echo -n hi", true},
+		{"echo hi | cat", true},
+		{"echo -x", false},
+		{"echo a|b", false},
+		{"echo hi -n", false},
+		// mkdir makes a new folder in an existing one.
+		{"mkdir ~/new", true},
+		{"mkdir ~/docs/new", true},
+		{"mkdir ~/docs", false}, // exists
+		{"mkdir ~/notes.txt", false},
+		{"mkdir /nowhere/new", false},
+		{"mkdir ~/new/", false},
+		{"mkdir ~/new | cat", false},
+		{"mkdir /etc/new", true}, // permission denied
+		// rmdir removes an empty folder, never a file or a full one.
+		{"rmdir ~/docs", true},
+		{"rmdir ~/notes.txt", false},
+		{"rmdir /home", false},
+		{"rmdir .", false},
+		{"rmdir /", false},
+		{"rmdir /root", false}, // can't see in
+		{"sudo rmdir /home/user/docs", true},
 	} {
 		_, p := testSetup(t)
 		if got := canRun(p, tc.line); got != tc.ok {

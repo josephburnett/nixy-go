@@ -373,6 +373,25 @@ func NewPath(ctx simulation.ArgContext, _ []string, token string) simulation.Sug
 	})
 }
 
+// NewName accepts a path that doesn't exist yet, in an existing folder
+// (mkdir: making what is already there is an error).
+func NewName(ctx simulation.ArgContext, _ []string, token string) simulation.Suggestion {
+	return pathArg(ctx, token, true, func(target []string, f *file.F, dir bool) bool {
+		return f == nil && !dir && len(target) > 0
+	})
+}
+
+// EmptyDir accepts an existing, empty folder the user can read (rmdir).
+// Folders the user can't read aren't offered: whether they are empty
+// is theirs to know. `.`, `..` and `/` are never accepted, as real
+// rmdir refuses them.
+func EmptyDir(ctx simulation.ArgContext, _ []string, token string) simulation.Suggestion {
+	return pathArg(ctx, token, false, func(target []string, f *file.F, dir bool) bool {
+		return f != nil && f.Type == file.Folder && len(f.Files) == 0 &&
+			!dir && len(target) > 0 && f.CanRead(ctx.User)
+	})
+}
+
 // MoveDest accepts a destination for moving the file prev[0], the way
 // real mv treats its last argument:
 //   - an existing folder: move into it, unless that is where the file

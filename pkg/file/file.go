@@ -42,6 +42,7 @@ const (
 	ErrIsDir      Errno = "Is a directory"
 	ErrPermission Errno = "Permission denied"
 	ErrExist      Errno = "File exists"
+	ErrNotEmpty   Errno = "Directory not empty"
 )
 
 // Navigate walks the filesystem tree following the given path components,

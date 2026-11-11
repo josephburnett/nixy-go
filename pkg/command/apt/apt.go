@@ -54,7 +54,12 @@ var PackageRegistry = map[string]string{
 	"ssh":   "ssh",
 	"sudo":  "sudo",
 	"yes":   "yes",
-	"apt":   "apt",
+	// Every real system has these; worlds may ship them.
+	"whoami": "whoami",
+	"echo":   "echo",
+	"mkdir":  "mkdir",
+	"rmdir":  "rmdir",
+	"apt":    "apt",
 }
 
 func launch(
