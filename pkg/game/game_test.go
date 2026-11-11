@@ -180,12 +180,12 @@ type mockQuest struct {
 	planTarget string
 }
 
-func (q *mockQuest) ID() string                          { return q.id }
-func (q *mockQuest) Description() string                 { return "mock quest" }
-func (q *mockQuest) Machine() string                     { return q.machine }
-func (q *mockQuest) RequiredAchievements() []Achievement { return q.required }
-func (q *mockQuest) GrantedAchievements() []Achievement  { return q.granted }
-func (q *mockQuest) Setup(_ *simulation.S) error         { q.setupRan = true; return nil }
+func (q *mockQuest) ID() string                                         { return q.id }
+func (q *mockQuest) Description() string                                { return "mock quest" }
+func (q *mockQuest) Machine() string                                    { return q.machine }
+func (q *mockQuest) RequiredAchievements() []Achievement                { return q.required }
+func (q *mockQuest) GrantedAchievements() []Achievement                 { return q.granted }
+func (q *mockQuest) Setup(_ *simulation.S) error                        { q.setupRan = true; return nil }
 func (q *mockQuest) IsComplete(_ *simulation.S, _ *CommandTracker) bool { return q.complete }
 func (q *mockQuest) PlanNextCommand(_ *simulation.S, _ *CommandTracker, _ string, _ []string) string {
 	return q.planTarget
@@ -253,7 +253,7 @@ func TestManagerDialogOnCompletion(t *testing.T) {
 	q := &mockQuest{id: "connect", machine: "m"}
 	m := NewManager([]Quest{q}, r)
 	m.AfterCommand(sim) // activates
-	m.Dialog.Drain()     // clear activation dialog
+	m.Dialog.Drain()    // clear activation dialog
 
 	q.complete = true
 	m.AfterCommand(sim) // completes

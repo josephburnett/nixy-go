@@ -10,12 +10,12 @@ type mockProcess struct {
 	killed bool
 }
 
-func (p *mockProcess) Stdout() (Data, bool, error)  { return nil, false, nil }
-func (p *mockProcess) Stderr() (Data, bool, error)  { return nil, false, nil }
-func (p *mockProcess) Stdin(_ Data) (bool, error)    { return false, nil }
-func (p *mockProcess) Next() []Datum                 { return nil }
-func (p *mockProcess) Owner() string                 { return p.owner }
-func (p *mockProcess) Kill() error                   { p.killed = true; return nil }
+func (p *mockProcess) Stdout() (Data, bool, error) { return nil, false, nil }
+func (p *mockProcess) Stderr() (Data, bool, error) { return nil, false, nil }
+func (p *mockProcess) Stdin(_ Data) (bool, error)  { return false, nil }
+func (p *mockProcess) Next() []Datum               { return nil }
+func (p *mockProcess) Owner() string               { return p.owner }
+func (p *mockProcess) Kill() error                 { p.killed = true; return nil }
 
 func TestSpaceAddAndList(t *testing.T) {
 	s := NewSpace()
