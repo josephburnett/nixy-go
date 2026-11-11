@@ -1,7 +1,6 @@
 package pwd
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
@@ -23,13 +22,9 @@ func launch(
 	cwd []string,
 	args []string,
 ) (process.P, error) {
-	if len(args) != 0 {
-		return nil, errAcceptNoArgs
+	warning := ""
+	if len(args) > 0 {
+		warning = "pwd: ignoring non-option arguments\n" // as GNU pwd
 	}
-	return command.NewSingleValueProcess(
-		owner,
-		"/"+strings.Join(cwd, "/")+"\n",
-	), nil
+	return command.Exited(owner, "/"+strings.Join(cwd, "/")+"\n", warning, 0), nil
 }
-
-var errAcceptNoArgs = fmt.Errorf("pwd does not accept parameters")

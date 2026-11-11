@@ -30,10 +30,18 @@ func TestPwdNested(t *testing.T) {
 	}
 }
 
-func TestPwdRejectsArgs(t *testing.T) {
-	_, err := launch(nil, "user", "host", nil, []string{"foo"})
-	if err == nil {
-		t.Fatal("expected error when args given")
+// Like GNU pwd, operands are ignored with a warning.
+func TestPwdIgnoresArgs(t *testing.T) {
+	p, err := launch(nil, "user", "host", nil, []string{"foo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outs := p.Read()
+	if got := process.Text(outs, process.Stdout); got != "/\n" {
+		t.Errorf("stdout %q", got)
+	}
+	if got := process.Text(outs, process.Stderr); got != "pwd: ignoring non-option arguments\n" {
+		t.Errorf("stderr %q", got)
 	}
 }
 
