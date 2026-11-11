@@ -1,8 +1,6 @@
 package cat
 
 import (
-	"strings"
-
 	"github.com/josephburnett/nixy-go/pkg/command"
 	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/process"
@@ -43,9 +41,6 @@ func launch(
 	data, err := c.Filesystem.ReadFile(file.Resolve(cwd, args[0]), owner)
 	if err != nil {
 		return command.Fail(owner, "cat", args[0], err), nil
-	}
-	if len(data) > 0 && !strings.HasSuffix(data, "\n") {
-		data += "\n"
 	}
 	return command.NewSingleValueProcess(owner, data), nil
 }

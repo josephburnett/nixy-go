@@ -47,7 +47,7 @@ func TestCatFile(t *testing.T) {
 	sim := testSetup(t)
 	p, _ := launch(sim, "user", "test", []string{}, []string{"hello.txt"})
 	out := stdout(t, p)
-	if !strings.Contains(out, "hello world") {
+	if out != "hello world" { // as stored: cat adds no newline
 		t.Fatalf("expected 'hello world', got %q", out)
 	}
 }

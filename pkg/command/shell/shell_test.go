@@ -64,7 +64,7 @@ func testFS() *file.F {
 			}},
 		"home": dir(file.OwnerRoot, map[string]*file.F{
 			"user": dir("user", map[string]*file.F{
-				"notes.txt": text("user", "a note\nanother"),
+				"notes.txt": text("user", "a note\nanother\n"),
 				".profile":  text("user", "hidden"),
 				"docs":      dir("user", map[string]*file.F{}),
 			}),

@@ -37,9 +37,6 @@ func launch(sim *simulation.S, owner, hostname string, cwd, args []string) (proc
 	if err != nil {
 		return command.Fail(owner, "head", "cannot open '"+args[0]+"' for reading", err), nil
 	}
-	if data != "" && !strings.HasSuffix(data, "\n") {
-		data += "\n" // as cat does, so the prompt starts a new line
-	}
 	h := &stdinHead{owner: owner}
 	h.take(data)
 	h.CloseStdin()

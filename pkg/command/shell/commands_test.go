@@ -45,8 +45,8 @@ func TestShellHeadWc(t *testing.T) {
 	for _, tc := range []struct{ line, want string }{
 		{"yes | head", strings.Repeat("y\n", 10)},
 		{"head notes.txt", "a note\nanother\n"},
-		{"wc notes.txt", " 1  3 14 notes.txt\n"},
-		{"wc -l notes.txt", "1 notes.txt\n"},
+		{"wc notes.txt", " 2  3 15 notes.txt\n"},
+		{"wc -l notes.txt", "2 notes.txt\n"},
 		{"ls | wc", "      2       2      15\n"},
 		{"ls | wc -l", "2\n"},
 		{"yes | head | wc -l", "10\n"},
