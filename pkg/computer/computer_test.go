@@ -7,14 +7,11 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-type mockProcess struct{}
+type mockProcess struct{ process.Written }
 
-func (p *mockProcess) Stdout() (process.Data, bool, error) { return nil, false, nil }
-func (p *mockProcess) Stderr() (process.Data, bool, error) { return nil, false, nil }
-func (p *mockProcess) Stdin(_ process.Data) (bool, error)  { return false, nil }
-func (p *mockProcess) Next() []process.Datum               { return nil }
-func (p *mockProcess) Owner() string                       { return "user" }
-func (p *mockProcess) Kill() error                         { return nil }
+func (p *mockProcess) Stdin(process.Data) error { return nil }
+func (p *mockProcess) Next() []process.Datum    { return nil }
+func (p *mockProcess) Owner() string            { return "user" }
 
 func TestNewComputer(t *testing.T) {
 	fs := &file.F{Type: file.Folder, Owner: file.OwnerRoot,

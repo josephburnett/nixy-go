@@ -62,6 +62,10 @@ Implementation:
   the segment after the last pipe. It adds just Enter and `|` (when
   the segment is Complete and pipeable) and the optional space after
   `|`. A pipeline finds every segment's binary before launching any.
+- A key the keyboard doesn't offer does nothing at all: the session
+  returns before recording, running or redrawing anything
+  (`TestFuzzE2ERejectedKeys` presses such keys during random play and
+  checks that nothing observable changes).
 - Permission denied is not a principle-1 violation: it is a real
   consequence (principle 2) and the guards allow it. Usage errors,
   missing paths and wrong file types are bugs.
@@ -93,7 +97,11 @@ Concrete implications (these all flow from this single principle):
 - **Identity is real.** The username chosen at login is the player's
   account on every machine. The prompt (`<user>@<host>:<path>>`) is
   ground truth — it matches `whoami`, owns the files the player
-  creates, and is what `CanWrite` checks against.
+  creates, and is what `CanWrite` checks against. Existing accounts
+  (root, nixy: `game.Accounts`, every owner in the world definitions)
+  can't be taken at login: real login would ask for their password,
+  and the game has none, so the login keyboard never offers Enter on
+  one.
 - **Per-user homes.** `MachineRegistry.bootMachine` provisions
   `/home/<username>` on every booted machine. Other users (Nixy) have
   their own homes. World definitions don't ship a placeholder
@@ -142,6 +150,23 @@ Concrete implications (these all flow from this single principle):
   coreutils does (`cat: foo: No such file or directory`, `rm: cannot
   remove 'x': Permission denied`). Stderr surfaces normally, exit vs.
   EOF behave correctly, etc.
+- **Processes are real** (`pkg/process`). A process's output is one
+  ordered sequence of stdout and stderr writes (`Read`), shown on the
+  terminal in the order written. Every process exits with a status
+  (`Exit`; 0 is success, 1 for a failed command, 127 command not
+  found, 126 not allowed to run, 137 killed). End of input
+  (`CloseStdin`) is not `Kill`: a pipe closes the next stage's stdin
+  when the stage before it exits, and a stage that doesn't read stdin
+  ignores that and still prints. Every stage's stderr reaches the
+  terminal; a pipeline's status is its last stage's. The shell keeps
+  `$?` (`shell.Info.LastStatus`), and the tracker records it on every
+  command line (`CommandRecord.Status`, `Running` for one still going,
+  like ssh), so quests can check what a command did. Embed
+  `process.Written` to get the output queue and exit status for free.
+- **Nothing hangs.** Processes act only when called. A pipeline moves
+  data one step per `Read`, and the session reads a bounded number of
+  times per keystroke, so a source that never ends can't freeze the
+  game.
 
 When choosing how to fix a bug or add a feature, ask: *would this
 choice make sense in real Unix?* If it papers over a real concept,

@@ -16,17 +16,15 @@ func New(p process.P) *G {
 	}
 }
 
-func (g *G) Stdout() (out process.Data, eof bool, err error) {
-	return g.process.Stdout()
-}
+func (g *G) Read() []process.Output { return g.process.Read() }
 
-func (g *G) Stderr() (out process.Data, eof bool, err error) {
-	return g.process.Stderr()
-}
+func (g *G) Exit() (int, bool) { return g.process.Exit() }
 
-func (g *G) Stdin(in process.Data) (eof bool, err error) {
+// Stdin passes in to the process only if it is one of the keys the
+// process offers (Next). Anything else is refused with an error.
+func (g *G) Stdin(in process.Data) error {
 	if len(in) != 1 {
-		return false, fmt.Errorf("guide: expected 1 datum, got %v", len(in))
+		return fmt.Errorf("guide: expected 1 datum, got %v", len(in))
 	}
 	valid := g.process.Next()
 	for _, v := range valid {
@@ -34,7 +32,7 @@ func (g *G) Stdin(in process.Data) (eof bool, err error) {
 			return g.process.Stdin(in)
 		}
 	}
-	return false, fmt.Errorf("invalid input")
+	return fmt.Errorf("invalid input")
 }
 
 func (g *G) Next() []process.Datum {

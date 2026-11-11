@@ -12,18 +12,19 @@ type CommandRecord struct {
 	Hostname string
 	Cwd      []string
 	Command  string
+	// Status is the command line's exit status, as in $?: 0 is
+	// success. Running means it hadn't finished when it was recorded
+	// (ssh, until the connection closes), and Status means nothing.
+	Status  int
+	Running bool
 }
 
 func NewCommandTracker() *CommandTracker {
 	return &CommandTracker{}
 }
 
-func (t *CommandTracker) Record(hostname string, cwd []string, command string) {
-	t.commands = append(t.commands, CommandRecord{
-		Hostname: hostname,
-		Cwd:      cwd,
-		Command:  command,
-	})
+func (t *CommandTracker) Record(r CommandRecord) {
+	t.commands = append(t.commands, r)
 }
 
 // Records returns a copy of all recorded commands, oldest first.

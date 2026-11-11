@@ -35,26 +35,12 @@ func testSetup(t *testing.T) *simulation.S {
 
 func stdout(t *testing.T, p process.P) string {
 	t.Helper()
-	out, _, _ := p.Stdout()
-	var s string
-	for _, d := range out {
-		if c, ok := d.(process.Chars); ok {
-			s += string(c)
-		}
-	}
-	return s
+	return process.Text(p.Read(), process.Stdout)
 }
 
 func stderr(t *testing.T, p process.P) string {
 	t.Helper()
-	out, _, _ := p.Stderr()
-	var s string
-	for _, d := range out {
-		if c, ok := d.(process.Chars); ok {
-			s += string(c)
-		}
-	}
-	return s
+	return process.Text(p.Read(), process.Stderr)
 }
 
 func TestCatFile(t *testing.T) {
@@ -98,6 +84,13 @@ func TestCatStdin(t *testing.T) {
 	p, _ := launch(sim, "user", "test", []string{}, nil)
 	p.Stdin(process.CharsData("piped input"))
 	out := stdout(t, p)
+	if _, exited := p.Exit(); exited {
+		t.Fatal("cat should run until its input closes")
+	}
+	p.CloseStdin()
+	if status, exited := p.Exit(); !exited || status != 0 {
+		t.Fatalf("cat should exit 0 when its input closes, got %v %v", status, exited)
+	}
 	if !strings.Contains(out, "piped input") {
 		t.Fatalf("expected 'piped input', got %q", out)
 	}

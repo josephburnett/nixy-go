@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -58,102 +59,78 @@ var DefaultNxHandler NxHandler
 var _ process.P = &shell{}
 
 type shell struct {
+	process.Written // what the shell writes itself: echo, errors, nx
+
 	simulation *simulation.S
 	owner      string
 	hostname   string
 	home       []string // $HOME: where login and bare `cd` land
-	exited     bool
 
-	childProcess     process.P
+	// job is the command line running in the foreground: a command, a
+	// pipeline, or the remote shell of an ssh. Keys go to it until it
+	// exits.
+	job              process.P
 	currentDirectory []string
 	currentCommand   string
-	echoOut          process.Data
-	echoErr          process.Data
+	status           int  // $?: the last command line's exit status
+	hasStatus        bool // a command line has finished
 }
 
-func (s *shell) Stdout() (process.Data, bool, error) {
-	if s.exited {
-		// Flush what was written before exiting (the echoed Enter, nx
-		// panic's message) along with EOF, or it's lost.
-		data := s.echoOut
-		s.echoOut = nil
-		return data, true, nil
-	}
-	data := s.echoOut
-	s.echoOut = nil
-	if s.childProcess != nil {
-		d, eof, err := s.childProcess.Stdout()
-		if err != nil && err != command.ErrEndOfFile {
-			return data, false, err
-		}
-		data = append(data, d...)
-		if eof {
-			// Drain any pending stderr into echoErr before reaping the
-			// child. Without this, an errorProcess's message — which lives
-			// only on stderr — is lost because the session loop calls
-			// Stdout before Stderr, and Kill drops the child.
-			for {
-				errOut, _, _ := s.childProcess.Stderr()
-				if len(errOut) == 0 {
-					break
-				}
-				s.echoErr = append(s.echoErr, errOut...)
-			}
-			s.childProcess.Kill()
-			s.childProcess = nil
+// Read returns the shell's own output and its job's, in order. When the
+// job exits the shell reaps it, keeping its status as $?.
+func (s *shell) Read() []process.Output {
+	if s.job != nil {
+		s.writeAll(s.job.Read())
+		if status, done := s.job.Exit(); done {
+			s.writeAll(s.job.Read())
+			s.job = nil
+			s.setStatus(status)
 		}
 	}
-	return data, false, nil
+	return s.Written.Read()
 }
 
-func (s *shell) Stderr() (process.Data, bool, error) {
-	if s.exited {
-		data := s.echoErr
-		s.echoErr = nil
-		return data, true, nil
+func (s *shell) writeAll(outs []process.Output) {
+	for _, o := range outs {
+		s.Write(o.Stream, o.Data)
 	}
-	data := s.echoErr
-	s.echoErr = nil
-	if s.childProcess != nil {
-		d, eof, err := s.childProcess.Stderr()
-		if err != nil {
-			return data, false, err
-		}
-		data = append(data, d...)
-		_ = eof // stderr eof doesn't kill the child
-	}
-	return data, false, nil
 }
 
-func (s *shell) Stdin(d process.Data) (bool, error) {
-	if s.exited {
-		return true, nil
+func (s *shell) setStatus(status int) {
+	s.status, s.hasStatus = status, true
+}
+
+// fail reports a command line that couldn't run.
+func (s *shell) fail(status int, msg string) {
+	s.Write(process.Stderr, process.CharsData(msg+"\n"))
+	s.setStatus(status)
+}
+
+func (s *shell) Stdin(d process.Data) error {
+	if _, exited := s.Exit(); exited {
+		return process.ErrNoInput
 	}
-	if s.childProcess != nil {
-		return s.childProcess.Stdin(d)
+	if s.job != nil {
+		return s.job.Stdin(d)
 	}
 
 	if len(d) != 1 {
-		return false, fmt.Errorf("shell only supports 1 datum at a time: %v", len(d))
+		return fmt.Errorf("shell only supports 1 datum at a time: %v", len(d))
 	}
 	in := d[0]
-	s.echoOut = append(s.echoOut, in)
+	s.Write(process.Stdout, process.Data{in})
 
 	switch in := in.(type) {
 	case process.Chars:
 		s.currentCommand += string(in)
-		return false, nil
 	case process.TermCode:
 		switch in {
 		case process.TermEnter:
 			cmd := strings.TrimSpace(s.currentCommand)
 			s.currentCommand = ""
-			if cmd == "" {
-				return false, nil
-			}
-			err := s.executeCommand(cmd)
-			if err != nil {
-				s.echoErr = append(s.echoErr, process.Chars(err.Error()+"\n"))
+			if cmd != "" {
+				s.hasStatus = false
+				s.executeCommand(cmd)
 			}
 		case process.TermBackspace:
 			if len(s.currentCommand) > 0 {
@@ -162,16 +139,28 @@ func (s *shell) Stdin(d process.Data) (bool, error) {
 		case process.TermClear:
 			s.currentCommand = ""
 		}
-		return s.exited, nil
 	default:
-		return false, fmt.Errorf("unhandled input type %T", in)
+		return fmt.Errorf("unhandled input type %T", in)
 	}
+	return nil
 }
 
-func (s *shell) executeCommand(cmd string) error {
+// CloseStdin is end of input to the shell (Ctrl+D): its job's input
+// ends, or with no job the shell exits, like `exit`.
+func (s *shell) CloseStdin() {
+	if s.job != nil {
+		s.job.CloseStdin()
+		return
+	}
+	s.Finish(s.status)
+}
+
+// executeCommand runs one command line. Whatever it starts becomes the
+// job; a builtin or a failure to start sets $? right away.
+func (s *shell) executeCommand(cmd string) {
 	p := command.Parse(cmd)
 	if len(p.Segments) == 0 {
-		return nil
+		return
 	}
 	// Tilde expansion happens here, before any command sees its args,
 	// as in a real shell (so `sudo cat ~/x` is still the player's ~).
@@ -182,7 +171,8 @@ func (s *shell) executeCommand(cmd string) error {
 	}
 
 	if !p.IsPipeline() {
-		return s.executeSingle(p.Segments[0])
+		s.executeSingle(p.Segments[0])
+		return
 	}
 
 	// Pipeline: find every binary before launching any, the way a real
@@ -191,68 +181,82 @@ func (s *shell) executeCommand(cmd string) error {
 	binaries := make([]*simulation.Binary, len(p.Segments))
 	for i, seg := range p.Segments {
 		if seg.Name == "" {
-			return fmt.Errorf("empty pipe segment")
+			s.fail(2, "syntax error near unexpected token `|'")
+			return
 		}
 		b, err := s.simulation.LookupBinary(s.hostname, s.owner, seg.Name)
 		if err != nil {
-			return err
+			s.fail(lookupStatus(err), err.Error())
+			return
 		}
 		binaries[i] = b
 	}
-	var processes []process.P
+	var stages []process.P
 	for i, seg := range p.Segments {
 		p, err := binaries[i].Launch(s.simulation, s.owner, s.hostname, s.currentDirectory, seg.Args)
 		if err != nil {
-			for _, proc := range processes {
+			for _, proc := range stages {
 				proc.Kill()
 			}
-			return err
+			s.fail(1, err.Error())
+			return
 		}
-		processes = append(processes, p)
+		stages = append(stages, p)
 	}
-
-	s.childProcess = &pipeline{processes: processes}
-	return nil
+	s.job = &pipeline{stages: stages, closed: make([]bool, len(stages))}
 }
 
-func (s *shell) executeSingle(seg command.Segment) error {
-	if seg.Name == "" {
-		return nil
+// lookupStatus is the shell's status for a command it couldn't start:
+// 126 when it isn't allowed to run, 127 when there's no such command.
+func lookupStatus(err error) int {
+	if errors.Is(err, file.ErrPermission) {
+		return 126
 	}
+	return 127
+}
 
+func (s *shell) executeSingle(seg command.Segment) {
 	switch seg.Name {
+	case "":
+		return
 	case "cd":
-		return s.builtinCd(seg.Args)
+		if err := s.builtinCd(seg.Args); err != nil {
+			s.fail(1, err.Error())
+			return
+		}
+		s.setStatus(0)
+		return
 	case "exit":
-		s.exited = true
-		return nil
+		s.setStatus(s.status)
+		s.Finish(s.status)
+		return
 	case "nx":
-		return s.builtinNx(seg.Args)
+		s.builtinNx(seg.Args)
+		return
 	}
 
-	p, err := s.launchBinary(seg)
-	if err != nil {
-		return err
-	}
-	s.childProcess = p
-	return nil
-}
-
-func (s *shell) launchBinary(seg command.Segment) (process.P, error) {
 	b, err := s.simulation.LookupBinary(s.hostname, s.owner, seg.Name)
 	if err != nil {
-		return nil, err
+		s.fail(lookupStatus(err), err.Error())
+		return
 	}
-	return b.Launch(s.simulation, s.owner, s.hostname, s.currentDirectory, seg.Args)
+	p, err := b.Launch(s.simulation, s.owner, s.hostname, s.currentDirectory, seg.Args)
+	if err != nil {
+		s.fail(1, err.Error())
+		return
+	}
+	s.job = p
 }
 
-func (s *shell) builtinNx(args []string) error {
+func (s *shell) builtinNx(args []string) {
 	if DefaultNxHandler == nil {
-		return fmt.Errorf("nx: game not initialized")
+		s.fail(1, "nx: game not initialized")
+		return
 	}
 	if len(args) == 0 {
-		s.echoOut = append(s.echoOut, process.Chars("Usage: nx quest|log|panic\n"))
-		return nil
+		s.Write(process.Stdout, process.CharsData("Usage: nx quest|log|panic\n"))
+		s.setStatus(0)
+		return
 	}
 	var output string
 	switch args[0] {
@@ -262,94 +266,109 @@ func (s *shell) builtinNx(args []string) error {
 		output = DefaultNxHandler.NxLog()
 	case "panic":
 		output = DefaultNxHandler.NxPanic()
-		s.exited = true // Disconnect to laptop
 	default:
-		return fmt.Errorf("nx: unknown subcommand '%v'", args[0])
+		s.fail(1, fmt.Sprintf("nx: unknown subcommand '%v'", args[0]))
+		return
 	}
-	s.echoOut = append(s.echoOut, process.Chars(output))
-	return nil
+	s.Write(process.Stdout, process.CharsData(output))
+	s.setStatus(0)
+	if args[0] == "panic" {
+		s.Finish(0) // disconnect to the laptop
+	}
 }
 
-// Hostname returns the hostname of the innermost active shell.
-func (s *shell) Hostname() string {
-	if child, ok := s.childProcess.(*shell); ok {
-		return child.Hostname()
-	}
-	return s.hostname
+// Info is what the game reads from a shell. Hostname, CurrentDirectory
+// and CurrentCommand describe the innermost shell (the one the player
+// is typing into, at the end of any ssh sessions).
+type Info interface {
+	Hostname() string
+	CurrentDirectory() []string
+	CurrentCommand() string
+	// Active is the innermost shell itself.
+	Active() Info
+	// LastStatus is $?: the exit status of the last command line this
+	// shell ran (0 is success). ok is false before one has finished
+	// and while one is still running, such as an ssh session.
+	LastStatus() (status int, ok bool)
 }
 
-// CurrentDirectory returns the cwd of the innermost active shell.
-func (s *shell) CurrentDirectory() []string {
-	if child, ok := s.childProcess.(*shell); ok {
-		return child.CurrentDirectory()
+var _ Info = &shell{}
+
+func (s *shell) innermost() *shell {
+	if child, ok := s.job.(*shell); ok {
+		return child.innermost()
 	}
-	return s.currentDirectory
+	return s
 }
 
-// CurrentCommand returns what the user has typed in the innermost active shell.
-func (s *shell) CurrentCommand() string {
-	if child, ok := s.childProcess.(*shell); ok {
-		return child.CurrentCommand()
+func (s *shell) Active() Info               { return s.innermost() }
+func (s *shell) Hostname() string           { return s.innermost().hostname }
+func (s *shell) CurrentDirectory() []string { return s.innermost().currentDirectory }
+func (s *shell) CurrentCommand() string     { return s.innermost().currentCommand }
+
+func (s *shell) LastStatus() (int, bool) {
+	if s.job != nil || !s.hasStatus {
+		return 0, false
 	}
-	return s.currentCommand
+	return s.status, true
 }
 
-// pipeline connects multiple processes: stdout of N feeds stdin of N+1.
+// pipeline connects its stages: the stdout of each feeds the stdin of
+// the next, and when one exits the next one's input closes. Stderr of
+// every stage, and the last stage's stdout, go to the terminal. Its
+// exit status is the last stage's, as in a shell.
 type pipeline struct {
-	processes []process.P
-	piped     bool
+	stages []process.P
+	closed []bool // closed[i]: stage i+1's stdin was closed
 }
 
-func (p *pipeline) Stdout() (process.Data, bool, error) {
-	if !p.piped {
-		p.pipe()
-	}
-	// Read from last process
-	last := p.processes[len(p.processes)-1]
-	return last.Stdout()
-}
+var _ process.P = &pipeline{}
 
-func (p *pipeline) Stderr() (process.Data, bool, error) {
-	// Collect stderr from all processes
-	var all process.Data
-	for _, proc := range p.processes {
-		d, _, _ := proc.Stderr()
-		all = append(all, d...)
-	}
-	return all, false, nil
-}
-
-func (p *pipeline) Stdin(in process.Data) (bool, error) {
-	// Write to first process
-	return p.processes[0].Stdin(in)
-}
-
-func (p *pipeline) Next() []process.Datum { return nil }
-func (p *pipeline) Owner() string         { return p.processes[0].Owner() }
-
-func (p *pipeline) Kill() error {
-	for _, proc := range p.processes {
-		proc.Kill()
-	}
-	return nil
-}
-
-func (p *pipeline) pipe() {
-	p.piped = true
-	for i := 0; i < len(p.processes)-1; i++ {
-		src := p.processes[i]
-		dst := p.processes[i+1]
-		// Read all stdout from src and feed to dst
-		for {
-			data, eof, _ := src.Stdout()
-			if len(data) > 0 {
-				dst.Stdin(data)
-			}
-			if eof {
-				dst.Kill() // Signal EOF to dst
-				break
+// Read moves data one step through the pipeline: each stage is read
+// once, in order, so data from a stage reaches the next in the same
+// call. A stage that never stops writing can't hang the caller.
+func (p *pipeline) Read() []process.Output {
+	var out []process.Output
+	last := len(p.stages) - 1
+	for i, st := range p.stages {
+		outs := st.Read()
+		_, exited := st.Exit()
+		if exited {
+			outs = append(outs, st.Read()...)
+		}
+		for _, o := range outs {
+			if o.Stream == process.Stdout && i < last {
+				// A reader that has exited drops it, as a closed pipe would.
+				_ = p.stages[i+1].Stdin(o.Data)
+			} else {
+				out = append(out, o)
 			}
 		}
+		if exited && i < last && !p.closed[i] {
+			p.closed[i] = true
+			p.stages[i+1].CloseStdin()
+		}
+	}
+	return out
+}
+
+func (p *pipeline) Exit() (int, bool) {
+	for _, st := range p.stages {
+		if _, exited := st.Exit(); !exited {
+			return 0, false
+		}
+	}
+	return p.stages[len(p.stages)-1].Exit()
+}
+
+func (p *pipeline) Stdin(in process.Data) error { return p.stages[0].Stdin(in) }
+func (p *pipeline) CloseStdin()                 { p.stages[0].CloseStdin() }
+func (p *pipeline) Next() []process.Datum       { return nil }
+func (p *pipeline) Owner() string               { return p.stages[0].Owner() }
+
+func (p *pipeline) Kill() {
+	for _, st := range p.stages {
+		st.Kill()
 	}
 }
 
@@ -395,11 +414,11 @@ func (s *shell) canEnter(dir []string) bool { return s.enter(dir) == nil }
 // it. The shell adds only the segment-completion keys (Enter, `|`) and
 // the optional space after `|`.
 func (s *shell) Next() []process.Datum {
-	if s.exited {
+	if _, exited := s.Exit(); exited {
 		return nil
 	}
-	if s.childProcess != nil {
-		return s.childProcess.Next()
+	if s.job != nil {
+		return s.job.Next()
 	}
 
 	var valid []process.Datum
@@ -504,11 +523,11 @@ func (s *shell) Owner() string {
 	return s.owner
 }
 
-func (s *shell) Kill() error {
-	s.exited = true
-	if s.childProcess != nil {
-		s.childProcess.Kill()
-		s.childProcess = nil
+// Kill ends the shell and its job.
+func (s *shell) Kill() {
+	if s.job != nil {
+		s.job.Kill()
+		s.job = nil
 	}
-	return nil
+	s.Written.Kill()
 }

@@ -46,8 +46,7 @@ func launch(
 		if err != nil {
 			return command.Fail(owner, "grep", args[1], err), nil
 		}
-		output := filterLines(data, pattern)
-		return command.NewSingleValueProcess(owner, output), nil
+		return result(owner, filterLines(data, pattern)), nil
 	}
 
 	// grep pattern (reads from stdin)
@@ -67,37 +66,36 @@ func filterLines(data, pattern string) string {
 	return strings.Join(matches, "\n") + "\n"
 }
 
+// result is grep's output and exit status: 1 when nothing matched.
+func result(owner, matches string) process.P {
+	status := 0
+	if matches == "" {
+		status = 1
+	}
+	return command.Exited(owner, matches, "", status)
+}
+
+// stdinGrep filters stdin, matching once its input closes.
 type stdinGrep struct {
+	process.Written
 	owner   string
 	pattern string
-	buf     string
-	done    bool
+	buf     strings.Builder
 }
 
-func (g *stdinGrep) Stdout() (process.Data, bool, error) {
-	if !g.done {
-		return nil, false, nil
-	}
-	output := filterLines(g.buf, g.pattern)
-	g.buf = ""
-	return process.CharsData(output), true, nil
+func (g *stdinGrep) Stdin(in process.Data) error {
+	g.buf.WriteString(in.String())
+	return nil
 }
 
-func (g *stdinGrep) Stderr() (process.Data, bool, error) { return nil, true, nil }
-
-func (g *stdinGrep) Stdin(in process.Data) (bool, error) {
-	for _, d := range in {
-		if c, ok := d.(process.Chars); ok {
-			g.buf += string(c)
-		}
+func (g *stdinGrep) CloseStdin() {
+	matches := filterLines(g.buf.String(), g.pattern)
+	if matches != "" {
+		g.Write(process.Stdout, process.CharsData(matches))
+		g.Finish(0)
 	}
-	return false, nil
+	g.Finish(1)
 }
 
 func (g *stdinGrep) Next() []process.Datum { return nil }
 func (g *stdinGrep) Owner() string         { return g.owner }
-
-func (g *stdinGrep) Kill() error {
-	g.done = true
-	return nil
-}

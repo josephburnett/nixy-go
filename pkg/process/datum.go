@@ -1,5 +1,7 @@
 package process
 
+import "strings"
+
 type Datum interface {
 	isDatum()
 }
@@ -25,4 +27,15 @@ var (
 
 func CharsData(s string) Data {
 	return Data{Chars(s)}
+}
+
+// String returns the characters in d, skipping key codes and signals.
+func (d Data) String() string {
+	var sb strings.Builder
+	for _, x := range d {
+		if c, ok := x.(Chars); ok {
+			sb.WriteString(string(c))
+		}
+	}
+	return sb.String()
 }

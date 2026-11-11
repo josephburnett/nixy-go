@@ -6,11 +6,6 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-var (
-	ErrEndOfFile       = fmt.Errorf("end of file")
-	ErrReadOnlyProcess = fmt.Errorf("read only process")
-)
-
 // Fail is a process that reports err the way coreutils does,
 // "cmd: subject: reason". The subject is the operand as typed
 // ("cat: foo: No such file or directory") or a phrase naming it

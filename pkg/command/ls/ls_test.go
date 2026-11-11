@@ -44,29 +44,12 @@ func testSetup(t *testing.T) *simulation.S {
 
 func stdout(t *testing.T, p process.P) string {
 	t.Helper()
-	out, _, err := p.Stdout()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var s string
-	for _, d := range out {
-		if c, ok := d.(process.Chars); ok {
-			s += string(c)
-		}
-	}
-	return s
+	return process.Text(p.Read(), process.Stdout)
 }
 
 func stderr(t *testing.T, p process.P) string {
 	t.Helper()
-	out, _, _ := p.Stderr()
-	var s string
-	for _, d := range out {
-		if c, ok := d.(process.Chars); ok {
-			s += string(c)
-		}
-	}
-	return s
+	return process.Text(p.Read(), process.Stderr)
 }
 
 func TestLsCwd(t *testing.T) {

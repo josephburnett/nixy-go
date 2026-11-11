@@ -2,84 +2,39 @@ package command
 
 import "github.com/josephburnett/nixy-go/pkg/process"
 
-var _ process.P = &singleValueProcess{}
-
-type singleValueProcess struct {
+// finished is a command that did all its work at launch: its output is
+// written and it has exited.
+type finished struct {
+	process.Written
 	owner string
-	value string
-	eof   bool
 }
 
+var _ process.P = &finished{}
+
+// Exited returns a process that wrote stdout and stderr (either may be
+// empty) and exited with status.
+func Exited(owner, stdout, stderr string, status int) process.P {
+	p := &finished{owner: owner}
+	if stderr != "" {
+		p.Write(process.Stderr, process.CharsData(stderr))
+	}
+	if stdout != "" {
+		p.Write(process.Stdout, process.CharsData(stdout))
+	}
+	p.Finish(status)
+	return p
+}
+
+// NewSingleValueProcess is a command that succeeded, printing value.
 func NewSingleValueProcess(owner, value string) process.P {
-	return &singleValueProcess{
-		owner: owner,
-		value: value,
-	}
+	return Exited(owner, value, "", 0)
 }
 
-func (s *singleValueProcess) Owner() string {
-	return s.owner
-}
-
-func (s *singleValueProcess) Stdout() (process.Data, bool, error) {
-	if s.eof {
-		return nil, true, ErrEndOfFile
-	}
-	s.eof = true
-	return process.CharsData(s.value), true, nil
-}
-
-func (s *singleValueProcess) Stderr() (process.Data, bool, error) {
-	return nil, true, nil
-}
-
-func (s *singleValueProcess) Stdin(_ process.Data) (bool, error) {
-	return false, ErrReadOnlyProcess
-}
-
-func (s *singleValueProcess) Next() []process.Datum {
-	return nil
-}
-
-func (s *singleValueProcess) Kill() error {
-	s.eof = true
-	return nil
-}
-
-// errorProcess writes a message to stderr and exits.
-var _ process.P = &errorProcess{}
-
-type errorProcess struct {
-	owner string
-	msg   string
-	eof   bool
-}
-
+// NewErrorProcess is a command that failed, printing msg on stderr.
 func NewErrorProcess(owner, msg string) process.P {
-	return &errorProcess{owner: owner, msg: msg}
+	return Exited(owner, "", msg, 1)
 }
 
-func (e *errorProcess) Owner() string { return e.owner }
-
-func (e *errorProcess) Stdout() (process.Data, bool, error) {
-	return nil, true, nil
-}
-
-func (e *errorProcess) Stderr() (process.Data, bool, error) {
-	if e.eof {
-		return nil, true, nil
-	}
-	e.eof = true
-	return process.CharsData(e.msg), true, nil
-}
-
-func (e *errorProcess) Stdin(_ process.Data) (bool, error) {
-	return false, ErrReadOnlyProcess
-}
-
-func (e *errorProcess) Next() []process.Datum { return nil }
-
-func (e *errorProcess) Kill() error {
-	e.eof = true
-	return nil
-}
+func (f *finished) Owner() string            { return f.owner }
+func (f *finished) Stdin(process.Data) error { return process.ErrNoInput }
+func (f *finished) Next() []process.Datum    { return nil }

@@ -17,15 +17,13 @@ func init() {
 }
 
 type testProcess struct {
+	process.Written
 	owner string
 }
 
-func (p *testProcess) Stdout() (process.Data, bool, error) { return nil, true, nil }
-func (p *testProcess) Stderr() (process.Data, bool, error) { return nil, true, nil }
-func (p *testProcess) Stdin(_ process.Data) (bool, error)  { return false, nil }
-func (p *testProcess) Next() []process.Datum               { return nil }
-func (p *testProcess) Owner() string                       { return p.owner }
-func (p *testProcess) Kill() error                         { return nil }
+func (p *testProcess) Stdin(process.Data) error { return nil }
+func (p *testProcess) Next() []process.Datum    { return nil }
+func (p *testProcess) Owner() string            { return p.owner }
 
 func testFS() *file.F {
 	return &file.F{

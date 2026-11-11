@@ -74,7 +74,7 @@ func testSetup(t *testing.T) (*simulation.S, process.P) {
 func writeString(t *testing.T, p process.P, s string) {
 	t.Helper()
 	for _, c := range s {
-		_, err := p.Stdin(process.Data{process.Chars(string(c))})
+		err := p.Stdin(process.Data{process.Chars(string(c))})
 		if err != nil {
 			t.Fatalf("writing '%c': %v", c, err)
 		}
@@ -83,7 +83,7 @@ func writeString(t *testing.T, p process.P, s string) {
 
 func writeEnter(t *testing.T, p process.P) {
 	t.Helper()
-	_, err := p.Stdin(process.Data{process.TermEnter})
+	err := p.Stdin(process.Data{process.TermEnter})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,50 +91,45 @@ func writeEnter(t *testing.T, p process.P) {
 
 func writeBackspace(t *testing.T, p process.P) {
 	t.Helper()
-	_, err := p.Stdin(process.Data{process.TermBackspace})
+	err := p.Stdin(process.Data{process.TermBackspace})
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func readAllStdout(t *testing.T, p process.P) string {
-	t.Helper()
-	var result string
+// unread holds output read from a shell but not yet asked for: what
+// readAllStdout read from stderr, and the reverse.
+var unread = map[process.P][]process.Output{}
+
+// readStream reads p until it has nothing more to say and returns what
+// it wrote to stream, keeping the other stream's output for later.
+func readStream(p process.P, stream process.Stream) string {
+	out := unread[p]
 	for i := 0; i < 10; i++ {
-		out, _, err := p.Stdout()
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, d := range out {
-			if c, ok := d.(process.Chars); ok {
-				result += string(c)
-			}
-		}
-		if len(out) == 0 {
+		o := p.Read()
+		if len(o) == 0 {
 			break
 		}
+		out = append(out, o...)
 	}
-	return result
+	var rest []process.Output
+	for _, o := range out {
+		if o.Stream != stream {
+			rest = append(rest, o)
+		}
+	}
+	unread[p] = rest
+	return process.Text(out, stream)
+}
+
+func readAllStdout(t *testing.T, p process.P) string {
+	t.Helper()
+	return readStream(p, process.Stdout)
 }
 
 func readAllStderr(t *testing.T, p process.P) string {
 	t.Helper()
-	var result string
-	for i := 0; i < 10; i++ {
-		out, _, err := p.Stderr()
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, d := range out {
-			if c, ok := d.(process.Chars); ok {
-				result += string(c)
-			}
-		}
-		if len(out) == 0 {
-			break
-		}
-	}
-	return result
+	return readStream(p, process.Stderr)
 }
 
 func containsDatum(datums []process.Datum, target process.Datum) bool {
@@ -429,7 +424,7 @@ func TestShellNextInvariant_EveryEnterStateTerminates(t *testing.T) {
 		// Build a fresh shell, replay the prefix, get Next().
 		_, p := testSetup(t)
 		for _, r := range cur {
-			_, _ = p.Stdin(process.Data{process.Chars(string(r))})
+			_ = p.Stdin(process.Data{process.Chars(string(r))})
 		}
 		next := p.Next()
 
@@ -493,24 +488,18 @@ func verifyEnterTerminates(t *testing.T, prefix string, maxPolls int) {
 	t.Helper()
 	_, p := testSetup(t)
 	for _, r := range prefix {
-		_, _ = p.Stdin(process.Data{process.Chars(string(r))})
+		_ = p.Stdin(process.Data{process.Chars(string(r))})
 	}
-	_, _ = p.Stdin(process.Data{process.TermEnter})
+	_ = p.Stdin(process.Data{process.TermEnter})
 
 	var stderr strings.Builder
 	for i := 0; ; i++ {
 		if i >= maxPolls {
 			t.Fatalf("hang: shell did not recover after %q + Enter within %d polls", prefix, maxPolls)
 		}
-		_, eof, _ := p.Stdout()
-		errOut, _, _ := p.Stderr()
-		for _, d := range errOut {
-			if c, ok := d.(process.Chars); ok {
-				stderr.WriteString(string(c))
-			}
-		}
-		// eof: the shell exited — correct termination for `exit`.
-		if eof || isFreshPrompt(p.Next()) {
+		stderr.WriteString(process.Text(p.Read(), process.Stderr))
+		// The shell exited: correct termination for `exit`.
+		if _, exited := p.Exit(); exited || isFreshPrompt(p.Next()) {
 			break
 		}
 	}
@@ -679,9 +668,9 @@ func TestShellExit(t *testing.T) {
 	writeString(t, p, "exit")
 	writeEnter(t, p)
 
-	_, eof, _ := p.Stdout()
-	if !eof {
-		t.Fatal("expected eof after exit")
+	p.Read()
+	if _, exited := p.Exit(); !exited {
+		t.Fatal("expected the shell to exit")
 	}
 }
 
@@ -802,7 +791,7 @@ func typeable(p process.P, line string) bool {
 		if !containsDatum(p.Next(), process.Chars(string(r))) {
 			return false
 		}
-		_, _ = p.Stdin(process.Data{process.Chars(string(r))})
+		_ = p.Stdin(process.Data{process.Chars(string(r))})
 	}
 	return true
 }
@@ -951,8 +940,8 @@ func TestShellPipelineFindsBinariesFirst(t *testing.T) {
 // canRunFresh is canRun that clears the line afterwards.
 func canRunFresh(p process.P, line string) bool {
 	ok := canRun(p, line)
-	_, _ = p.Stdin(process.Data{process.TermClear})
-	_, _, _ = p.Stdout()
+	_ = p.Stdin(process.Data{process.TermClear})
+	p.Read()
 	return ok
 }
 

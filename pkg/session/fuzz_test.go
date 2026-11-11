@@ -300,10 +300,10 @@ type stderrTap struct {
 	buf strings.Builder
 }
 
-func (s *stderrTap) Stderr() (process.Data, bool, error) {
-	d, eof, err := s.P.Stderr()
-	s.buf.WriteString(charsOf(d))
-	return d, eof, err
+func (s *stderrTap) Read() []process.Output {
+	out := s.P.Read()
+	s.buf.WriteString(process.Text(out, process.Stderr))
+	return out
 }
 
 func (s *stderrTap) take() string {

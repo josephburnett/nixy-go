@@ -63,14 +63,7 @@ func testSetup(t *testing.T) *simulation.S {
 
 func stderr(t *testing.T, p process.P) string {
 	t.Helper()
-	out, _, _ := p.Stderr()
-	var s string
-	for _, d := range out {
-		if c, ok := d.(process.Chars); ok {
-			s += string(c)
-		}
-	}
-	return s
+	return process.Text(p.Read(), process.Stderr)
 }
 
 func TestSshConnect(t *testing.T) {
@@ -84,13 +77,7 @@ func TestSshConnect(t *testing.T) {
 		p.Stdin(process.Data{process.Chars(string(c))})
 	}
 	p.Stdin(process.Data{process.TermEnter})
-	out, _, _ := p.Stdout()
-	var s string
-	for _, d := range out {
-		if c, ok := d.(process.Chars); ok {
-			s += string(c)
-		}
-	}
+	s := process.Text(p.Read(), process.Stdout)
 	// ssh opens a login shell: it starts in the user's home.
 	if !strings.Contains(s, "/home/user\n") {
 		t.Fatalf("expected pwd to print /home/user, got %q", s)
@@ -126,8 +113,8 @@ func TestSshExit(t *testing.T) {
 		p.Stdin(process.Data{process.Chars(string(c))})
 	}
 	p.Stdin(process.Data{process.TermEnter})
-	_, eof, _ := p.Stdout()
-	if !eof {
-		t.Fatal("expected eof after exit")
+	p.Read()
+	if _, exited := p.Exit(); !exited {
+		t.Fatal("expected the remote shell to exit")
 	}
 }

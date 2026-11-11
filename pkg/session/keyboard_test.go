@@ -308,14 +308,14 @@ func (w *walkWorld) typeable(line string) bool {
 	ok := true
 	n := 0
 	for _, r := range line {
-		if _, err := w.g.Stdin(process.Data{process.Chars(string(r))}); err != nil {
+		if err := w.g.Stdin(process.Data{process.Chars(string(r))}); err != nil {
 			ok = false
 			break
 		}
 		n++
 	}
 	for range n {
-		_, _ = w.g.Stdin(process.Data{process.TermBackspace})
+		_ = w.g.Stdin(process.Data{process.TermBackspace})
 	}
 	drain(w.g)
 	return ok
@@ -325,13 +325,13 @@ func (w *walkWorld) typeable(line string) bool {
 func (w *walkWorld) next(t *testing.T, line string) []process.Datum {
 	t.Helper()
 	for _, r := range line {
-		if _, err := w.g.Stdin(process.Data{process.Chars(string(r))}); err != nil {
+		if err := w.g.Stdin(process.Data{process.Chars(string(r))}); err != nil {
 			t.Fatalf("replaying %q: %q rejected", line, string(r))
 		}
 	}
 	next := w.g.Next()
 	for range line {
-		_, _ = w.g.Stdin(process.Data{process.TermBackspace})
+		_ = w.g.Stdin(process.Data{process.TermBackspace})
 	}
 	drain(w.g)
 	return next
@@ -343,10 +343,10 @@ func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 	t.Helper()
 	g := w.freshShell(t)
 	for _, r := range line {
-		_, _ = g.Stdin(process.Data{process.Chars(string(r))})
+		_ = g.Stdin(process.Data{process.Chars(string(r))})
 	}
 	drain(g)
-	_, _ = g.Stdin(process.Data{process.TermEnter})
+	_ = g.Stdin(process.Data{process.TermEnter})
 
 	var stderr strings.Builder
 	for i := 0; ; i++ {
@@ -354,17 +354,12 @@ func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 			t.Errorf("hang: %q + Enter did not return to a prompt", line)
 			return
 		}
-		_, eof, _ := g.Stdout()
-		errOut, _, _ := g.Stderr()
-		stderr.WriteString(charsOf(errOut))
-		if eof || isFreshPrompt(g.Next()) {
+		stderr.WriteString(process.Text(g.Read(), process.Stderr))
+		if _, exited := g.Exit(); exited || isFreshPrompt(g.Next()) {
 			break
 		}
 	}
-	for range 5 {
-		errOut, _, _ := g.Stderr()
-		stderr.WriteString(charsOf(errOut))
-	}
+	stderr.WriteString(process.Text(g.Read(), process.Stderr))
 	if msg := stderr.String(); msg != "" && !strings.Contains(msg, "Permission denied") {
 		t.Errorf("mistake: %q + Enter wrote %q", line, msg)
 	}
@@ -381,27 +376,12 @@ func copyFS(f *file.F) *file.F {
 	return &c
 }
 
-func drain(g interface {
-	Stdout() (process.Data, bool, error)
-	Stderr() (process.Data, bool, error)
-}) {
+func drain(g interface{ Read() []process.Output }) {
 	for range 50 {
-		out, _, _ := g.Stdout()
-		errOut, _, _ := g.Stderr()
-		if len(out) == 0 && len(errOut) == 0 {
+		if len(g.Read()) == 0 {
 			return
 		}
 	}
-}
-
-func charsOf(d process.Data) string {
-	var sb strings.Builder
-	for _, x := range d {
-		if c, ok := x.(process.Chars); ok {
-			sb.WriteString(string(c))
-		}
-	}
-	return sb.String()
 }
 
 // isFreshPrompt reports whether the keyboard looks like an empty prompt:

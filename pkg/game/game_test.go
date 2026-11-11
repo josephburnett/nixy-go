@@ -56,7 +56,7 @@ func TestAchievementList(t *testing.T) {
 
 func TestTrackerRecord(t *testing.T) {
 	tr := NewCommandTracker()
-	tr.Record("host", []string{"home"}, "ls")
+	tr.Record(CommandRecord{Hostname: "host", Cwd: []string{"home"}, Command: "ls"})
 	if !tr.HasCommandOnHost("host") {
 		t.Fatal("should have command on host")
 	}
@@ -67,7 +67,7 @@ func TestTrackerRecord(t *testing.T) {
 
 func TestTrackerHasCommand(t *testing.T) {
 	tr := NewCommandTracker()
-	tr.Record("host", nil, "pwd")
+	tr.Record(CommandRecord{Hostname: "host", Cwd: nil, Command: "pwd"})
 	if !tr.HasCommand("host", "pwd") {
 		t.Fatal("should find exact command")
 	}
@@ -78,7 +78,7 @@ func TestTrackerHasCommand(t *testing.T) {
 
 func TestTrackerHasCommandPrefix(t *testing.T) {
 	tr := NewCommandTracker()
-	tr.Record("host", nil, "grep error log.txt")
+	tr.Record(CommandRecord{Hostname: "host", Cwd: nil, Command: "grep error log.txt"})
 	if !tr.HasCommandPrefix("host", "grep") {
 		t.Fatal("should match prefix")
 	}
@@ -89,7 +89,7 @@ func TestTrackerHasCommandPrefix(t *testing.T) {
 
 func TestTrackerHasVisitedDir(t *testing.T) {
 	tr := NewCommandTracker()
-	tr.Record("host", []string{"home", "user"}, "ls")
+	tr.Record(CommandRecord{Hostname: "host", Cwd: []string{"home", "user"}, Command: "ls"})
 	if !tr.HasVisitedDir("host", []string{"home", "user"}) {
 		t.Fatal("should find visited dir")
 	}
@@ -100,12 +100,12 @@ func TestTrackerHasVisitedDir(t *testing.T) {
 
 func TestTrackerHasPipe(t *testing.T) {
 	tr := NewCommandTracker()
-	tr.Record("host", nil, "ls | grep foo")
+	tr.Record(CommandRecord{Hostname: "host", Cwd: nil, Command: "ls | grep foo"})
 	if !tr.HasPipe("host") {
 		t.Fatal("should detect pipe")
 	}
 	tr2 := NewCommandTracker()
-	tr2.Record("host", nil, "ls")
+	tr2.Record(CommandRecord{Hostname: "host", Cwd: nil, Command: "ls"})
 	if tr2.HasPipe("host") {
 		t.Fatal("should not detect pipe in non-pipe command")
 	}

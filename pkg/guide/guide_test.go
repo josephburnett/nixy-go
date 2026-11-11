@@ -8,27 +8,14 @@ import (
 
 // mockProcess implements process.P for testing the guide.
 type mockProcess struct {
-	valid  []process.Datum
-	stdin  process.Data
-	stdout process.Data
-	stderr process.Data
+	process.Written
+	valid []process.Datum
+	stdin process.Data
 }
 
-func (p *mockProcess) Stdout() (process.Data, bool, error) {
-	d := p.stdout
-	p.stdout = nil
-	return d, false, nil
-}
-
-func (p *mockProcess) Stderr() (process.Data, bool, error) {
-	d := p.stderr
-	p.stderr = nil
-	return d, false, nil
-}
-
-func (p *mockProcess) Stdin(in process.Data) (bool, error) {
+func (p *mockProcess) Stdin(in process.Data) error {
 	p.stdin = append(p.stdin, in...)
-	return false, nil
+	return nil
 }
 
 func (p *mockProcess) Next() []process.Datum {
@@ -36,7 +23,6 @@ func (p *mockProcess) Next() []process.Datum {
 }
 
 func (p *mockProcess) Owner() string { return "user" }
-func (p *mockProcess) Kill() error   { return nil }
 
 func TestGuideAllowsValidInput(t *testing.T) {
 	p := &mockProcess{
@@ -44,7 +30,7 @@ func TestGuideAllowsValidInput(t *testing.T) {
 	}
 	g := New(p)
 
-	_, err := g.Stdin(process.Data{process.Chars("a")})
+	err := g.Stdin(process.Data{process.Chars("a")})
 	if err != nil {
 		t.Fatalf("expected valid input to pass, got %v", err)
 	}
@@ -59,7 +45,7 @@ func TestGuideBlocksInvalidInput(t *testing.T) {
 	}
 	g := New(p)
 
-	_, err := g.Stdin(process.Data{process.Chars("z")})
+	err := g.Stdin(process.Data{process.Chars("z")})
 	if err == nil {
 		t.Fatal("expected invalid input to be blocked")
 	}
@@ -74,7 +60,7 @@ func TestGuideAllowsTermCode(t *testing.T) {
 	}
 	g := New(p)
 
-	_, err := g.Stdin(process.Data{process.TermEnter})
+	err := g.Stdin(process.Data{process.TermEnter})
 	if err != nil {
 		t.Fatalf("expected TermEnter to pass, got %v", err)
 	}
@@ -86,7 +72,7 @@ func TestGuideBlocksTermCode(t *testing.T) {
 	}
 	g := New(p)
 
-	_, err := g.Stdin(process.Data{process.TermEnter})
+	err := g.Stdin(process.Data{process.TermEnter})
 	if err == nil {
 		t.Fatal("expected TermEnter to be blocked when not in Next()")
 	}
@@ -98,33 +84,25 @@ func TestGuideRejectsMultipleDatums(t *testing.T) {
 	}
 	g := New(p)
 
-	_, err := g.Stdin(process.Data{process.Chars("a"), process.Chars("b")})
+	err := g.Stdin(process.Data{process.Chars("a"), process.Chars("b")})
 	if err == nil {
 		t.Fatal("expected error for multiple datums")
 	}
 }
 
-func TestGuidePassthroughStdout(t *testing.T) {
-	p := &mockProcess{
-		stdout: process.Data{process.Chars("output")},
-	}
+func TestGuidePassthroughOutput(t *testing.T) {
+	p := &mockProcess{}
+	p.Write(process.Stdout, process.CharsData("output"))
+	p.Write(process.Stderr, process.CharsData("error"))
+	p.Finish(3)
 	g := New(p)
 
-	out, _, _ := g.Stdout()
-	if len(out) != 1 || string(out[0].(process.Chars)) != "output" {
-		t.Fatalf("expected stdout passthrough, got %v", out)
+	out := g.Read()
+	if len(out) != 2 || out[0].Data.String() != "output" || out[1].Stream != process.Stderr {
+		t.Fatalf("expected output passthrough in order, got %v", out)
 	}
-}
-
-func TestGuidePassthroughStderr(t *testing.T) {
-	p := &mockProcess{
-		stderr: process.Data{process.Chars("error")},
-	}
-	g := New(p)
-
-	out, _, _ := g.Stderr()
-	if len(out) != 1 || string(out[0].(process.Chars)) != "error" {
-		t.Fatalf("expected stderr passthrough, got %v", out)
+	if status, exited := g.Exit(); !exited || status != 3 {
+		t.Fatalf("expected exit passthrough, got %v %v", status, exited)
 	}
 }
 
@@ -144,7 +122,7 @@ func TestGuideEmptyNext(t *testing.T) {
 	p := &mockProcess{valid: nil}
 	g := New(p)
 
-	_, err := g.Stdin(process.Data{process.Chars("a")})
+	err := g.Stdin(process.Data{process.Chars("a")})
 	if err == nil {
 		t.Fatal("expected everything to be blocked when Next() is empty")
 	}

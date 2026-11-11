@@ -14,13 +14,6 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
 
-// ShellInfo provides context about the current shell for hints and display.
-type ShellInfo interface {
-	Hostname() string
-	CurrentDirectory() []string
-	CurrentCommand() string
-}
-
 // Mode is the session's current phase.
 type Mode int
 
@@ -40,7 +33,7 @@ type Session struct {
 	Username string
 	Game     *game.Game
 	Guide    *guide.G
-	Shell    ShellInfo
+	Shell    shellpkg.Info
 
 	games    map[string]*game.Game
 	accounts []string  // existing users, which the player can't log in as
@@ -275,7 +268,7 @@ func (s *Session) startLoginShell() error {
 	}
 	s.loginSh = proc
 	s.Guide = guide.New(proc)
-	s.Shell = proc.(ShellInfo)
+	s.Shell = proc.(shellpkg.Info)
 	return nil
 }
 
@@ -337,31 +330,26 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 	// A key the keyboard didn't offer has no effect at all: nothing is
 	// recorded or run, and the screen stays as it was. There is no
 	// negative feedback either; the key just does nothing.
-	if _, err := s.Guide.Stdin(process.Data{datum}); err != nil {
+	typedIn := s.Shell.Active()
+	if err := s.Guide.Stdin(process.Data{datum}); err != nil {
 		return
 	}
 	t.Notify("")
 
+	// Show what the shell writes, stdout and stderr in the order
+	// written, as a terminal does. The cap keeps a command that never
+	// stops writing from hanging the keystroke.
 	loggedOut := false
 	for range 50 {
-		out, eof, _ := s.Guide.Stdout()
-		if len(out) > 0 {
-			t.Write(out)
+		outs := s.Guide.Read()
+		for _, o := range outs {
+			t.Write(o.Data)
 		}
-		if eof {
+		if _, exited := s.Guide.Exit(); exited {
 			loggedOut = true
 			break
 		}
-		if len(out) == 0 {
-			break
-		}
-	}
-
-	for range 10 {
-		errOut, _, _ := s.Guide.Stderr()
-		if len(errOut) > 0 {
-			t.Write(errOut)
-		} else {
+		if len(outs) == 0 {
 			break
 		}
 	}
@@ -384,7 +372,11 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 			if s.Shell.Hostname() == cmdHost {
 				cwd = s.Shell.CurrentDirectory()
 			}
-			s.Game.Manager.Tracker.Record(cmdHost, cwd, cmdLine)
+			status, done := typedIn.LastStatus()
+			s.Game.Manager.Tracker.Record(game.CommandRecord{
+				Hostname: cmdHost, Cwd: cwd, Command: cmdLine,
+				Status: status, Running: !done,
+			})
 		}
 		s.Game.AfterCommand()
 		dialog := s.Game.Manager.Dialog.Drain()

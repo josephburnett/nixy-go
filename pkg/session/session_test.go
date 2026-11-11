@@ -266,3 +266,27 @@ func TestLoginRefusesExistingAccounts(t *testing.T) {
 		}
 	}
 }
+
+// The tracker records each command line's exit status, for quests that
+// check what a command did rather than what was typed.
+func TestTrackerRecordsExitStatus(t *testing.T) {
+	sess, term := newLoggedIn(t, "alice")
+	typeLine(t, sess, term, "pwd")
+	typeLine(t, sess, term, "ls /root")
+	typeLine(t, sess, term, "ssh nixy")
+	recs := sess.Game.Manager.Tracker.Records()
+	want := []struct {
+		cmd     string
+		status  int
+		running bool
+	}{{"pwd", 0, false}, {"ls /root", 1, false}, {"ssh nixy", 0, true}}
+	if len(recs) != len(want) {
+		t.Fatalf("records: %+v", recs)
+	}
+	for i, w := range want {
+		r := recs[i]
+		if r.Command != w.cmd || r.Status != w.status || r.Running != w.running {
+			t.Errorf("record %d = %+v, want %+v", i, r, w)
+		}
+	}
+}

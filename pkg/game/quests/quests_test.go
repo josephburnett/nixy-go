@@ -84,7 +84,7 @@ func (s *shellState) executeCommand(t *testing.T, cmd string) {
 	t.Helper()
 
 	// Track before execution
-	s.game.Manager.Tracker.Record(s.hostname, s.cwd, cmd)
+	s.game.Manager.Tracker.Record(game.CommandRecord{Hostname: s.hostname, Cwd: s.cwd, Command: cmd})
 
 	// Handle builtins directly (bypass shell for reliability)
 	if strings.HasPrefix(cmd, "cd ") {
@@ -124,19 +124,19 @@ func (s *shellState) executeCommand(t *testing.T, cmd string) {
 	} else if strings.Contains(cmd, "|") {
 		// Handle pipe: execute each segment, pipe data
 		segments := strings.Split(cmd, "|")
-		var data process.Data
-		for _, seg := range segments {
+		var data string
+		for i, seg := range segments {
 			seg = strings.TrimSpace(seg)
 			segFields := strings.Fields(seg)
 			p, err := s.game.Sim.Launch(s.hostname, "user", segFields[0], segFields[1:], s.cwd)
 			if err != nil {
 				break
 			}
-			if len(data) > 0 {
-				p.Stdin(data)
-				p.Kill()
+			if i > 0 {
+				p.Stdin(process.CharsData(data))
+				p.CloseStdin()
 			}
-			data, _, _ = p.Stdout()
+			data = process.Text(p.Read(), process.Stdout)
 		}
 	} else {
 		s.launchAndDrain(t, name, args, "user")
@@ -151,13 +151,7 @@ func (s *shellState) launchAndDrain(t *testing.T, name string, args []string, ow
 	if err != nil {
 		return // Command failed, that's okay
 	}
-	// Drain output
-	for i := 0; i < 20; i++ {
-		_, eof, _ := p.Stdout()
-		if eof {
-			break
-		}
-	}
+	p.Read()
 }
 
 func (s *shellState) handleCd(cmd string) {

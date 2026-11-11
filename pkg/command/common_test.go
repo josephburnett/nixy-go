@@ -6,128 +6,68 @@ import (
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
-func TestSingleValueProcessStdout(t *testing.T) {
-	p := NewSingleValueProcess("user", "hello\n")
-	out, eof, err := p.Stdout()
-	if err != nil {
-		t.Fatal(err)
+func TestSingleValueProcess(t *testing.T) {
+	p := NewSingleValueProcess("alice", "hello\n")
+	if status, exited := p.Exit(); !exited || status != 0 {
+		t.Fatalf("expected exit 0, got %v %v", status, exited)
 	}
-	if !eof {
-		t.Fatal("expected eof on first read")
+	out := p.Read()
+	if got := process.Text(out, process.Stdout); got != "hello\n" {
+		t.Fatalf("stdout %q", got)
 	}
-	if len(out) != 1 {
-		t.Fatalf("expected 1 datum, got %d", len(out))
+	if got := process.Text(out, process.Stderr); got != "" {
+		t.Fatalf("stderr %q", got)
 	}
-	if string(out[0].(process.Chars)) != "hello\n" {
-		t.Fatalf("expected 'hello\\n', got %v", out[0])
+	if len(p.Read()) != 0 {
+		t.Fatal("second read should be empty")
 	}
-}
-
-func TestSingleValueProcessStdoutSecondRead(t *testing.T) {
-	p := NewSingleValueProcess("user", "data")
-	p.Stdout() // first read
-	_, eof, err := p.Stdout()
-	if err != ErrEndOfFile {
-		t.Fatalf("expected ErrEndOfFile, got %v", err)
+	if p.Owner() != "alice" || len(p.Next()) != 0 {
+		t.Fatal("owner or next wrong")
 	}
-	if !eof {
-		t.Fatal("expected eof")
+	if err := p.Stdin(process.CharsData("input")); err != process.ErrNoInput {
+		t.Fatalf("expected ErrNoInput, got %v", err)
 	}
 }
 
-func TestSingleValueProcessStderr(t *testing.T) {
-	p := NewSingleValueProcess("user", "data")
-	_, eof, _ := p.Stderr()
-	if !eof {
-		t.Fatal("stderr should always be eof")
+func TestSingleValueProcessEmpty(t *testing.T) {
+	if out := NewSingleValueProcess("user", "").Read(); len(out) != 0 {
+		t.Fatalf("no output expected, got %v", out)
 	}
 }
 
-func TestSingleValueProcessStdin(t *testing.T) {
-	p := NewSingleValueProcess("user", "data")
-	_, err := p.Stdin(process.CharsData("input"))
-	if err != ErrReadOnlyProcess {
-		t.Fatalf("expected ErrReadOnlyProcess, got %v", err)
+func TestErrorProcess(t *testing.T) {
+	p := NewErrorProcess("bob", "something went wrong\n")
+	if status, exited := p.Exit(); !exited || status != 1 {
+		t.Fatalf("expected exit 1, got %v %v", status, exited)
 	}
-}
-
-func TestSingleValueProcessNext(t *testing.T) {
-	p := NewSingleValueProcess("user", "data")
-	if len(p.Next()) != 0 {
-		t.Fatal("expected no valid inputs")
+	out := p.Read()
+	if got := process.Text(out, process.Stderr); got != "something went wrong\n" {
+		t.Fatalf("stderr %q", got)
 	}
-}
-
-func TestSingleValueProcessOwner(t *testing.T) {
-	p := NewSingleValueProcess("alice", "data")
-	if p.Owner() != "alice" {
-		t.Fatalf("expected 'alice', got %q", p.Owner())
+	if got := process.Text(out, process.Stdout); got != "" {
+		t.Fatalf("stdout %q", got)
 	}
-}
-
-func TestSingleValueProcessKill(t *testing.T) {
-	p := NewSingleValueProcess("user", "data")
-	p.Kill()
-	_, eof, _ := p.Stdout()
-	if !eof {
-		t.Fatal("expected eof after kill")
-	}
-}
-
-func TestErrorProcessStderr(t *testing.T) {
-	p := NewErrorProcess("user", "something went wrong\n")
-	out, eof, _ := p.Stderr()
-	if !eof {
-		t.Fatal("expected eof")
-	}
-	if len(out) != 1 {
-		t.Fatalf("expected 1 datum, got %d", len(out))
-	}
-	if string(out[0].(process.Chars)) != "something went wrong\n" {
-		t.Fatalf("expected error message, got %v", out[0])
-	}
-}
-
-func TestErrorProcessStderrSecondRead(t *testing.T) {
-	p := NewErrorProcess("user", "err")
-	p.Stderr() // first read
-	out, eof, _ := p.Stderr()
-	if !eof {
-		t.Fatal("expected eof")
-	}
-	if len(out) != 0 {
-		t.Fatal("expected empty on second read")
-	}
-}
-
-func TestErrorProcessStdout(t *testing.T) {
-	p := NewErrorProcess("user", "err")
-	_, eof, _ := p.Stdout()
-	if !eof {
-		t.Fatal("stdout should always be eof")
-	}
-}
-
-func TestErrorProcessStdin(t *testing.T) {
-	p := NewErrorProcess("user", "err")
-	_, err := p.Stdin(process.CharsData("input"))
-	if err != ErrReadOnlyProcess {
-		t.Fatalf("expected ErrReadOnlyProcess, got %v", err)
-	}
-}
-
-func TestErrorProcessOwner(t *testing.T) {
-	p := NewErrorProcess("bob", "err")
 	if p.Owner() != "bob" {
-		t.Fatalf("expected 'bob', got %q", p.Owner())
+		t.Fatal("owner wrong")
 	}
 }
 
-func TestErrorProcessKill(t *testing.T) {
+func TestExitedKeepsOrderAndIgnoresCloseStdin(t *testing.T) {
+	p := Exited("user", "out\n", "err\n", 2)
+	p.CloseStdin()
+	out := p.Read()
+	if len(out) != 2 || out[0].Stream != process.Stderr || out[1].Stream != process.Stdout {
+		t.Fatalf("expected stderr then stdout, got %v", out)
+	}
+	if status, _ := p.Exit(); status != 2 {
+		t.Fatalf("status %v", status)
+	}
+}
+
+func TestKillDropsOutput(t *testing.T) {
 	p := NewErrorProcess("user", "err")
 	p.Kill()
-	out, _, _ := p.Stderr()
-	if len(out) != 0 {
-		t.Fatal("expected empty stderr after kill")
+	if out := p.Read(); len(out) != 0 {
+		t.Fatalf("expected no output after kill, got %v", out)
 	}
 }

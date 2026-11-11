@@ -49,26 +49,17 @@ func launch(
 	return command.NewSingleValueProcess(owner, data), nil
 }
 
-// stdinCat passes stdin through to stdout (for use in pipes).
+// stdinCat copies stdin to stdout until its input closes.
 type stdinCat struct {
+	process.Written
 	owner string
-	buf   process.Data
-	eof   bool
 }
 
-func (s *stdinCat) Stdout() (process.Data, bool, error) {
-	d := s.buf
-	s.buf = nil
-	return d, s.eof, nil
+func (s *stdinCat) Stdin(in process.Data) error {
+	s.Write(process.Stdout, in)
+	return nil
 }
 
-func (s *stdinCat) Stderr() (process.Data, bool, error) { return nil, true, nil }
-
-func (s *stdinCat) Stdin(in process.Data) (bool, error) {
-	s.buf = append(s.buf, in...)
-	return false, nil
-}
-
+func (s *stdinCat) CloseStdin()           { s.Finish(0) }
 func (s *stdinCat) Next() []process.Datum { return nil }
 func (s *stdinCat) Owner() string         { return s.owner }
-func (s *stdinCat) Kill() error           { s.eof = true; return nil }
