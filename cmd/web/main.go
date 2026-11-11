@@ -18,7 +18,6 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
 
 	"github.com/josephburnett/nixy-go/pkg/debug"
-	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/session"
 	"github.com/josephburnett/nixy-go/pkg/terminal"
 )
@@ -62,21 +61,9 @@ func handleKeystroke(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
 	}
-	key := args[0].String()
-
-	var datum process.Datum
-	switch key {
-	case "Enter":
-		datum = process.TermEnter
-	case "Backspace":
-		datum = process.TermBackspace
-	default:
-		runes := []rune(key)
-		if len(runes) == 1 {
-			datum = process.Chars(key)
-		}
-	}
-
+	// Typed keys (KeyboardEvent.key) and tapped keys (data-key) use the
+	// same names.
+	datum := terminal.KeyDatum(args[0].String())
 	if datum == nil {
 		return term.Render()
 	}

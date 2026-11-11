@@ -49,6 +49,7 @@ type Segment struct {
 	Text  string
 	Style Style
 	Host  string // for StyleHost: which host's color to use
+	Key   string // for pressable keyboard keys: the KeyName it sends
 }
 
 // RenderedLine is one output line composed of styled segments. Renderers

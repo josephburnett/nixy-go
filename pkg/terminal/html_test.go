@@ -1,6 +1,8 @@
 package terminal
 
 import (
+	"html"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -111,10 +113,10 @@ func TestHTMLRenderKeyboardClasses(t *testing.T) {
 func TestHTMLRenderKeyboardValid(t *testing.T) {
 	valid := []process.Datum{process.Chars("l"), process.TermEnter}
 	out := renderHTMLForKeyboard(valid, nil)
-	if !strings.Contains(out, `class="key-valid">l</span>`) {
+	if !strings.Contains(out, `class="key-valid" data-key="l">l</span>`) {
 		t.Fatal("expected key-valid class for 'l'")
 	}
-	if !strings.Contains(out, `class="key-valid">[enter]</span>`) {
+	if !strings.Contains(out, `class="key-valid" data-key="Enter">[enter]</span>`) {
 		t.Fatal("expected key-valid class for enter")
 	}
 }
@@ -128,6 +130,70 @@ func TestHTMLRenderEscaping(t *testing.T) {
 	}
 	if !strings.Contains(out, "&lt;script&gt;") {
 		t.Fatal("expected escaped HTML entities")
+	}
+}
+
+// allKeyboardDatums lists every key drawn on the on-screen keyboard.
+func allKeyboardDatums() []process.Datum {
+	var all []process.Datum
+	for _, row := range keyboardRows {
+		for _, k := range row {
+			all = append(all, process.Chars(k))
+		}
+	}
+	for _, sk := range specialKeys {
+		all = append(all, sk.datum)
+	}
+	return all
+}
+
+var dataKeyAttr = regexp.MustCompile(`data-key="([^"]*)"`)
+
+// TestHTMLKeyboardTappableKeysMatchValidSet: exactly the valid keys carry
+// data-key, and each one decodes back to its datum. That's what makes a tap
+// send the same keystroke as typing, and a dim key do nothing.
+func TestHTMLKeyboardTappableKeysMatchValidSet(t *testing.T) {
+	all := allKeyboardDatums()
+	cases := [][]process.Datum{
+		nil,
+		all,
+		{process.Chars("l"), process.Chars(" "), process.Chars("|"), process.TermEnter},
+		{process.TermBackspace, process.Chars("/"), process.Chars(".")},
+	}
+	for _, valid := range cases {
+		// Hint on a key that isn't valid must not make it tappable.
+		out := renderHTMLForKeyboard(valid, process.Chars("q"))
+		var got []process.Datum
+		for _, m := range dataKeyAttr.FindAllStringSubmatch(out, -1) {
+			d := KeyDatum(html.UnescapeString(m[1]))
+			if d == nil {
+				t.Fatalf("data-key %q doesn't decode to a keystroke", m[1])
+			}
+			got = append(got, d)
+		}
+		if len(got) != len(valid) {
+			t.Fatalf("valid=%v: %d tappable keys, want %d\n%s", valid, len(got), len(valid), out)
+		}
+		gotSet := buildDatumSet(got)
+		for _, d := range valid {
+			if !gotSet.contains(d) {
+				t.Errorf("valid key %v is not tappable", d)
+			}
+		}
+	}
+}
+
+func TestKeyNameRoundTrip(t *testing.T) {
+	for _, d := range allKeyboardDatums() {
+		name := KeyName(d)
+		if back := KeyDatum(name); !datumEqual(back, d) {
+			t.Errorf("KeyDatum(KeyName(%v)) = %v", d, back)
+		}
+	}
+	for _, name := range []string{"", "Tab", "ArrowUp", "Shift"} {
+		if d := KeyDatum(name); d != nil {
+			t.Errorf("KeyDatum(%q) = %v, want nil", name, d)
+		}
 	}
 }
 

@@ -1,6 +1,8 @@
 package terminal
 
 import (
+	"unicode/utf8"
+
 	"github.com/josephburnett/nixy-go/pkg/process"
 )
 
@@ -55,6 +57,39 @@ func (s datumSet) contains(d process.Datum) bool {
 		return s.termCodes[d]
 	}
 	return false
+}
+
+// KeyName is the name a front end uses for a keystroke: "Enter",
+// "Backspace", or the character itself. It matches DOM KeyboardEvent.key,
+// so the web build sends typed and tapped keys the same way.
+func KeyName(d process.Datum) string {
+	switch d := d.(type) {
+	case process.Chars:
+		return string(d)
+	case process.TermCode:
+		switch d {
+		case process.TermEnter:
+			return "Enter"
+		case process.TermBackspace:
+			return "Backspace"
+		}
+	}
+	return ""
+}
+
+// KeyDatum is the inverse of KeyName. It returns nil for names that
+// aren't a keystroke the game handles (e.g. "Tab", "ArrowUp").
+func KeyDatum(name string) process.Datum {
+	switch name {
+	case "Enter":
+		return process.TermEnter
+	case "Backspace":
+		return process.TermBackspace
+	}
+	if utf8.RuneCountInString(name) == 1 {
+		return process.Chars(name)
+	}
+	return nil
 }
 
 func datumEqual(a, b process.Datum) bool {

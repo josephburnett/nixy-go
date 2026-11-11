@@ -20,7 +20,15 @@ func (h *HTMLRenderer) Render(f Frame) string {
 			if class != "" {
 				sb.WriteString(`<span class="`)
 				sb.WriteString(class)
-				sb.WriteString(`">`)
+				sb.WriteString(`"`)
+				if seg.Key != "" {
+					// Tappable key: index.html sends data-key to
+					// nixyKeystroke, the same as a typed key.
+					sb.WriteString(` data-key="`)
+					sb.WriteString(html.EscapeString(seg.Key))
+					sb.WriteString(`"`)
+				}
+				sb.WriteString(`>`)
 				sb.WriteString(text)
 				sb.WriteString(`</span>`)
 			} else {

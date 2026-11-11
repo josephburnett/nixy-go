@@ -256,13 +256,19 @@ func layoutKeyboard(valid []process.Datum, hint process.Datum) []RenderedLine {
 	return lines
 }
 
+// layoutKey styles one keyboard key. Keys the player can press right now
+// also carry their KeyName so a front end can make them tappable; dim
+// keys carry none, so tapping them does nothing.
 func layoutKey(label string, datum process.Datum, validSet datumSet, hint process.Datum) Segment {
+	seg := Segment{Text: label, Style: StyleKeyDim}
 	switch {
 	case hint != nil && datumEqual(datum, hint):
-		return Segment{Text: label, Style: StyleOnPath}
+		seg.Style = StyleOnPath
 	case validSet.contains(datum):
-		return Segment{Text: label, Style: StyleKeyValid}
-	default:
-		return Segment{Text: label, Style: StyleKeyDim}
+		seg.Style = StyleKeyValid
 	}
+	if validSet.contains(datum) {
+		seg.Key = KeyName(datum)
+	}
+	return seg
 }

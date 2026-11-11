@@ -10,6 +10,7 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
+    min-height: 100dvh; /* excludes mobile browser toolbars */
 }
 
 #terminal {
@@ -19,7 +20,14 @@ body {
     color: #ccc;
     width: 100%;
     height: 100vh;
+    height: 100dvh;
     padding: 1em;
+    overflow: hidden;
+    /* No double-tap zoom or text selection while tapping keys. */
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 #terminal pre {
@@ -44,3 +52,12 @@ body {
 .key-valid { color: #fff; font-weight: bold; }
 .key-hint { color: #0c0; font-weight: bold; }
 .key-dim { color: #444; }
+
+/* Keys that can be pressed right now (see data-key in HTMLRenderer). */
+[data-key] { cursor: pointer; }
+[data-key]:active { background: #333; }
+
+/* Grow the tap target to fill the gap around each key without moving
+   anything: the layout stays character-for-character with the ANSI one. */
+[data-key] { position: relative; }
+[data-key]::after { content: ""; position: absolute; inset: -0.4em -0.5ch; }

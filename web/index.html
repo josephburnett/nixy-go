@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Nixy</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- No <input> anywhere, so phones never pop up their own keyboard:
+         the on-screen keyboard is the input. -->
     <div id="terminal"></div>
     <script src="wasm_exec.js"></script>
     <script>
@@ -17,28 +19,37 @@
             const container = document.getElementById("terminal");
             container.innerHTML = nixyInit();
 
-            // Measure monospace character dimensions
-            function measureChar() {
-                const span = document.createElement("span");
-                span.style.fontFamily = "monospace";
-                span.style.fontSize = "16px";
-                span.style.position = "absolute";
-                span.style.visibility = "hidden";
-                span.textContent = "M";
-                document.body.appendChild(span);
-                const rect = span.getBoundingClientRect();
-                document.body.removeChild(span);
-                return { w: rect.width, h: rect.height };
+            function show(html) {
+                if (html) {
+                    container.innerHTML = html;
+                }
+            }
+
+            // Measure one character cell using the same styles the
+            // terminal renders with (font and line-height come from the
+            // container's <pre>), averaged over a block to avoid rounding.
+            function measureCell() {
+                const pre = document.createElement("pre");
+                pre.style.position = "absolute";
+                pre.style.visibility = "hidden";
+                pre.textContent = ("M".repeat(10) + "\n").repeat(10);
+                container.appendChild(pre);
+                const rect = pre.getBoundingClientRect();
+                container.removeChild(pre);
+                return { w: rect.width / 10, h: rect.height / 10 };
             }
 
             function updateSize() {
-                const ch = measureChar();
-                const cols = Math.floor(container.clientWidth / ch.w);
-                const rows = Math.floor(container.clientHeight / ch.h);
-                container.innerHTML = nixyResize(cols, rows);
+                const cell = measureCell();
+                const style = getComputedStyle(container);
+                const w = container.clientWidth
+                    - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+                const h = container.clientHeight
+                    - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+                show(nixyResize(Math.floor(w / cell.w), Math.floor(h / cell.h)));
             }
 
-            // Handle keyboard input
+            // Typed keys.
             document.addEventListener("keydown", e => {
                 // Ctrl+\ dumps the snapshot ring to a downloadable file.
                 if (e.ctrlKey && (e.key === "\\" || e.code === "Backslash")) {
@@ -54,22 +65,30 @@
                     e.preventDefault();
                     return;
                 }
-                // Ignore modifier-only keys and key combos (except shift for uppercase)
-                if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") {
-                    return;
-                }
                 if (e.ctrlKey || e.altKey || e.metaKey) {
                     return;
                 }
-
-                const html = nixyKeystroke(e.key);
-                if (html) {
-                    container.innerHTML = html;
+                // Only swallow keys the game uses, so Tab, F5, F12 etc.
+                // keep working.
+                if (e.key !== "Enter" && e.key !== "Backspace" && [...e.key].length !== 1) {
+                    return;
                 }
+                show(nixyKeystroke(e.key));
                 e.preventDefault();
             });
 
-            // Handle resize
+            // Tapped / clicked keys. Only keys that are valid right now
+            // carry data-key, so dim keys do nothing. pointerdown (not
+            // click) so taps respond immediately and don't select text.
+            container.addEventListener("pointerdown", e => {
+                const key = e.target.closest("[data-key]");
+                if (!key) {
+                    return;
+                }
+                e.preventDefault();
+                show(nixyKeystroke(key.dataset.key));
+            });
+
             new ResizeObserver(() => updateSize()).observe(container);
         });
     </script>
