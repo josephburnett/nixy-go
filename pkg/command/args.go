@@ -2,6 +2,7 @@ package command
 
 import (
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 
@@ -234,7 +235,7 @@ func ValidCommand(
 	name, rest, hasArgs := strings.Cut(text, " ")
 	if hasArgs {
 		va, ok := lookup(name)
-		if !ok || !contains(names, name) {
+		if !ok || !slices.Contains(names, name) {
 			return simulation.Suggestion{}
 		}
 		return va(ctx, rest)
@@ -365,7 +366,7 @@ func AnyPath(ctx simulation.ArgContext, _ []string, token string) simulation.Sug
 // already are is a no-op, not an action.
 func CdTarget(ctx simulation.ArgContext, _ []string, token string) simulation.Suggestion {
 	return pathArg(ctx, token, false, func(target []string, f *file.F, _ bool) bool {
-		return f != nil && f.Type == file.Folder && !pathsEqual(target, ctx.Cwd)
+		return f != nil && f.Type == file.Folder && !slices.Equal(target, ctx.Cwd)
 	})
 }
 
@@ -419,7 +420,7 @@ func RedirectTarget(ctx simulation.ArgContext, operands []string, token string) 
 			return false
 		}
 		for _, n := range named {
-			if pathsEqual(n, target) {
+			if slices.Equal(n, target) {
 				return false
 			}
 		}
@@ -445,13 +446,13 @@ func MoveDest(ctx simulation.ArgContext, prev []string, token string) simulation
 	return pathArg(ctx, token, true, func(target []string, f *file.F, dir bool) bool {
 		if f != nil && f.Type == file.Folder {
 			into := append(append([]string{}, target...), base)
-			if pathsEqual(into, src) {
+			if slices.Equal(into, src) {
 				return false
 			}
 			existing, ok := f.Files[base]
 			return !ok || existing.Type != file.Folder
 		}
-		return !dir && len(target) > 0 && !pathsEqual(target, src)
+		return !dir && len(target) > 0 && !slices.Equal(target, src)
 	})
 }
 
@@ -608,27 +609,6 @@ func viableDir(user string, path []string, f *file.F, allowNew bool, accept path
 			return true
 		}
 		if child.Type == file.Folder && viableDir(user, p, child, allowNew, accept) {
-			return true
-		}
-	}
-	return false
-}
-
-func pathsEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
 			return true
 		}
 	}
