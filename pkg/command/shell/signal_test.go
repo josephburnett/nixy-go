@@ -96,8 +96,8 @@ func TestPipelineSigPipe(t *testing.T) {
 		t.Fatalf("yes exited %d, want SIGPIPE's %d", status, process.SigPipe.Status())
 	}
 	c, _ := sim.GetComputer("test")
-	if n := len(c.Processes()); n != 1 {
-		t.Fatalf("%d processes left, want just the shell", n)
+	if n := len(c.Processes()); n != 2 {
+		t.Fatalf("%d processes left, want just the shells", n)
 	}
 }
 

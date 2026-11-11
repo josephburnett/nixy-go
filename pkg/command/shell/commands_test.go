@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/josephburnett/nixy-go/pkg/file"
@@ -33,6 +34,38 @@ func TestShellBasicCommands(t *testing.T) {
 	}
 	if _, err := c.Filesystem.Navigate([]string{"home", "user", "docs"}); err == nil {
 		t.Fatal("rmdir docs left it")
+	}
+}
+
+// ps shows the table as `ps -o pid,user,cmd` would, itself included;
+// kill signals by PID, only your own processes unless root.
+func TestShellPsKill(t *testing.T) {
+	_, p := testSetup(t) // PID 1 is a root shell, 2 this one
+	for _, tc := range []struct{ line, stdout, stderr string }{
+		{"ps", "  PID USER     CMD\n    2 user     shell\n    3 user     ps\n", ""},
+		{"ps -e | grep shell", "    1 root     shell\n    2 user     shell\n    5 user     grep shell\n", ""},
+		{"kill 1", "", "kill: (1) - Operation not permitted\n"},
+		{"kill 2", "", ""}, // a shell ignores SIGTERM
+		{"sudo kill -9 1", "", ""},
+		{"ps -e", "  PID USER     CMD\n    2 user     shell\n    9 user     ps -e\n", ""},
+	} {
+		if !canRun(p, tc.line) {
+			t.Fatalf("%q can't be typed", tc.line)
+		}
+		writeEnter(t, p)
+		if got := strings.TrimPrefix(readAllStdout(t, p), tc.line); got != tc.stdout {
+			t.Errorf("%q: stdout %q, want %q", tc.line, got, tc.stdout)
+		}
+		if got := readAllStderr(t, p); got != tc.stderr {
+			t.Errorf("%q: stderr %q, want %q", tc.line, got, tc.stderr)
+		}
+	}
+	if !canRun(p, "kill -9 2") {
+		t.Fatal("can't kill -9 your own shell")
+	}
+	writeEnter(t, p)
+	if status, exited := p.Exit(); !exited || status != 137 {
+		t.Fatalf("kill -9 of the shell: exited=%v status %d", exited, status)
 	}
 }
 

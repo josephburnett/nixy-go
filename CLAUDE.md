@@ -82,8 +82,10 @@ Implementation:
   (`TestFuzzE2ERejectedKeys` presses such keys during random play and
   checks that nothing observable changes).
 - Permission denied is not a principle-1 violation: it is a real
-  consequence (principle 2) and the guards allow it. Usage errors,
-  missing paths and wrong file types are bugs.
+  consequence (principle 2) and the guards allow it, as they allow
+  kill's "Operation not permitted" on someone else's process (the
+  same lesson for processes). Usage errors, missing paths and wrong
+  file types are bugs.
 - Guards:
   - `TestKeyboardWalk_NoMistakes` (`pkg/session/`) walks the keyboard
     (`|` included) over the real worlds at several world states and
@@ -184,10 +186,16 @@ Concrete implications (these all flow from this single principle):
   `sim.Start` (or `sim.Launch` by binary name), which puts it in its
   computer's table with a PID and its command line; it leaves the
   table when it exits. `computer.C.Processes()` lists PID, owner and
-  command line (for `ps`); `computer.C.Kill(pid, user)` lets only the
-  owner or root kill (`process.ErrNotPermitted`, `ErrNoProcess`).
-  Each pipeline stage is its own process; ssh shows as `ssh HOST` on
-  the client and its remote `shell -l` on the server.
+  command line; `computer.C.Signal(pid, user, sig)` (and `Kill`) lets
+  only the owner or root signal (`process.ErrNotPermitted`,
+  `ErrNoProcess`). Each pipeline stage is its own process; ssh shows
+  as `ssh HOST` on the client and its remote `shell -l` on the
+  server. `ps` (yours) and `ps -e` (everyone's) print `PID USER CMD`
+  and read the table when first read, so they list themselves and
+  their pipeline; `kill [-9] PID` offers only PIDs in the table.
+  (ssh is not yet a process of its own: its table entry is the remote
+  shell, so `kill -9` of it reports "Killed", not a closed
+  connection.)
 - **Nothing hangs.** Processes act only when called. A pipeline moves
   data one step per `Read`, and the session reads a bounded number of
   times per keystroke, so a source that never ends can't freeze the

@@ -59,6 +59,8 @@ var PackageRegistry = map[string]string{
 	"echo":   "echo",
 	"mkdir":  "mkdir",
 	"rmdir":  "rmdir",
+	"ps":     "ps",
+	"kill":   "kill",
 	"apt":    "apt",
 }
 

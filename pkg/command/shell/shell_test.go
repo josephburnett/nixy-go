@@ -9,9 +9,11 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/cat"
 	_ "github.com/josephburnett/nixy-go/pkg/command/echo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/grep"
+	_ "github.com/josephburnett/nixy-go/pkg/command/kill"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
 	_ "github.com/josephburnett/nixy-go/pkg/command/mkdir"
 	_ "github.com/josephburnett/nixy-go/pkg/command/mv"
+	_ "github.com/josephburnett/nixy-go/pkg/command/ps"
 	_ "github.com/josephburnett/nixy-go/pkg/command/pwd"
 	_ "github.com/josephburnett/nixy-go/pkg/command/rm"
 	_ "github.com/josephburnett/nixy-go/pkg/command/rmdir"
@@ -28,8 +30,8 @@ import (
 // testBinaries are installed in the fixture's /bin: every registered
 // command, so the structural tests cover them all.
 var testBinaries = []string{
-	"apt", "cat", "echo", "grep", "ls", "mkdir", "mv", "pwd", "rm", "rmdir",
-	"ssh", "sudo", "touch", "whoami", "yes",
+	"apt", "cat", "echo", "grep", "kill", "ls", "mkdir", "mv", "ps", "pwd",
+	"rm", "rmdir", "ssh", "sudo", "touch", "whoami", "yes",
 }
 
 func testFS() *file.F {
@@ -72,6 +74,10 @@ func testSetup(t *testing.T) (*simulation.S, process.P) {
 	sim := simulation.New()
 	sim.Nx = stubNx{}
 	if err := sim.Boot("test", testFS()); err != nil {
+		t.Fatal(err)
+	}
+	// PID 1 is root's, so kill meets a process it may not signal.
+	if _, err := sim.Launch("test", file.OwnerRoot, "shell", nil, []string{}); err != nil {
 		t.Fatal(err)
 	}
 	p, err := sim.Launch("test", "user", "shell", nil, []string{})
@@ -515,9 +521,17 @@ func verifyEnterTerminates(t *testing.T, prefix string, maxPolls int) {
 	}
 	// Permission denied is a real consequence; any other error means the
 	// keyboard let the player type something the command rejects.
-	if msg := stderr.String(); msg != "" && !strings.Contains(msg, "Permission denied") {
+	if msg := stderr.String(); !consequence(msg) {
 		t.Errorf("mistake: %q + Enter wrote %q", prefix, msg)
 	}
+}
+
+// consequence reports whether stderr is empty or a real consequence of
+// a well-typed command: a permission error, from files or from kill on
+// someone else's process.
+func consequence(stderr string) bool {
+	return stderr == "" || strings.Contains(stderr, "Permission denied") ||
+		strings.Contains(stderr, "Operation not permitted")
 }
 
 type stubNx struct{}
@@ -960,6 +974,22 @@ func TestShellNextInvariant_Lines(t *testing.T) {
 		{"rmdir /", false},
 		{"rmdir /root", false}, // can't see in
 		{"sudo rmdir /home/user/docs", true},
+		// ps lists processes, everyone's with -e.
+		{"ps", true},
+		{"ps -e", true},
+		{"ps -e | grep shell", true},
+		{"ps x", false},
+		{"ps -a", false},
+		// kill takes the PID of a process that exists, -9 for SIGKILL.
+		{"kill 1", true}, // root's: Operation not permitted
+		{"kill 2", true},
+		{"kill -9 2", true},
+		{"sudo kill 1", true},
+		{"kill 3", false}, // no such process
+		{"kill", false},
+		{"kill -9", false},
+		{"kill -1 2", false},
+		{"kill 2 | cat", false},
 	} {
 		_, p := testSetup(t)
 		if got := canRun(p, tc.line); got != tc.ok {

@@ -94,11 +94,16 @@ func (p Positional) validate(ctx simulation.ArgContext, partial string) simulati
 
 	a := p.arg(k)
 	if a == nil {
-		// Only the trailing space after the last argument.
+		// Only the trailing space after the last argument, or the
+		// options of a command that takes no arguments (`ps -e`).
 		if cur != "" {
 			return simulation.Suggestion{}
 		}
-		return simulation.Suggestion{Complete: p.enough(k)}
+		sug := simulation.Suggestion{Complete: p.enough(k)}
+		if k == 0 && p.moreOptions(used) && p.afterOptions(ctx) {
+			sug.Chars = []rune{'-'}
+		}
+		return sug
 	}
 
 	sug := a(ctx, args, cur)

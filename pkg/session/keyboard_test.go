@@ -96,6 +96,7 @@ func buildScenario(t *testing.T, sc keyboardScenario) (*Session, *terminal.T) {
 				OwnerPermission: file.Write, CommonPermission: file.Read, Data: n}
 		}
 	}
+	sess.updatePlayingTerminal(term) // the keyboard sees what was installed
 	for _, cmd := range sc.commands {
 		typeCommand(t, sess, term, cmd)
 	}
@@ -346,16 +347,30 @@ func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 	g := w.freshShell(t)
 	before := w.dumpWorld()
 	for _, r := range line {
-		_ = g.Stdin(process.Data{process.Chars(string(r))})
+		if err := g.Stdin(process.Data{process.Chars(string(r))}); err != nil {
+			if strings.Contains(line, "kill ") {
+				// An earlier check killed that process; files are
+				// restored between checks, the process table isn't.
+				return
+			}
+			t.Errorf("%q can't be typed on a fresh shell (%q rejected)", line, string(r))
+			return
+		}
 	}
 	drain(g)
 	_ = g.Stdin(process.Data{process.TermEnter})
 
 	var stderr strings.Builder
+	interrupted := false
 	for i := 0; ; i++ {
 		if i >= maxPolls {
-			t.Errorf("hang: %q + Enter did not return to a prompt", line)
-			return
+			// A command may run forever (yes), but then Ctrl+C must be
+			// offered and must end it.
+			if interrupted || g.Stdin(process.Data{process.SigInt}) != nil {
+				t.Errorf("hang: %q + Enter did not return to a prompt", line)
+				return
+			}
+			interrupted, i = true, 0
 		}
 		stderr.WriteString(process.Text(g.Read(), process.Stderr))
 		if _, exited := g.Exit(); exited || isFreshPrompt(g.Next()) {
@@ -363,7 +378,7 @@ func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 		}
 	}
 	stderr.WriteString(process.Text(g.Read(), process.Stderr))
-	if msg := stderr.String(); msg != "" && !strings.Contains(msg, "Permission denied") {
+	if msg := stderr.String(); !consequence(msg) {
 		t.Errorf("mistake: %q + Enter wrote %q", line, msg)
 	}
 	if strings.Contains(line, "|") && w.dumpWorld() != before {
