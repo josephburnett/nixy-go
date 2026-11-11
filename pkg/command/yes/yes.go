@@ -32,22 +32,17 @@ func launch(
 	if len(args) > 0 {
 		line = strings.Join(args, " ")
 	}
-	return &yes{owner: owner, line: process.CharsData(line + "\n")}, nil
+	return &yes{Proc: command.NewProc(owner), line: process.CharsData(line + "\n")}, nil
 }
 
 // yes never exits on its own. Processes act only when called, so it
 // writes one line per Read and can't run away with the game.
 type yes struct {
-	process.Written
-	owner string
-	line  process.Data
+	command.Proc
+	line process.Data
 }
 
 func (y *yes) Read() []process.Output {
 	y.Write(process.Stdout, y.line)
 	return y.Written.Read()
 }
-
-func (y *yes) Stdin(process.Data) error { return process.ErrNoInput }
-func (y *yes) Next() []process.Datum    { return nil }
-func (y *yes) Owner() string            { return y.owner }

@@ -30,7 +30,7 @@ func launch(
 ) (process.P, error) {
 	if len(args) == 0 {
 		// No args: read from stdin (for pipes). Return a passthrough process.
-		return &stdinCat{owner: owner}, nil
+		return &stdinCat{Proc: command.NewProc(owner)}, nil
 	}
 
 	c, err := sim.GetComputer(hostname)
@@ -47,8 +47,7 @@ func launch(
 
 // stdinCat copies stdin to stdout until its input closes.
 type stdinCat struct {
-	process.Written
-	owner string
+	command.Proc
 }
 
 func (s *stdinCat) Stdin(in process.Data) error {
@@ -56,6 +55,4 @@ func (s *stdinCat) Stdin(in process.Data) error {
 	return nil
 }
 
-func (s *stdinCat) CloseStdin()           { s.Finish(0) }
-func (s *stdinCat) Next() []process.Datum { return nil }
-func (s *stdinCat) Owner() string         { return s.owner }
+func (s *stdinCat) CloseStdin() { s.Finish(0) }

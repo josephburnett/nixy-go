@@ -32,7 +32,7 @@ func launch(sim *simulation.S, owner, hostname string, cwd, args []string) (proc
 		flags = "lwc"
 	}
 	if len(args) == 0 {
-		return &stdinWc{owner: owner, flags: flags}, nil
+		return &stdinWc{Proc: command.NewProc(owner), flags: flags}, nil
 	}
 	c, err := sim.GetComputer(hostname)
 	if err != nil {
@@ -75,8 +75,7 @@ func count(data, flags, name string) string {
 
 // stdinWc counts its input once it closes.
 type stdinWc struct {
-	process.Written
-	owner string
+	command.Proc
 	flags string
 	buf   strings.Builder
 }
@@ -90,6 +89,3 @@ func (w *stdinWc) CloseStdin() {
 	w.Write(process.Stdout, process.CharsData(count(w.buf.String(), w.flags, "")))
 	w.Finish(0)
 }
-
-func (w *stdinWc) Next() []process.Datum { return nil }
-func (w *stdinWc) Owner() string         { return w.owner }

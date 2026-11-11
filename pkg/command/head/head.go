@@ -27,7 +27,7 @@ const lines = 10
 
 func launch(sim *simulation.S, owner, hostname string, cwd, args []string) (process.P, error) {
 	if len(args) == 0 {
-		return &stdinHead{owner: owner}, nil
+		return &stdinHead{Proc: command.NewProc(owner)}, nil
 	}
 	c, err := sim.GetComputer(hostname)
 	if err != nil {
@@ -37,7 +37,7 @@ func launch(sim *simulation.S, owner, hostname string, cwd, args []string) (proc
 	if err != nil {
 		return command.Fail(owner, "head", "cannot open '"+args[0]+"' for reading", err), nil
 	}
-	h := &stdinHead{owner: owner}
+	h := &stdinHead{Proc: command.NewProc(owner)}
 	h.take(data)
 	h.CloseStdin()
 	return h, nil
@@ -46,8 +46,7 @@ func launch(sim *simulation.S, owner, hostname string, cwd, args []string) (proc
 // stdinHead copies lines until it has printed enough, then exits; a
 // writer still sending gets SIGPIPE (`yes | head`).
 type stdinHead struct {
-	process.Written
-	owner   string
+	command.Proc
 	printed int
 	partial string
 }
@@ -82,6 +81,3 @@ func (h *stdinHead) CloseStdin() {
 	}
 	h.Finish(0)
 }
-
-func (h *stdinHead) Next() []process.Datum { return nil }
-func (h *stdinHead) Owner() string         { return h.owner }

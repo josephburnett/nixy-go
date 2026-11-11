@@ -25,17 +25,16 @@ func launch(sim *simulation.S, owner, hostname string, _, args []string) (proces
 		return nil, err
 	}
 	flags, _ := command.Options(args)
-	return &ps{owner: owner, c: c, all: strings.ContainsRune(flags, 'e')}, nil
+	return &ps{Proc: command.NewProc(owner), c: c, all: strings.ContainsRune(flags, 'e')}, nil
 }
 
 // ps reads the process table when first read, not at launch: by then
 // it is in the table itself, as real ps lists itself (and the rest of
 // its pipeline).
 type ps struct {
-	process.Written
-	owner string
-	c     *computer.C
-	all   bool
+	command.Proc
+	c   *computer.C
+	all bool
 }
 
 func (p *ps) Read() []process.Output {
@@ -43,7 +42,7 @@ func (p *ps) Read() []process.Output {
 		var sb strings.Builder
 		fmt.Fprintf(&sb, "%5s %-8s %s\n", "PID", "USER", "CMD")
 		for _, info := range p.c.Processes() {
-			if p.all || info.Owner == p.owner {
+			if p.all || info.Owner == p.Owner() {
 				fmt.Fprintf(&sb, "%5d %-8s %s\n", info.PID, info.Owner, info.Command)
 			}
 		}
@@ -52,7 +51,3 @@ func (p *ps) Read() []process.Output {
 	}
 	return p.Written.Read()
 }
-
-func (p *ps) Stdin(process.Data) error { return process.ErrNoInput }
-func (p *ps) Next() []process.Datum    { return nil }
-func (p *ps) Owner() string            { return p.owner }

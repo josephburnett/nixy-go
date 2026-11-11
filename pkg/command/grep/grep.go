@@ -53,7 +53,7 @@ func launch(
 	}
 
 	// grep pattern (reads from stdin)
-	return &stdinGrep{owner: owner, pattern: pattern}, nil
+	return &stdinGrep{Proc: command.NewProc(owner), pattern: pattern}, nil
 }
 
 func filterLines(data, pattern string) string {
@@ -81,8 +81,7 @@ func result(owner, matches string) process.P {
 // stdinGrep filters stdin a line at a time, as real grep does, so a
 // source that never ends (`yes | grep y`) still shows its matches.
 type stdinGrep struct {
-	process.Written
-	owner   string
+	command.Proc
 	pattern string
 	partial string // the start of a line not yet ended
 	matched bool
@@ -118,6 +117,3 @@ func (g *stdinGrep) CloseStdin() {
 	}
 	g.Finish(1)
 }
-
-func (g *stdinGrep) Next() []process.Datum { return nil }
-func (g *stdinGrep) Owner() string         { return g.owner }
