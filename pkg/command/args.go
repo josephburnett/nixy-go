@@ -322,14 +322,7 @@ var Hostname = OneOf(func(ctx simulation.ArgContext) []string {
 // characters, which no shell interprets, and no leading `-` (an
 // option).
 func Word(_ simulation.ArgContext, _ []string, token string) simulation.Suggestion {
-	var chars []rune
-	for _, r := range wordChars {
-		if r == '-' && token == "" {
-			continue
-		}
-		chars = append(chars, r)
-	}
-	return simulation.Suggestion{Chars: chars, Complete: token != ""}
+	return freeForm(wordChars, token)
 }
 
 // Pattern accepts a literal search word for grep. It is limited to
@@ -337,14 +330,19 @@ func Word(_ simulation.ArgContext, _ []string, token string) simulation.Suggesti
 // regular expressions, so what the player types behaves the same in
 // real Unix. A leading `-` would be an option, so it is not offered.
 func Pattern(_ simulation.ArgContext, _ []string, token string) simulation.Suggestion {
-	var chars []rune
-	for _, r := range patternChars {
-		if r == '-' && token == "" {
-			continue
+	return freeForm(patternChars, token)
+}
+
+// freeForm offers any of chars, except `-` first, and completes on any
+// non-empty token.
+func freeForm(chars, token string) simulation.Suggestion {
+	var out []rune
+	for _, r := range chars {
+		if r != '-' || token != "" {
+			out = append(out, r)
 		}
-		chars = append(chars, r)
 	}
-	return simulation.Suggestion{Chars: chars, Complete: token != ""}
+	return simulation.Suggestion{Chars: out, Complete: token != ""}
 }
 
 // FilePath accepts an existing file (not a folder). Folders are offered
