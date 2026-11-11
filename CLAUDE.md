@@ -127,16 +127,17 @@ Concrete implications (these all flow from this single principle):
   make a quest succeed. If the player can't do something, that's a
   teaching opportunity — fix the world (perms, ownership) or the
   quest. The Permissions quest specifically teaches `sudo`; preserve
-  the model it depends on. (Today, `/home/nixy` is `Common: Write`
-  on purpose — Nixy is loose with perms so early quests work without
-  `sudo`. A future quest will tighten that and teach `sudo` as the
-  way back in. Don't undo Nixy's loose perms without that quest.)
+  the model it depends on. `/home/nixy` ships `Common: Write` on
+  purpose — Nixy is loose with perms so early quests work without
+  `sudo` — and the Lockdown quest (after Permissions) tightens it to
+  Read: the player's `rm old.txt` there is denied (deleting writes
+  the folder) and `sudo rm old.txt` is the way back in.
 - **Installing software takes root.** `apt install` writes `/bin` as
   whoever runs it, so a normal user gets real apt's lock error ("are
   you root?") and `sudo apt install` works; installed files are owned
-  by the installer. That is why Nixy ships grep, rm and touch: the
-  early quests need no apt, and apt arrives with sudo in the
-  Permissions quest (the server lacks touch; the planner has the
+  by the installer. That is why Nixy ships grep, rm and touch (and
+  sudo, for Lockdown): the early quests need no apt, and apt arrives
+  with sudo in the Permissions quest (the server lacks touch; the planner has the
   player try `apt install touch`, read the error, then use sudo).
   Files created under sudo are owned by root.
 - **Permissions are checked one way.** The model has three levels
@@ -210,7 +211,8 @@ loop wraps it in scaffolding:
   count as reading Nixy's readme, while a grep that matched nothing,
   `lsx`, or a rejected command don't. A deliberate failure is an
   outcome too: Permissions plans `apt install touch` until a failed
-  one is recorded. Never match command strings.
+  one is recorded, Lockdown plans `rm old.txt` until a denied one
+  is. Never match command strings.
 - **Recovery: the player can break anything, never the quest line.**
   Planners compute each step from the world as it is now, and:
   - before planning a command they call `need(ctx, name)`: when

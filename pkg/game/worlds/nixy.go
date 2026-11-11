@@ -27,6 +27,9 @@ func Nixy() *file.F {
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "rm"},
 					"touch": {Type: file.Binary, Owner: file.OwnerRoot,
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "touch"},
+					// For the Lockdown quest, once Nixy locks her home.
+					"sudo": {Type: file.Binary, Owner: file.OwnerRoot,
+						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "sudo"},
 				}},
 			"etc": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
@@ -42,10 +45,10 @@ func Nixy() *file.F {
 			"home": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
 				Files: map[string]*file.F{
-					// Nixy's home. CommonPermission is Write for now — Nixy is loose
-					// with permissions so the player can clean up junk.txt without
-					// sudo. The future Permissions quest will tighten this back to
-					// Read and teach sudo as the way in.
+					// Nixy's home. CommonPermission is Write to begin with: Nixy is
+					// loose with permissions, so the early quests need no sudo.
+					// The Lockdown quest tightens it to Read, and sudo becomes the
+					// way back in.
 					"nixy": {Type: file.Folder, Owner: "nixy",
 						OwnerPermission: file.Write, CommonPermission: file.Write,
 						Files: map[string]*file.F{

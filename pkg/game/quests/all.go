@@ -11,5 +11,6 @@ func All() []game.Quest {
 		&Modification{},
 		&Composition{},
 		&Permissions{},
+		&Lockdown{},
 	}
 }

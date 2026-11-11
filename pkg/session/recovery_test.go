@@ -20,6 +20,18 @@ func TestBrokenPrerequisitesRecover(t *testing.T) {
 		lines []string
 	}{
 		{"readme deleted", "inspection", "nixy", []string{"rm /home/nixy/readme.txt"}},
+		{"system log deleted", "inspection", "nixy", []string{"sudo rm /var/log/system.log"}},
+		{"cat and grep deleted", "inspection", "nixy", []string{"sudo rm /bin/cat", "sudo rm /bin/grep"}},
+		{"grep and sudo deleted", "inspection", "nixy", []string{"sudo rm /bin/grep", "sudo rm /bin/sudo"}},
+		{"cat replaced by rm", "inspection", "nixy", []string{
+			"sudo apt install mv", "sudo rm /bin/cat", "sudo mv /bin/rm /bin/cat"}},
+		{"readme moved", "inspection", "nixy", []string{
+			"sudo apt install mv", "sudo mv /home/nixy/readme.txt /home/nixy/r.txt"}},
+		{"rm and apt deleted", "modification", "nixy", []string{"sudo rm /bin/apt", "sudo rm /bin/rm"}},
+		{"touch deleted", "modification", "nixy", []string{"sudo rm /bin/touch"}},
+		{"grep renamed", "composition", "nixy", []string{
+			"sudo apt install mv", "sudo mv /bin/grep /bin/g"}},
+		{"target deleted", "composition", "nixy", []string{"sudo rm /home/nixy/projects/target.txt"}},
 		{"server sudo deleted", "permissions", "server", []string{
 			"sudo apt install rm", "sudo rm /bin/sudo"}},
 		{"server apt deleted", "permissions", "server", []string{
@@ -28,6 +40,8 @@ func TestBrokenPrerequisitesRecover(t *testing.T) {
 			"sudo apt install touch", "sudo apt install rm", "sudo rm /bin/touch"}},
 		{"hosts deleted", "permissions", "server", []string{
 			"sudo apt install rm", "sudo rm /etc/hosts"}},
+		{"nixy sudo deleted", "lockdown", "nixy", []string{"sudo rm /bin/sudo"}},
+		{"nixy rm deleted", "lockdown", "nixy", []string{"sudo rm /bin/rm"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -70,7 +70,20 @@ func AllDialog() []DialogEntry {
 			}},
 		{OnQuestComplete, "permissions",
 			[]string{
-				"You did it! You're a real command line pro now.",
+				"You did it! The server's happy.",
+				"Watching you work as root got me thinking about my own files...",
+			}},
+		// Lockdown quest
+		{OnQuestActivate, "lockdown",
+			[]string{
+				"Anyone could change things in my home! So I've locked it: you can still look, but only I can change it.",
+				"Deleting a file changes the folder it's in, so you can't delete in my home any more.",
+				"I do still want old.txt gone. Try `rm old.txt` in my home and see.",
+				"Then do it as root, like on the server: `sudo rm old.txt`.",
+			}},
+		{OnQuestComplete, "lockdown",
+			[]string{
+				"Locked, but not locked out: that's what `sudo` is for.",
 				"Thanks for all your help. The systems are running smoothly.",
 			}},
 	}

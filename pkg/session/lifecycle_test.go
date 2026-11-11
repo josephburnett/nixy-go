@@ -125,10 +125,14 @@ func historyContains(term *terminal.T, sub string) bool {
 
 func TestNxPanicUnwindsNestedShellsToLaptop(t *testing.T) {
 	sess, term := newLoggedIn(t, "alice")
-	typeLine(t, sess, term, "ssh nixy")
-	typeLine(t, sess, term, "ssh laptop")
-	typeLine(t, sess, term, "ssh nixy")
-	typeLine(t, sess, term, "nx panic")
+	typeCommand(t, sess, term, "ssh nixy")
+	typeCommand(t, sess, term, "sudo apt install ssh")
+	typeCommand(t, sess, term, "ssh laptop")
+	typeCommand(t, sess, term, "ssh nixy")
+	if got := sess.Shell.Hostname(); got != "nixy" {
+		t.Fatalf("nested ssh should be on nixy, got %q", got)
+	}
+	typeCommand(t, sess, term, "nx panic")
 
 	if sess.Mode != ModePlaying {
 		t.Fatalf("nx panic must not log out, mode=%v", sess.Mode)
