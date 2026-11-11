@@ -12,6 +12,7 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/head"
 	_ "github.com/josephburnett/nixy-go/pkg/command/kill"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
+	_ "github.com/josephburnett/nixy-go/pkg/command/man"
 	_ "github.com/josephburnett/nixy-go/pkg/command/mkdir"
 	_ "github.com/josephburnett/nixy-go/pkg/command/mv"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ps"
@@ -32,7 +33,7 @@ import (
 // testBinaries are installed in the fixture's /bin: every registered
 // command, so the structural tests cover them all.
 var testBinaries = []string{
-	"apt", "cat", "echo", "grep", "head", "kill", "ls", "mkdir", "mv", "ps",
+	"apt", "cat", "echo", "grep", "head", "kill", "ls", "man", "mkdir", "mv", "ps",
 	"pwd", "rm", "rmdir", "ssh", "sudo", "touch", "wc", "whoami", "yes",
 }
 
@@ -1008,6 +1009,17 @@ func TestShellNextInvariant_Lines(t *testing.T) {
 		{"rm ~/notes.txt > x", false}, // prints nothing
 		{"cd > x", false},
 		{"> x", false},
+		// man shows the page of a command in /bin; help, a builtin's.
+		{"man ls", true},
+		{"man man", true},
+		{"man ls | grep a", true},
+		{"man cd", false},
+		{"man", false},
+		{"help", true},
+		{"help cd", true},
+		{"help nx", true},
+		{"help ls", false},
+		{"help | cat", false},
 		// head and wc read a file, or a pipe.
 		{"head ~/notes.txt", true},
 		{"yes | head", true},

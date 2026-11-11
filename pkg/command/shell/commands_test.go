@@ -65,6 +65,24 @@ func TestShellHeadWc(t *testing.T) {
 	}
 }
 
+// man shows a command's page, help a builtin's.
+func TestShellManHelp(t *testing.T) {
+	_, p := loginSetup(t)
+	for _, tc := range []struct{ line, want string }{
+		{"man ls", "LS(1)\nNAME\n    ls - list folder contents\n"},
+		{"help cd", "cd [DIR]\n"},
+		{"help", "Shell builtins"},
+	} {
+		if !canRun(p, tc.line) {
+			t.Fatalf("%q can't be typed", tc.line)
+		}
+		writeEnter(t, p)
+		if got := strings.TrimPrefix(readAllStdout(t, p), tc.line); !strings.HasPrefix(got, tc.want) {
+			t.Errorf("%q printed %q, want it to start %q", tc.line, got, tc.want)
+		}
+	}
+}
+
 // ps shows the table as `ps -o pid,user,cmd` would, itself included;
 // kill signals by PID, only your own processes unless root.
 func TestShellPsKill(t *testing.T) {

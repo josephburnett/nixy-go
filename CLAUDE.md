@@ -71,7 +71,7 @@ Implementation:
 - Commands are found one way: `sim.LookupBinary` via `/bin/<name>`,
   for running, validating and sudo alike. It looks up as a user
   (root under sudo) with the same permission checks as any file:
-  running needs Read on the binary. Builtins (cd, exit, nx) have
+  running needs Read on the binary. Builtins (cd, exit, help, nx) have
   validators in `shell.builtinArgs` and can't be piped.
 - `shell.Next()` is pipe-aware: it splits on `|` and validates only
   the segment after the last pipe. It adds just Enter and `|` (when
@@ -434,4 +434,8 @@ a path" is too lenient.
   (what the front ends and session tests import), and give it an apt
   package in `apt.PackageRegistry` (`TestEveryPackageIsRegistered`
   checks every package runs). Worlds ship the basics; the rest are a
-  `sudo apt install` away, which is where quests teach them.
+  `sudo apt install` away, which is where quests teach them. Write
+  its manual page in `pkg/command/man/pages.go`
+  (`TestEveryCommandHasAPage`): short, and true of the real command.
+  `man CMD` offers only commands in /bin with a page; `help [BUILTIN]`
+  is the shell's, for its builtins (`shell.builtinHelp`).

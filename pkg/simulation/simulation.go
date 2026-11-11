@@ -150,6 +150,17 @@ func lookup(name string) (*Binary, bool) {
 	return b, ok
 }
 
+// Registered lists every registered binary's name, sorted.
+func Registered() []string {
+	sealed.Store(true)
+	names := make([]string, 0, len(registry))
+	for n := range registry {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
 func GetBinary(name string) (*Binary, error) {
 	if b, ok := lookup(name); ok {
 		return b, nil

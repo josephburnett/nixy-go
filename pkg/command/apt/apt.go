@@ -63,6 +63,7 @@ var PackageRegistry = map[string]string{
 	"kill":   "kill",
 	"head":   "head",
 	"wc":     "wc",
+	"man":    "man",
 	"apt":    "apt",
 }
 

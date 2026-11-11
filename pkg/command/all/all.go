@@ -10,6 +10,7 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/head"
 	_ "github.com/josephburnett/nixy-go/pkg/command/kill"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ls"
+	_ "github.com/josephburnett/nixy-go/pkg/command/man"
 	_ "github.com/josephburnett/nixy-go/pkg/command/mkdir"
 	_ "github.com/josephburnett/nixy-go/pkg/command/mv"
 	_ "github.com/josephburnett/nixy-go/pkg/command/ps"

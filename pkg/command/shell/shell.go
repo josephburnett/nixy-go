@@ -264,6 +264,9 @@ func (s *shell) executeSingle(seg command.Segment) {
 	case "nx":
 		s.builtinNx(seg.Args)
 		return
+	case "help":
+		s.builtinHelp(seg.Args)
+		return
 	}
 
 	b, err := s.simulation.LookupBinary(s.hostname, s.owner, seg.Name)
@@ -612,10 +615,56 @@ func (r *redirected) Read() []process.Output {
 	return out
 }
 
+// builtinHelp is bash's help: what the shell's own commands do. Other
+// commands have manual pages (man).
+var builtinHelp = map[string]string{
+	"cd":   "cd [DIR]\n    Change the current folder to DIR. With no DIR, go home (~).\n",
+	"exit": "exit\n    Leave this shell: log out, or end an ssh session.\n",
+	"help": "help [BUILTIN]\n    Describe the shell's builtins. For other commands, use man.\n",
+	"nx": "nx quest|log|panic\n    The game's own command: the current quest, what you've done,\n" +
+		"    or panic to put every machine's /bin back and return to the laptop.\n",
+}
+
+func (s *shell) builtinHelp(args []string) {
+	if len(args) == 0 {
+		var names []string
+		for name := range builtinArgs {
+			if _, ok := s.builtin(name); ok {
+				names = append(names, name)
+			}
+		}
+		sort.Strings(names)
+		var sb strings.Builder
+		sb.WriteString("Shell builtins (help NAME for more; man COMMAND for the rest):\n")
+		for _, n := range names {
+			sb.WriteString("    " + n + "\n")
+		}
+		s.Write(process.Stdout, process.CharsData(sb.String()))
+	} else {
+		s.Write(process.Stdout, process.CharsData(builtinHelp[args[0]]))
+	}
+	s.setStatus(0)
+}
+
+// helpArgs is `help [BUILTIN]`.
+func helpArgs(ctx simulation.ArgContext, partial string) simulation.Suggestion {
+	topic := command.OneOf(func(ctx simulation.ArgContext) []string {
+		var names []string
+		for name := range builtinHelp {
+			if name != "nx" || ctx.Sim.Nx != nil {
+				names = append(names, name)
+			}
+		}
+		return names
+	})
+	return command.Positional{Args: []command.Arg{topic}}.Validate(ctx, partial)
+}
+
 // builtinArgs are the validators for the shell's builtins.
 var builtinArgs = map[string]simulation.ValidArgs{
 	"cd":   cdArgs,
 	"exit": command.NoArgs,
+	"help": helpArgs,
 	"nx": command.Subcommands(map[string]simulation.ValidArgs{
 		"quest": command.NoArgs,
 		"log":   command.NoArgs,
