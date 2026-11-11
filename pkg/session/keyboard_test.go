@@ -16,30 +16,40 @@ import (
 // active, then a list of extra commands typed key by key.
 type keyboardScenario struct {
 	name       string
-	untilQuest string   // follow the planner until this quest is active ("" = don't)
-	commands   []string // then type these
+	untilQuest string              // follow the planner until this quest is active ("" = don't)
+	install    map[string][]string // then put these commands in each host's /bin
+	commands   []string            // then type these
 }
 
 var keyboardScenarios = []keyboardScenario{
 	{name: "laptop-fresh"},
 	{name: "nixy-fresh", commands: []string{"ssh nixy"}},
 	{
+		// Not reachable in play (nixy has no sudo), but it puts every
+		// command's validator in front of nixy's world.
 		name:       "nixy-home-all-installed",
 		untilQuest: "modification",
-		commands: []string{
-			"apt install rm", "apt install touch", "apt install mv",
-			"apt install sudo", "cd /home/nixy",
-		},
+		install:    map[string][]string{"nixy": {"mv", "sudo"}},
+		commands:   []string{"cd /home/nixy"},
 	},
 	{
 		name:       "nixy-projects",
 		untilQuest: "composition",
-		commands:   []string{"apt install mv", "cd /home/nixy/projects"},
+		install:    map[string][]string{"nixy": {"mv"}},
+		commands:   []string{"cd /home/nixy/projects"},
 	},
 	{
 		name:       "server",
 		untilQuest: "permissions",
-		commands:   []string{"exit", "ssh server", "apt install rm", "apt install mv"},
+		commands:   []string{"exit", "ssh server"},
+	},
+	{
+		name:       "server-sudo-installed",
+		untilQuest: "permissions",
+		commands: []string{
+			"exit", "ssh server", "sudo apt install touch", "sudo apt install rm",
+			"sudo apt install mv", "sudo apt install grep",
+		},
 	},
 }
 
@@ -74,6 +84,16 @@ func buildScenario(t *testing.T, sc keyboardScenario) (*Session, *terminal.T) {
 				t.Fatalf("%s: planner has no command for %q", sc.name, a.ID())
 			}
 			typeCommand(t, sess, term, cmd)
+		}
+	}
+	for host, names := range sc.install {
+		c, err := sess.Game.Sim.GetComputer(host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, n := range names {
+			c.Filesystem.Files["bin"].Files[n] = &file.F{Type: file.Binary, Owner: file.OwnerRoot,
+				OwnerPermission: file.Write, CommonPermission: file.Read, Data: n}
 		}
 	}
 	for _, cmd := range sc.commands {

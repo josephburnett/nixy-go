@@ -18,6 +18,15 @@ func Nixy() *file.F {
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "pwd"},
 					"apt": {Type: file.Binary, Owner: file.OwnerRoot,
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "apt"},
+					// Shipped, so the early quests need no apt: installing
+					// software takes root, which the Permissions quest
+					// teaches.
+					"grep": {Type: file.Binary, Owner: file.OwnerRoot,
+						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "grep"},
+					"rm": {Type: file.Binary, Owner: file.OwnerRoot,
+						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "rm"},
+					"touch": {Type: file.Binary, Owner: file.OwnerRoot,
+						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "touch"},
 				}},
 			"etc": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,

@@ -25,13 +25,18 @@ func (q *Permissions) IsComplete(sim *simulation.S, _ *game.CommandTracker) bool
 	return fileExists(sim, "server", []string{"etc", "config"})
 }
 
-func (q *Permissions) PlanNextCommand(sim *simulation.S, _ *game.CommandTracker, hostname string, cwd []string) string {
+func (q *Permissions) PlanNextCommand(sim *simulation.S, tracker *game.CommandTracker, hostname string, cwd []string) string {
 	nav := planNavigate(hostname, "server", cwd)
 	if nav != "" {
 		return nav
 	}
 
 	if !binaryInstalled(sim, "server", "touch") {
+		// Try it as yourself first: apt's "are you root?" is the
+		// lesson that makes sudo make sense.
+		if !tracker.HasCommand("server", "apt install touch") {
+			return "apt install touch"
+		}
 		return "sudo apt install touch"
 	}
 

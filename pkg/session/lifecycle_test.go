@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/game"
 	"github.com/josephburnett/nixy-go/pkg/process"
 	"github.com/josephburnett/nixy-go/pkg/terminal"
@@ -203,5 +204,37 @@ func TestKeyboardNeverEmpty(t *testing.T) {
 			sess.HandleKeystroke(d, term)
 		}
 		assertKeyboardLive(t, term)
+	}
+}
+
+// TestNxPanicRestoresShippedBin: a machine's shipped commands come back
+// after nx panic, however they were lost (here: deleted from /bin), so
+// losing ssh on the laptop can't strand the player. Commands installed
+// since stay.
+func TestNxPanicRestoresShippedBin(t *testing.T) {
+	sess, term := newLoggedIn(t, "alice")
+	laptop, _ := sess.Game.Sim.GetComputer("laptop")
+	nixy, _ := sess.Game.Sim.GetComputer("nixy")
+	delete(laptop.Filesystem.Files["bin"].Files, "ssh")
+	delete(nixy.Filesystem.Files["bin"].Files, "apt")
+	nixy.Filesystem.Files["bin"].Files["mv"] = &file.F{Type: file.Binary, Owner: file.OwnerRoot,
+		OwnerPermission: file.Write, CommonPermission: file.Read, Data: "mv"}
+	nixy.Filesystem.Files["bin"].Files["rm"].Data = "cat" // a broken copy
+
+	typeLine(t, sess, term, "nx panic")
+
+	for host, names := range map[string][]string{"laptop": {"ssh", "ls", "cat"}, "nixy": {"apt", "mv"}} {
+		for _, n := range names {
+			if _, err := sess.Game.Sim.LookupBinary(host, n); err != nil {
+				t.Errorf("%s: %s missing after panic: %v", host, n, err)
+			}
+		}
+	}
+	if d := nixy.Filesystem.Files["bin"].Files["rm"].Data; d != "rm" {
+		t.Errorf("nixy /bin/rm not restored: runs %q", d)
+	}
+	typeLine(t, sess, term, "ssh nixy")
+	if got := sess.Shell.Hostname(); got != "nixy" {
+		t.Fatalf("ssh after panic: on %q", got)
 	}
 }

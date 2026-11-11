@@ -49,12 +49,6 @@ func (q *Modification) PlanNextCommand(sim *simulation.S, _ *game.CommandTracker
 		return nav
 	}
 
-	if !binaryInstalled(sim, "nixy", "rm") {
-		return "apt install rm"
-	}
-	if !binaryInstalled(sim, "nixy", "touch") {
-		return "apt install touch"
-	}
 	if !pathEqual(cwd, []string{"home", "nixy"}) {
 		return "cd /home/nixy"
 	}

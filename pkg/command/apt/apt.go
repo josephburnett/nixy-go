@@ -1,6 +1,7 @@
 package apt
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -27,7 +28,7 @@ var installable = command.OneOf(func(ctx simulation.ArgContext) []string {
 	if err != nil {
 		return nil
 	}
-	bin, err := c.Filesystem.Navigate([]string{"bin"})
+	bin, err := c.Filesystem.LookupDir([]string{"bin"}, ctx.User)
 	if err != nil {
 		return nil
 	}
@@ -76,6 +77,10 @@ func launch(
 	}
 }
 
+// lockError is what real apt says when a normal user tries to install.
+const lockError = "E: Could not open lock file /var/lib/dpkg/lock-frontend - open (13: Permission denied)\n" +
+	"E: Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), are you root?\n"
+
 func aptInstall(sim *simulation.S, owner, hostname string, args []string) (process.P, error) {
 	if len(args) == 0 {
 		return command.NewErrorProcess(owner, "apt install: missing package name\n"), nil
@@ -89,31 +94,28 @@ func aptInstall(sim *simulation.S, owner, hostname string, args []string) (proce
 	for _, pkg := range args {
 		binaryName, ok := PackageRegistry[pkg]
 		if !ok {
-			return command.NewErrorProcess(owner, fmt.Sprintf("apt: package '%v' not found\n", pkg)), nil
+			return command.NewErrorProcess(owner, fmt.Sprintf("E: Unable to locate package %v\n", pkg)), nil
 		}
-
-		// Check if already installed
-		binDir, err := c.Filesystem.Navigate([]string{"bin"})
-		if err != nil {
-			return command.NewErrorProcess(owner, "apt: /bin not found\n"), nil
+		bin, err := c.Filesystem.LookupDir([]string{"bin"}, owner)
+		if err == nil {
+			if _, installed := bin.Files[pkg]; installed {
+				continue
+			}
 		}
-		if _, exists := binDir.Files[pkg]; exists {
-			continue // Already installed
-		}
-
-		// Install: create binary in /bin
-		newBin := &file.F{
+		// Installing writes /bin as whoever runs apt, so only root
+		// can: a normal user hits real apt's lock error.
+		err = c.Filesystem.CreateFile([]string{"bin"}, pkg, &file.F{
 			Type:             file.Binary,
-			Owner:            file.OwnerRoot,
+			Owner:            owner,
 			OwnerPermission:  file.Write,
 			CommonPermission: file.Read,
 			Data:             binaryName,
+		}, owner)
+		if errors.Is(err, file.ErrPermission) {
+			return command.NewErrorProcess(owner, lockError), nil
 		}
-		// apt needs root to install, but we install as root regardless
-		// (apt itself handles privilege escalation in real life)
-		err = c.Filesystem.CreateFile([]string{"bin"}, pkg, newBin, file.OwnerRoot)
 		if err != nil {
-			return command.NewErrorProcess(owner, fmt.Sprintf("apt: %v\n", err)), nil
+			return command.NewErrorProcess(owner, fmt.Sprintf("E: %v\n", err)), nil
 		}
 	}
 

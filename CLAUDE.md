@@ -110,6 +110,14 @@ Concrete implications (these all flow from this single principle):
   on purpose — Nixy is loose with perms so early quests work without
   `sudo`. A future quest will tighten that and teach `sudo` as the
   way back in. Don't undo Nixy's loose perms without that quest.)
+- **Installing software takes root.** `apt install` writes `/bin` as
+  whoever runs it, so a normal user gets real apt's lock error ("are
+  you root?") and `sudo apt install` works; installed files are owned
+  by the installer. That is why Nixy ships grep, rm and touch: the
+  early quests need no apt, and apt arrives with sudo in the
+  Permissions quest (the server lacks touch; the planner has the
+  player try `apt install touch`, read the error, then use sudo).
+  Files created under sudo are owned by root.
 - **Permissions are checked one way.** The model has three levels
   (None/Read/Write); on a folder, Read means both listing and search
   (real Unix's r and x), Write adds creating and deleting entries.
@@ -194,7 +202,9 @@ suite for both.
 - Both use `pkg/session/` for shared game/guide/shell initialization.
 - The session never ends itself. `exit` on the laptop logs out to the
   `login:` prompt; each username keeps its own game, so logging back in
-  resumes it. `nx panic` replaces the whole shell stack with a fresh
+  resumes it. `nx panic` puts back every machine's shipped `/bin`
+  (from its world definition; later installs stay) and replaces the
+  whole shell stack with a fresh
   laptop shell (never a logout). Only the CLI's double Ctrl+C quits.
   The keyboard must never be empty — the web build has no other input.
 

@@ -32,7 +32,6 @@ func AllDialog() []DialogEntry {
 			[]string{
 				"I have some files that need attention.",
 				"Use `cat` to read them and `grep` to search through logs.",
-				"You might need to install grep first: `apt install grep`",
 			}},
 		{OnQuestComplete, "inspection",
 			[]string{
@@ -43,8 +42,7 @@ func AllDialog() []DialogEntry {
 		{OnQuestActivate, "modification",
 			[]string{
 				"Time to clean up. There's some junk in my home directory.",
-				"Delete junk.txt and create important.txt.",
-				"You'll need to install `rm` and `touch` first.",
+				"Delete junk.txt with `rm` and create important.txt with `touch`.",
 			}},
 		{OnQuestComplete, "modification",
 			[]string{
@@ -66,8 +64,10 @@ func AllDialog() []DialogEntry {
 		// Permissions quest
 		{OnQuestActivate, "permissions",
 			[]string{
-				"The server needs a config file in /etc, but it's locked down.",
-				"You'll need `sudo` to create files there. Try: `sudo touch /etc/config`",
+				"The server needs a config file, /etc/config, but it's locked down.",
+				"It doesn't even have `touch`. Try `apt install touch` and see what it says.",
+				"Installing software and writing to /etc are root's jobs.",
+				"`sudo` runs one command as root: `sudo apt install touch`, then `sudo touch /etc/config`.",
 			}},
 		{OnQuestComplete, "permissions",
 			[]string{

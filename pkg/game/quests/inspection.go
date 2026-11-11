@@ -26,7 +26,7 @@ func (q *Inspection) IsComplete(_ *simulation.S, tracker *game.CommandTracker) b
 		tracker.HasCommandPrefix("nixy", "grep")
 }
 
-func (q *Inspection) PlanNextCommand(sim *simulation.S, tracker *game.CommandTracker, hostname string, cwd []string) string {
+func (q *Inspection) PlanNextCommand(_ *simulation.S, tracker *game.CommandTracker, hostname string, cwd []string) string {
 	nav := planNavigate(hostname, "nixy", cwd)
 	if nav != "" {
 		return nav
@@ -39,9 +39,6 @@ func (q *Inspection) PlanNextCommand(sim *simulation.S, tracker *game.CommandTra
 		return "cat readme.txt"
 	}
 
-	if !binaryInstalled(sim, "nixy", "grep") {
-		return "apt install grep"
-	}
 	if !pathEqual(cwd, []string{"var", "log"}) {
 		return "cd /var/log"
 	}

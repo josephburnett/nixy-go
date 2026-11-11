@@ -58,7 +58,7 @@ func stderr(t *testing.T, p process.P) string {
 
 func TestAptInstall(t *testing.T) {
 	sim := testSetup(t)
-	p, _ := launch(sim, "user", "test", nil, []string{"install", "grep"})
+	p, _ := launch(sim, file.OwnerRoot, "test", nil, []string{"install", "grep"})
 	errOut := stderr(t, p)
 	if errOut != "" {
 		t.Fatalf("unexpected error: %q", errOut)
@@ -70,6 +70,22 @@ func TestAptInstall(t *testing.T) {
 	}
 	if f.Data != "grep" {
 		t.Fatalf("expected binary data 'grep', got %q", f.Data)
+	}
+	if f.Owner != file.OwnerRoot {
+		t.Fatalf("installed by root, but owned by %q", f.Owner)
+	}
+}
+
+// TestAptInstallNeedsRoot: installing writes /bin, which only root can.
+func TestAptInstallNeedsRoot(t *testing.T) {
+	sim := testSetup(t)
+	p, _ := launch(sim, "user", "test", nil, []string{"install", "grep"})
+	if errOut := stderr(t, p); !strings.Contains(errOut, "Permission denied") || !strings.Contains(errOut, "are you root?") {
+		t.Fatalf("expected apt's lock error, got %q", errOut)
+	}
+	c, _ := sim.GetComputer("test")
+	if _, err := c.Filesystem.Navigate([]string{"bin", "grep"}); err == nil {
+		t.Fatal("grep installed without root")
 	}
 }
 
@@ -87,7 +103,7 @@ func TestAptInstallUnknown(t *testing.T) {
 	sim := testSetup(t)
 	p, _ := launch(sim, "user", "test", nil, []string{"install", "foobar"})
 	errOut := stderr(t, p)
-	if !strings.Contains(errOut, "not found") {
+	if errOut != "E: Unable to locate package foobar\n" {
 		t.Fatalf("expected not found, got %q", errOut)
 	}
 }

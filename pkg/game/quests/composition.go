@@ -46,15 +46,12 @@ func (q *Composition) IsComplete(_ *simulation.S, tracker *game.CommandTracker) 
 	return tracker.HasPipe("nixy")
 }
 
-func (q *Composition) PlanNextCommand(sim *simulation.S, _ *game.CommandTracker, hostname string, cwd []string) string {
+func (q *Composition) PlanNextCommand(_ *simulation.S, _ *game.CommandTracker, hostname string, cwd []string) string {
 	nav := planNavigate(hostname, "nixy", cwd)
 	if nav != "" {
 		return nav
 	}
 
-	if !binaryInstalled(sim, "nixy", "grep") {
-		return "apt install grep"
-	}
 	if !pathEqual(cwd, []string{"home", "nixy", "projects"}) {
 		return "cd /home/nixy/projects"
 	}

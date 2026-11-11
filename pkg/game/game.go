@@ -112,11 +112,12 @@ func (g *Game) TakePanic() bool {
 	return p
 }
 
-// NxPanic restores /bin/apt on all machines and flags the session to
-// disconnect the player back to the laptop (see TakePanic).
+// NxPanic puts back every machine's shipped /bin (so a deleted ssh,
+// apt or sudo can't strand the player) and flags the session to
+// disconnect the player back to the laptop (see TakePanic). Commands
+// installed since are kept.
 func (g *Game) NxPanic() string {
 	g.panicked = true
-	// Ensure /bin/apt exists on all booted machines
 	for _, e := range g.Manager.Machines().AllEntries() {
 		if !g.Manager.Machines().IsBooted(e.Hostname) {
 			continue
@@ -125,18 +126,17 @@ func (g *Game) NxPanic() string {
 		if err != nil {
 			continue
 		}
-		binDir, err := c.Filesystem.Navigate([]string{"bin"})
-		if err != nil {
+		shipped, ok := e.Filesystem().Files["bin"]
+		if !ok {
 			continue
 		}
-		if _, exists := binDir.Files["apt"]; !exists {
-			binDir.Files["apt"] = &file.F{
-				Type:             file.Binary,
-				Owner:            file.OwnerRoot,
-				OwnerPermission:  file.Write,
-				CommonPermission: file.Read,
-				Data:             "apt",
-			}
+		bin, ok := c.Filesystem.Files["bin"]
+		if !ok || bin.Type != file.Folder {
+			c.Filesystem.Files["bin"] = shipped
+			continue
+		}
+		for name, f := range shipped.Files {
+			bin.Files[name] = f
 		}
 	}
 	return "Panic! Restoring system state...\n"

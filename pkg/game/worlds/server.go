@@ -16,10 +16,10 @@ func Server() *file.F {
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "cat"},
 					"pwd": {Type: file.Binary, Owner: file.OwnerRoot,
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "pwd"},
+					// No touch: the Permissions quest installs it with
+					// sudo apt.
 					"sudo": {Type: file.Binary, Owner: file.OwnerRoot,
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "sudo"},
-					"touch": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "touch"},
 					"apt": {Type: file.Binary, Owner: file.OwnerRoot,
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "apt"},
 				}},
