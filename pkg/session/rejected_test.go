@@ -168,7 +168,7 @@ func assertProcessTable(t *testing.T, sess *Session) {
 				}
 				all = append(all, fmt.Sprintf("%s:%d %s %q", h, p.PID, p.Owner, p.Command))
 				switch {
-				case p.Command == "shell -l":
+				case p.Command == "-sh":
 					shells++
 				case strings.HasPrefix(p.Command, "ssh "):
 					sshs++

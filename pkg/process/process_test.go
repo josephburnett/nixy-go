@@ -26,8 +26,8 @@ func (p *mockProcess) Signal(sig Signal) {
 func TestSpaceAddAndList(t *testing.T) {
 	s := NewSpace()
 	id1 := s.Add(&mockProcess{owner: "a"}, "ls")
-	id2 := s.Add(&mockProcess{owner: "b"}, "shell -l")
-	want := []Info{{PID: 1, Owner: "a", Command: "ls"}, {PID: 2, Owner: "b", Command: "shell -l"}}
+	id2 := s.Add(&mockProcess{owner: "b"}, "-sh")
+	want := []Info{{PID: 1, Owner: "a", Command: "ls"}, {PID: 2, Owner: "b", Command: "-sh"}}
 	if id1 != 1 || id2 != 2 {
 		t.Fatalf("PIDs %d %d, want 1 2", id1, id2)
 	}

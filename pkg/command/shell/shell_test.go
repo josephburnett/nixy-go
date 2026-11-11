@@ -1107,7 +1107,7 @@ func runLine(t *testing.T, p process.P, line string) string {
 // and bare `cd` isn't offered when already home (a no-op, like `cd .`).
 func TestShellHome(t *testing.T) {
 	sim, _ := testSetup(t)
-	p, err := sim.Launch("test", "user", "shell", []string{"-l"}, nil)
+	p, err := sim.Login("test", "user")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1131,7 +1131,7 @@ func TestShellHome(t *testing.T) {
 // entered starts at /.
 func TestShellLoginWithoutHome(t *testing.T) {
 	sim, _ := testSetup(t)
-	p, err := sim.Launch("test", "ghost", "shell", []string{"-l"}, nil)
+	p, err := sim.Login("test", "ghost")
 	if err != nil {
 		t.Fatal(err)
 	}

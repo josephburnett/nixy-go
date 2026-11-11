@@ -34,7 +34,7 @@ func New() *S {
 }
 
 // Launch starts the registered binary binaryName on hostname as owner,
-// like Start. The game uses it for shells (login, ssh).
+// like Start, for processes the game starts itself (Nixy's own).
 func (s *S) Launch(hostname, owner, binaryName string, args []string, cwd []string) (process.P, error) {
 	b, ok := lookup(binaryName)
 	if !ok {
@@ -48,15 +48,30 @@ func (s *S) Launch(hostname, owner, binaryName string, args []string, cwd []stri
 // which it leaves when it exits. Every process the game runs starts
 // here, so the table is what ps would show.
 func (s *S) Start(hostname, owner string, b *Binary, argv []string, cwd []string) (process.P, error) {
+	return s.start(hostname, owner, b, argv[1:], strings.Join(argv, " "), cwd)
+}
+
+// Login starts a login shell for owner on hostname, as login(1) and
+// sshd do: it starts in owner's home, and ps lists it as `-sh` (a
+// leading `-` is how Unix marks a login shell).
+func (s *S) Login(hostname, owner string) (process.P, error) {
+	b, ok := lookup("shell")
+	if !ok {
+		return nil, fmt.Errorf("binary shell not found")
+	}
+	return s.start(hostname, owner, b, []string{"-l"}, "-sh", nil)
+}
+
+func (s *S) start(hostname, owner string, b *Binary, args []string, cmdline string, cwd []string) (process.P, error) {
 	c, ok := s.computers[hostname]
 	if !ok {
 		return nil, fmt.Errorf("hostname %v not found", hostname)
 	}
-	p, err := b.Launch(s, owner, hostname, cwd, argv[1:])
+	p, err := b.Launch(s, owner, hostname, cwd, args)
 	if err != nil {
 		return nil, err
 	}
-	c.Add(p, strings.Join(argv, " "))
+	c.Add(p, cmdline)
 	return p, nil
 }
 

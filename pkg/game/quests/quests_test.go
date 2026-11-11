@@ -61,7 +61,7 @@ func newShellState(t *testing.T, g *game.Game) *shellState {
 
 func (s *shellState) login(t *testing.T) {
 	t.Helper()
-	p, err := s.game.Sim.Launch("laptop", "user", "shell", []string{"-l"}, nil)
+	p, err := s.game.Sim.Login("laptop", "user")
 	if err != nil {
 		t.Fatal(err)
 	}

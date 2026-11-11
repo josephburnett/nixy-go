@@ -271,7 +271,7 @@ func (s *Session) startLoginShell() error {
 	if s.loginSh != nil {
 		s.loginSh.Kill()
 	}
-	proc, err := s.Game.Sim.Launch("laptop", s.Username, "shell", []string{"-l"}, nil)
+	proc, err := s.Game.Sim.Login("laptop", s.Username)
 	if err != nil {
 		return err
 	}

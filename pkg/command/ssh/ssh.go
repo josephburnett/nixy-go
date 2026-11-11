@@ -56,7 +56,7 @@ func launch(
 	}
 
 	// Launch a shell on the target machine
-	remoteShell, err := sim.Launch(targetHost, owner, "shell", []string{"-l"}, nil)
+	remoteShell, err := sim.Login(targetHost, owner)
 	if err != nil {
 		return command.NewErrorProcess(owner, fmt.Sprintf("ssh: %v\n", err)), nil
 	}

@@ -37,7 +37,7 @@ func run(t *testing.T, p process.P, line string) []process.Output {
 func loginSetup(t *testing.T) (*simulation.S, process.P) {
 	t.Helper()
 	sim, _ := testSetup(t)
-	p, err := sim.Launch("test", "user", "shell", []string{"-l"}, nil)
+	p, err := sim.Login("test", "user")
 	if err != nil {
 		t.Fatal(err)
 	}
