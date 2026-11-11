@@ -119,9 +119,10 @@ func (s datumSet) contains(d process.Datum) bool {
 }
 
 // KeyName is the name a front end uses for a keystroke: "Enter",
-// "Backspace", "^C" (Ctrl+C), or the character itself. Apart from ^C it
-// matches DOM KeyboardEvent.key, so the web build sends typed and
-// tapped keys the same way (it maps Ctrl+C to "^C" itself).
+// "Backspace", "^C" (Ctrl+C), "^L" (Ctrl+L, clear the screen), or the
+// character itself. Apart from the Ctrl keys it matches DOM
+// KeyboardEvent.key, so the web build sends typed and tapped keys the
+// same way (it maps Ctrl+C and Ctrl+L itself).
 func KeyName(d process.Datum) string {
 	switch d := d.(type) {
 	case process.Chars:
@@ -132,6 +133,8 @@ func KeyName(d process.Datum) string {
 			return "Enter"
 		case process.TermBackspace:
 			return "Backspace"
+		case process.TermClear:
+			return "^L"
 		}
 	case process.Signal:
 		if d == process.SigInt {
@@ -151,6 +154,8 @@ func KeyDatum(name string) process.Datum {
 		return process.TermBackspace
 	case "^C":
 		return process.SigInt
+	case "^L":
+		return process.TermClear
 	}
 	if utf8.RuneCountInString(name) == 1 {
 		return process.Chars(name)

@@ -76,6 +76,12 @@
                     e.preventDefault();
                     return;
                 }
+                // Ctrl+L clears the screen, as in the CLI.
+                if (e.ctrlKey && !e.altKey && !e.metaKey && e.key === "l") {
+                    show(nixyKeystroke("^L"));
+                    e.preventDefault();
+                    return;
+                }
                 if (e.ctrlKey || e.altKey || e.metaKey) {
                     return;
                 }

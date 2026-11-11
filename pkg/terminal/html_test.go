@@ -190,6 +190,10 @@ func TestKeyNameRoundTrip(t *testing.T) {
 			t.Errorf("KeyDatum(KeyName(%v)) = %v", d, back)
 		}
 	}
+	// Ctrl+L isn't drawn, but both front ends send it.
+	if KeyDatum(KeyName(process.TermClear)) != process.Datum(process.TermClear) {
+		t.Error("Ctrl+L doesn't round-trip")
+	}
 	for _, name := range []string{"", "Tab", "ArrowUp", "Shift"} {
 		if d := KeyDatum(name); d != nil {
 			t.Errorf("KeyDatum(%q) = %v, want nil", name, d)
