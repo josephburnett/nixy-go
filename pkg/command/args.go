@@ -124,7 +124,7 @@ func (p Positional) validate(ctx simulation.ArgContext, partial string) simulati
 		return simulation.Suggestion{Chars: chars}
 	}
 	complete := p.enough(k + 1)
-	if next := p.arg(k + 1); complete || (next != nil && live(next(ctx, append(args, cur), ""))) {
+	if next := p.arg(k + 1); complete || (next != nil && next(ctx, append(args, cur), "").Live()) {
 		chars = append(chars, ' ')
 	}
 	return simulation.Suggestion{Chars: chars, Complete: complete}
@@ -171,7 +171,7 @@ func (p Positional) moreOptions(used string) bool {
 // options are given: it can run, or its first argument can be typed.
 func (p Positional) afterOptions(ctx simulation.ArgContext) bool {
 	a := p.arg(0)
-	return p.enough(0) || (a != nil && live(a(ctx, nil, "")))
+	return p.enough(0) || (a != nil && a(ctx, nil, "").Live())
 }
 
 // validateOption validates the option word being typed.
@@ -215,12 +215,6 @@ func (p Positional) enough(n int) bool {
 	return n >= p.Required
 }
 
-// live reports whether a suggestion leads anywhere: it is complete or
-// has a key to type next.
-func live(s simulation.Suggestion) bool {
-	return s.Complete || len(s.Chars) > 0
-}
-
 // ValidCommand validates "NAME ARGS..." for a choice of names, each with
 // its own args validator. It serves the shell's command position, sudo's
 // command argument and subcommands (apt install, nx quest). A name is
@@ -251,7 +245,7 @@ func ValidCommand(
 			continue
 		}
 		s := va(ctx, "")
-		if !live(s) {
+		if !s.Live() {
 			continue
 		}
 		if len(n) > len(name) {

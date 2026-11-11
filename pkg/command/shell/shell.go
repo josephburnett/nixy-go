@@ -510,7 +510,7 @@ func (s *shell) Next() []process.Datum {
 		valid = append(valid, process.TermEnter)
 		if printsOut {
 			valid = append(valid, process.Chars("|"))
-			if live(redirectTarget(ctx, p, "")) {
+			if redirectTarget(ctx, p, "").Live() {
 				valid = append(valid, process.Chars(">"))
 			}
 		}
@@ -553,8 +553,6 @@ func redirectTarget(ctx simulation.ArgContext, p command.Pipeline, tok string) s
 	}
 	return command.RedirectTarget(ctx, operands, tok)
 }
-
-func live(s simulation.Suggestion) bool { return s.Complete || len(s.Chars) > 0 }
 
 // openRedirect opens the target of `>` (truncating it) or `>>` as the
 // shell's owner, creating it if need be, before the command runs.

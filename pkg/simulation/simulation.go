@@ -100,6 +100,10 @@ type Suggestion struct {
 	Writes   bool
 }
 
+// Live reports whether the suggestion leads anywhere: the command can
+// run, or there is a key to type next.
+func (s Suggestion) Live() bool { return s.Complete || len(s.Chars) > 0 }
+
 // ArgContext is what a validator sees besides the typed text.
 type ArgContext struct {
 	Sim      *S
