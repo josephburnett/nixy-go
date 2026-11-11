@@ -13,6 +13,8 @@ import (
 type Game struct {
 	Sim     *simulation.S
 	Manager *Manager
+
+	panicked bool // set by NxPanic, cleared by TakePanic
 }
 
 // NewGame creates a game with the given quests and machines. The username
@@ -102,8 +104,18 @@ func (g *Game) NxLog() string {
 	return sb.String()
 }
 
-// NxPanic disconnects to laptop and ensures /bin/apt on all machines.
+// TakePanic reports whether nx panic ran since the last call. The session
+// uses it to disconnect the player back to a fresh laptop shell.
+func (g *Game) TakePanic() bool {
+	p := g.panicked
+	g.panicked = false
+	return p
+}
+
+// NxPanic restores /bin/apt on all machines and flags the session to
+// disconnect the player back to the laptop (see TakePanic).
 func (g *Game) NxPanic() string {
+	g.panicked = true
 	// Ensure /bin/apt exists on all booted machines
 	for _, e := range g.Manager.Machines().AllEntries() {
 		if !g.Manager.Machines().IsBooted(e.Hostname) {

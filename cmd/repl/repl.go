@@ -118,10 +118,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if m.sess.HandleKeystroke(datum, m.terminal) {
-			m.quitting = true
-			return m, tea.Quit
-		}
+		m.sess.HandleKeystroke(datum, m.terminal)
 		m.recorder.Push(m.sess, m.terminal, datum)
 	}
 

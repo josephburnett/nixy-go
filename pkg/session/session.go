@@ -29,12 +29,20 @@ const (
 
 // Session holds session-wide state. In ModeLogin, only Username is being
 // built; Game/Guide/Shell are nil. In ModePlaying they are all set.
+//
+// Logging out (exit on the laptop) returns to ModeLogin. Each username
+// keeps its own game, so logging back in resumes where that player left
+// off, like logging back into a machine that kept running.
 type Session struct {
 	Mode     Mode
 	Username string
 	Game     *game.Game
 	Guide    *guide.G
 	Shell    ShellInfo
+
+	games    map[string]*game.Game
+	lastUser string    // who logged in last, to tell a resume from a switch
+	loginSh  process.P // the laptop login shell; Guide wraps it
 }
 
 const (
@@ -63,12 +71,15 @@ func (s *Session) InitTerminal(t *terminal.T) {
 	}
 }
 
-// HandleKeystroke routes the keystroke based on session mode.
-func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
+// HandleKeystroke routes the keystroke based on session mode. The session
+// never ends on its own: logging out returns to the login prompt, and
+// quitting is up to the front end (double Ctrl+C in the CLI).
+func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) {
 	if s.Mode == ModeLogin {
-		return s.handleLoginKeystroke(datum, t)
+		s.handleLoginKeystroke(datum, t)
+		return
 	}
-	return s.handlePlayingKeystroke(datum, t)
+	s.handlePlayingKeystroke(datum, t)
 }
 
 // --- login mode ---------------------------------------------------------
@@ -76,7 +87,7 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) bool {
 // handleLoginKeystroke validates the keystroke against the login rules
 // (lowercase a-z, length 1-8, Backspace when non-empty, Enter when valid)
 // and bootstraps the game on a successful Enter.
-func (s *Session) handleLoginKeystroke(datum process.Datum, t *terminal.T) bool {
+func (s *Session) handleLoginKeystroke(datum process.Datum, t *terminal.T) {
 	t.Notify("")
 	switch d := datum.(type) {
 	case process.Chars:
@@ -91,18 +102,19 @@ func (s *Session) handleLoginKeystroke(datum process.Datum, t *terminal.T) bool 
 			}
 		case process.TermEnter:
 			if isValidUsername(t.State.Line) {
-				s.Username = t.State.Line
-				t.State.Line = ""
-				if err := s.bootstrapGame(t); err != nil {
+				name := t.State.Line
+				// Echo the login line into the scrollback like a real
+				// terminal does.
+				t.Write(process.Data{process.TermEnter})
+				if err := s.login(name, t); err != nil {
 					t.Notify("login error: " + err.Error())
-					return false
+					s.updateLoginTerminal(t)
 				}
-				return false
+				return
 			}
 		}
 	}
 	s.updateLoginTerminal(t)
-	return false
 }
 
 func (s *Session) updateLoginTerminal(t *terminal.T) {
@@ -168,9 +180,82 @@ func loginThought(buf string) string {
 	return "I can keep typing or press enter when ready"
 }
 
-// bootstrapGame initializes the game world after a successful login and
-// switches the session to ModePlaying.
-func (s *Session) bootstrapGame(t *terminal.T) error {
+// login starts a login shell on the laptop for name, resuming that
+// player's game if they have one, and switches to ModePlaying.
+//
+// A different username gets its own game rather than a new home in the
+// current one: quest progress and Nixy's dialog belong to one player, and
+// sharing them would hand the second player the first one's achievements.
+func (s *Session) login(name string, t *terminal.T) error {
+	if s.games == nil {
+		s.games = map[string]*game.Game{}
+	}
+	g, resumed := s.games[name]
+	if !resumed {
+		var err error
+		g, err = newGame(name)
+		if err != nil {
+			return err
+		}
+		s.games[name] = g
+	}
+	if name != s.lastUser {
+		// Someone else's conversation with Nixy shouldn't linger on screen.
+		t.State.Dialog = nil
+	}
+	s.lastUser = name
+	shellpkg.DefaultNxHandler = g
+	s.Username = name
+	s.Game = g
+	if err := s.startLoginShell(); err != nil {
+		return err
+	}
+	s.Mode = ModePlaying
+
+	// Drain pending dialog (e.g. the first quest's greeting).
+	dialog := g.Manager.Dialog.Drain()
+	if len(dialog) > 0 {
+		t.SetDialog(dialog)
+	}
+	s.updatePlayingTerminal(t)
+	return nil
+}
+
+// startLoginShell launches a fresh shell on the laptop for the current
+// user, replacing (and killing) any previous one.
+func (s *Session) startLoginShell() error {
+	if s.loginSh != nil {
+		s.loginSh.Kill()
+	}
+	proc, err := s.Game.Sim.Launch("laptop", s.Username, "shell", nil, []string{})
+	if err != nil {
+		return err
+	}
+	s.loginSh = proc
+	s.Guide = guide.New(proc)
+	s.Shell = proc.(ShellInfo)
+	return nil
+}
+
+// logout ends the login shell and returns to the login prompt. The game
+// stays in s.games for when this user logs back in.
+func (s *Session) logout(t *terminal.T) {
+	t.Write(process.Data{process.Chars("logout\n")})
+	if s.loginSh != nil {
+		s.loginSh.Kill()
+	}
+	s.loginSh = nil
+	s.Mode = ModeLogin
+	s.Username = ""
+	s.Game = nil
+	s.Guide = nil
+	s.Shell = nil
+	t.State.Line = ""
+	s.updateLoginTerminal(t)
+}
+
+// newGame builds a fresh world and quest line for username.
+func newGame(username string) (*game.Game, error) {
 	allQuests := []game.Quest{
 		&quests.Connect{},
 		&quests.Orientation{},
@@ -184,32 +269,12 @@ func (s *Session) bootstrapGame(t *terminal.T) error {
 		{Hostname: "nixy", Filesystem: worlds.Nixy},
 		{Hostname: "server", Filesystem: worlds.Server, UnlockedBy: "server-unlocked"},
 	}
-	g, err := game.NewGame(allQuests, machines, s.Username)
-	if err != nil {
-		return err
-	}
-	shellpkg.DefaultNxHandler = g
-	proc, err := g.Sim.Launch("laptop", s.Username, "shell", nil, []string{})
-	if err != nil {
-		return err
-	}
-	s.Game = g
-	s.Guide = guide.New(proc)
-	s.Shell = proc.(ShellInfo)
-	s.Mode = ModePlaying
-
-	// Drain initial dialog (e.g. first quest activation greeting).
-	dialog := g.Manager.Dialog.Drain()
-	if len(dialog) > 0 {
-		t.SetDialog(dialog)
-	}
-	s.updatePlayingTerminal(t)
-	return nil
+	return game.NewGame(allQuests, machines, username)
 }
 
 // --- playing mode -------------------------------------------------------
 
-func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) bool {
+func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 	t.SetPrompt(s.promptFor(s.Shell.Hostname(), s.Shell.CurrentDirectory()))
 
 	// Capture command + host before Enter dispatches — ssh nixy must be
@@ -227,14 +292,17 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) boo
 	_, _ = s.Guide.Stdin(process.Data{datum})
 	t.Notify("")
 
+	loggedOut := false
 	for range 50 {
 		out, eof, _ := s.Guide.Stdout()
-		if eof {
-			return true
-		}
 		if len(out) > 0 {
 			t.Write(out)
-		} else {
+		}
+		if eof {
+			loggedOut = true
+			break
+		}
+		if len(out) == 0 {
 			break
 		}
 	}
@@ -246,6 +314,16 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) boo
 		} else {
 			break
 		}
+	}
+
+	// nx panic disconnects the player back to the laptop: every nested
+	// ssh shell goes, and so does the laptop shell (which the panic may
+	// have exited), replaced by a fresh one. It never logs the player out.
+	if s.Game.TakePanic() {
+		if err := s.startLoginShell(); err != nil {
+			t.Notify("nx panic: " + err.Error())
+		}
+		loggedOut = false
 	}
 
 	if _, ok := datum.(process.TermCode); ok && datum == process.TermEnter {
@@ -265,8 +343,11 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) boo
 		}
 	}
 
+	if loggedOut {
+		s.logout(t)
+		return
+	}
 	s.updatePlayingTerminal(t)
-	return false
 }
 
 func (s *Session) updatePlayingTerminal(t *terminal.T) {

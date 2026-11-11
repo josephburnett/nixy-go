@@ -25,13 +25,9 @@ import (
 func typeLine(t *testing.T, s *Session, term *terminal.T, line string) {
 	t.Helper()
 	for _, r := range line {
-		if s.HandleKeystroke(process.Chars(string(r)), term) {
-			t.Fatalf("unexpected EOF while typing %q", line)
-		}
+		s.HandleKeystroke(process.Chars(string(r)), term)
 	}
-	if s.HandleKeystroke(process.TermEnter, term) {
-		t.Fatalf("unexpected EOF on Enter for %q", line)
-	}
+	s.HandleKeystroke(process.TermEnter, term)
 }
 
 // loginAs drives the session through the login phase so the rest of the

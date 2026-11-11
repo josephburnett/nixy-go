@@ -26,6 +26,9 @@ make test     # run the test suite
 make fuzz     # run the quest and end-to-end fuzz tests 10x each
 ```
 
+`exit` on the laptop logs you out to the `login:` prompt. Log in with
+the same name to pick up where you left off.
+
 Needs Go 1.24+ and, for `make serve`, Python 3.
 
 ## Code

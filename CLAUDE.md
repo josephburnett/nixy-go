@@ -166,6 +166,11 @@ suite for both.
 - `cmd/web/` — WASM via `syscall/js`. Exports `nixyInit`,
   `nixyKeystroke`, `nixyResize`, `nixyDumpState` to JavaScript.
 - Both use `pkg/session/` for shared game/guide/shell initialization.
+- The session never ends itself. `exit` on the laptop logs out to the
+  `login:` prompt; each username keeps its own game, so logging back in
+  resumes it. `nx panic` replaces the whole shell stack with a fresh
+  laptop shell (never a logout). Only the CLI's double Ctrl+C quits.
+  The keyboard must never be empty — the web build has no other input.
 
 ### Key packages
 

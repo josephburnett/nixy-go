@@ -245,7 +245,8 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 		sess.InitTerminal(term)
 		typeCommand(t, sess, term, "user")
 		tap := &stderrTap{P: sess.Shell.(process.P)}
-		sess.Guide = guide.New(tap)
+		tapped := guide.New(tap)
+		sess.Guide = tapped
 
 		for step := 0; step < steps; step++ {
 			valid := term.State.ValidKeys
@@ -262,20 +263,25 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 			if !containsKey(valid, d) {
 				continue // random play can break a plan (e.g. delete its file), leaving a stale hint
 			}
-			ended := false
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
 						t.Fatalf("seed %d step %d: panic on %q at %q: %v", seed, step, keyName(d), line, r)
 					}
 				}()
-				ended = sess.HandleKeystroke(d, term)
+				sess.HandleKeystroke(d, term)
 			}()
 			if msg := tap.take(); msg != "" && !strings.Contains(msg, "permission denied") {
 				t.Fatalf("seed %d step %d: %q + %s wrote %q", seed, step, line, keyName(d), msg)
 			}
-			if ended {
-				break // exit or nx panic on the laptop ends the session
+			if sess.Mode != ModePlaying {
+				break // exit on the laptop logs out
+			}
+			if sess.Guide != tapped {
+				// nx panic replaced the shell stack; keep watching stderr.
+				tap = &stderrTap{P: sess.Shell.(process.P)}
+				tapped = guide.New(tap)
+				sess.Guide = tapped
 			}
 		}
 	}
