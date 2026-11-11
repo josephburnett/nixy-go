@@ -9,16 +9,8 @@ func Laptop() *file.F {
 		Files: map[string]*file.F{
 			"bin": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
-				Files: map[string]*file.F{
-					"ssh": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "ssh"},
-					"ls": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "ls"},
-					"cat": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "cat"},
-					"pwd": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "pwd"},
-				}},
+				Files: programs("ssh", "ls", "cat", "pwd",
+					"whoami", "echo", "mkdir", "man", "ps", "kill")},
 			"etc": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
 				Files: map[string]*file.F{

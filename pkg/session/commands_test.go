@@ -35,10 +35,13 @@ func init() {
 
 // consequence reports whether stderr is empty or a real consequence of
 // a well-typed command: a permission error, from files or from kill on
-// someone else's process.
+// someone else's process, or the shell reporting a job the player
+// killed.
 func consequence(stderr string) bool {
 	return stderr == "" || strings.Contains(stderr, "Permission denied") ||
-		strings.Contains(stderr, "Operation not permitted")
+		strings.Contains(stderr, "Operation not permitted") ||
+		// The player killed their own job (or the shell an ssh runs).
+		stderr == "Killed\n" || stderr == "Terminated\n"
 }
 
 // A pipeline that works quietly before printing finishes within the

@@ -9,20 +9,9 @@ func Server() *file.F {
 		Files: map[string]*file.F{
 			"bin": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
-				Files: map[string]*file.F{
-					"ls": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "ls"},
-					"cat": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "cat"},
-					"pwd": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "pwd"},
-					// No touch: the Permissions quest installs it with
-					// sudo apt.
-					"sudo": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "sudo"},
-					"apt": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "apt"},
-				}},
+				// A bare box: no touch, which the Permissions quest
+				// installs with sudo apt.
+				Files: programs("ls", "cat", "pwd", "sudo", "apt", "whoami", "man")},
 			// /etc is world-readable, as in real Unix, but only root
 			// can write to it: that's what the Permissions quest's sudo
 			// is for.

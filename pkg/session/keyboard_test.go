@@ -364,7 +364,13 @@ func (w *walkWorld) checkEnter(t *testing.T, line string, maxPolls int) {
 		}
 	}
 	drain(g)
-	_ = g.Stdin(process.Data{process.TermEnter})
+	if err := g.Stdin(process.Data{process.TermEnter}); err != nil {
+		if strings.Contains(line, "kill ") {
+			return // as above: the PID typed is a prefix of a live one
+		}
+		t.Errorf("%q + Enter is rejected on a fresh shell", line)
+		return
+	}
 
 	var stderr strings.Builder
 	interrupted := false

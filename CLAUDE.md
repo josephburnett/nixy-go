@@ -164,10 +164,14 @@ Concrete implications (these all flow from this single principle):
 - **Installing software takes root.** `apt install` writes `/bin` as
   whoever runs it, so a normal user gets real apt's lock error ("are
   you root?") and `sudo apt install` works; installed files are owned
-  by the installer. That is why Nixy ships grep, rm and touch (and
-  sudo, for Lockdown): the early quests need no apt, and apt arrives
-  with sudo in the Permissions quest (the server lacks touch; the planner has the
-  player try `apt install touch`, read the error, then use sudo).
+  by the installer. Worlds ship the everyday basics real systems have
+  everywhere (`pkg/game/worlds`): ls, cat, pwd, whoami and man on
+  every machine, plus echo, mkdir, ps and kill on the laptop and nixy.
+  Nixy also ships grep, rm and touch (and sudo, for Lockdown) so the
+  early quests need no apt; apt arrives with sudo in the Permissions
+  quest (the server is a bare box that lacks touch; the planner has
+  the player try `apt install touch`, read the error, then use sudo),
+  and later quests install what they teach (wc, yes) through `need`.
   Files created under sudo are owned by root.
 - **Permissions are checked one way.** The model has three levels
   (None/Read/Write); on a folder, Read means both listing and search
@@ -406,7 +410,8 @@ Fuzz and liveness tests with different goals:
   panics; each seed starts random play at a different quest and now
   and then types lines that break things (`sudo rm /bin/sudo`, delete
   a quest's file). Fails on panics, an empty keyboard, stderr other
-  than permission denied, or a hint that isn't a valid key. Then the
+  than permission denied (or `Killed` for a job the player killed),
+  or a hint that isn't a valid key. Then the
   liveness check: from wherever random play left the world, following
   only the hints (`followHints`) must finish every quest within
   `hintFinishKeys` keys, never meeting an invalid hint, a plan without

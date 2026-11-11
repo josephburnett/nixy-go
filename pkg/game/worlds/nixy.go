@@ -9,28 +9,12 @@ func Nixy() *file.F {
 		Files: map[string]*file.F{
 			"bin": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
-				Files: map[string]*file.F{
-					"ls": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "ls"},
-					"cat": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "cat"},
-					"pwd": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "pwd"},
-					"apt": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "apt"},
-					// Shipped, so the early quests need no apt: installing
-					// software takes root, which the Permissions quest
-					// teaches.
-					"grep": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "grep"},
-					"rm": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "rm"},
-					"touch": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "touch"},
-					// For the Lockdown quest, once Nixy locks her home.
-					"sudo": {Type: file.Binary, Owner: file.OwnerRoot,
-						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "sudo"},
-				}},
+				// grep, rm and touch ship so the early quests need no apt:
+				// installing software takes root, which the Permissions
+				// quest teaches. sudo is for Lockdown, once Nixy locks
+				// her home. wc and yes come later, from apt.
+				Files: programs("ls", "cat", "pwd", "apt", "grep", "rm", "touch", "sudo",
+					"whoami", "echo", "mkdir", "man", "ps", "kill")},
 			"etc": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
 				Files: map[string]*file.F{
