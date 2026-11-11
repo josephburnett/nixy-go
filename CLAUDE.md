@@ -24,103 +24,79 @@ This is what makes exploration safe. A beginner mashing keys learns,
 not panics.
 
 Implementation:
-- Every `simulation.Binary` must have a `ValidArgs` (`Register` panics
+- Every `simulation.Binary` has a `ValidArgs` (`Register` panics
   without one). It is the single answer to "what may be typed after
-  this command name": which chars come next (`Suggestion.Chars`) and
-  whether the line can run as typed (`Suggestion.Complete`). There is
-  no "anything goes" fallback.
+  this command name": a `Suggestion` with the chars that come next,
+  whether the line can run as typed (`Complete`), and whether it then
+  prints to stdout (`Writes`). There is no "anything goes" fallback.
   - Zero-arg commands answer Complete for `""` (`ls`, `pwd`). NOT
-    standalone cat or grep — those hang without an upstream pipe
-    because the game has no terminal stdin.
+    standalone cat or grep: those would hang, since the game has no
+    terminal stdin.
   - A pipe connects a command that prints to one that reads stdin.
-    `Suggestion.Writes` (from `Positional.Writes`: ls, cat, grep, pwd,
-    apt list) gates `|`; commands that only change files (rm, mv,
+    `Writes` gates `|`; commands that only change files (rm, mv,
     touch, apt install) print nothing to pipe, so a pipeline never
     changes the world a later segment was validated against. Under
-    `ArgContext.InPipe` only `ReadsStdin` commands lead anywhere, and
-    they take exactly `PipeRequired` args (`ls | cat`, `ls | grep
-    target`; not `ls | ls` or `ls | cat file`, which run but connect
-    nothing).
+    `ArgContext.InPipe` only `ReadsStdin` commands lead anywhere, with
+    exactly `PipeRequired` args (`ls | cat`, `ls | grep target`; not
+    `ls | ls`, which runs but connects nothing).
   - `Interactive` binaries (ssh, shell) take over the terminal: they
     are kept out of pipelines and out of sudo.
 - Validators are built from parts in `pkg/command/args.go`:
-  - `Positional` — positional `Arg`s, how many are required standalone
-    and in a pipe (`ReadsStdin`, `PipeRequired`), and whether the
-    command prints (`Writes`). It offers the space
-    between args and the trailing space before `|`. `NoArgs` is the
-    empty one. `Variadic` repeats the last Arg (`echo WORD...`).
-  - Options are `Positional.Flags`: single-character flags, each at
-    most once, alone or bundled, before the first argument (`ls -a
-    DIR`, `ps -e`, `kill -9 PID`). The launch side reads them with
-    `command.Options(args)`, which splits them off the same way. Add
-    a flag to a command this way, never by parsing `-x` ad hoc.
-  - `ValidCommand` — "NAME ARGS" over a set of names, each with its
-    own validator. Used for the shell's command position, sudo (any
-    non-interactive /bin command, then that command's validator) and
-    `Subcommands` (apt install|list, nx quest|log|panic). It offers a
-    name only if its args can lead somewhere.
+  - `Positional`: positional `Arg`s, how many are required standalone
+    and in a pipe, whether it `Writes`, `Variadic` (repeat the last
+    Arg: `echo WORD...`), and `Flags`: single-letter options, each at
+    most once, alone or bundled, before the first argument (`ls -a`,
+    `kill -9 PID`). Commands read them back with `command.Options`;
+    never parse `-x` ad hoc. `NoArgs` is the empty Positional.
+  - `ValidCommand`: "NAME ARGS" over a set of names, each with its own
+    validator, offering a name only if its args can lead somewhere.
+    It serves the shell's command position, sudo, and `Subcommands`
+    (apt install|list, nx quest|log|panic).
   - Path args (`FilePath`, `AnyPath`, `CdTarget`, `NewPath`,
-    `NewName`, `EmptyDir`, `MoveDest`) offer only keys that lead to an
-    accepted path: a folder is offered for descent only if something
-    accepted lies below. File args never complete on folders (`cat .`,
-    `rm ..`). `NewName` (mkdir) must not exist yet; `EmptyDir` (rmdir)
-    is an empty folder the user can read.
-  - Free-form words (new names, grep patterns, `Word` for echo) use
-    portable filename characters only — nothing a real shell would
-    interpret (`|`, `>`, `*`), no leading `-` — and only ones on the
-    on-screen keyboard: lowercase, digits, `.` and `-` (no capitals
-    or `_`, which have no key).
+    `NewName`, `EmptyDir`, `MoveDest`, `RedirectTarget`) share
+    `pathArg`: they offer only keys that lead to an accepted path, and
+    a folder only if something accepted lies below. File args never
+    complete on folders (`cat .`).
+  - Free-form words (`Word`, `Pattern`, new names) use portable
+    filename characters a real shell won't interpret (no `|`, `>`,
+    `*`), no leading `-`, and only keys on the on-screen keyboard.
 - **Every valid key is on the on-screen keyboard.** The web build on a
-  phone has no other input, so a key that's valid but has no key on
-  screen is a dead end for a tap-only player. `terminal.OnScreen(d)`
-  says whether a key is drawn (digits, letters, `>`, `~`, `^C`, the
-  special row); the session tests' `pressAccepted` and the random fuzz
-  fail if any valid key isn't, which covers every hint and every
-  planned command too.
+  phone has no other input. `terminal.OnScreen(d)` says whether a key
+  is drawn (digits, letters, `>`, `~`, `^C`, the special row); the
+  session tests' `pressAccepted` and the random fuzz fail on a valid
+  key that isn't, which covers every hint and planned command too.
 - Commands are found one way: `sim.LookupBinary` via `/bin/<name>`,
-  for running, validating and sudo alike. It looks up as a user
-  (root under sudo) with the same permission checks as any file:
-  running needs Read on the binary. Builtins (cd, exit, help, nx) have
-  validators in `shell.builtinArgs` and can't be piped.
-- `shell.Next()` is pipe-aware: it splits on `|` and validates only
-  the segment after the last pipe. It adds just Enter and `|` (when
-  the segment is Complete and pipeable) and the optional space after
-  `|`. A pipeline finds every segment's binary before launching any.
-- Output redirection (`>` replaces, `>>` appends) is the shell's, like
-  `|`: `command.Parse` puts it on the segment (`Segment.Redirect`,
-  partial input included) and the args end at the operator. `>` is
-  offered exactly where `|` is (a complete command that `Writes`),
-  only on the last segment, then a second `>`, one optional space and
-  the target (`command.RedirectTarget`): a text file or a new name in
-  an existing folder, validated as the shell's owner, never a folder
-  or a file the line names as an operand (`cat f > f` would read an
-  emptied file; GNU cat refuses it). After the target only Enter.
+  for running, validating and sudo alike, as a user (root under sudo)
+  with the same permission checks as any file. Builtins (cd, exit,
+  help, nx) have validators in `shell.builtinArgs` and can't be piped.
+- `shell.Next()` is pipe-aware: `command.Parse` splits the line on
+  `|`, and only the last segment is validated. The shell adds Enter
+  and `|` (when the segment is Complete and pipeable), the optional
+  space after `|`, and `>`. A pipeline finds every segment's binary
+  before launching any.
+- Redirection (`>` replaces, `>>` appends) is offered exactly where
+  `|` is, only on the last segment; then a second `>`, one optional
+  space and the target (`command.RedirectTarget`: a text file or a new
+  name in an existing folder, as the shell's owner, never a file the
+  line names as an operand: `cat f > f` would read an emptied file).
 - A key the keyboard doesn't offer does nothing at all: the session
-  returns before recording, running or redrawing anything
-  (`TestFuzzE2ERejectedKeys` presses such keys during random play and
-  checks that nothing observable changes).
+  returns before recording, running or redrawing anything.
 - Permission denied is not a principle-1 violation: it is a real
-  consequence (principle 2) and the guards allow it, as they allow
-  kill's "Operation not permitted" on someone else's process (the
-  same lesson for processes). Usage errors, missing paths and wrong
-  file types are bugs.
+  consequence (principle 2), as is kill's "Operation not permitted" on
+  someone else's process. Usage errors, missing paths and wrong file
+  types are bugs.
 - Guards:
   - `TestKeyboardWalk_NoMistakes` (`pkg/session/`) walks the keyboard
-    (`|` included) over the real worlds at several world states and
-    checks every reachable state: never a dead end (some key besides
-    Backspace), every Enter terminates (by itself, or a command that
-    never ends, like `yes`, by Ctrl+C, which must then be offered)
-    with no stderr but permission denied, and a pipeline leaves every
-    file as it was (except a redirect's target).
-    Reaching each scenario types the planner's commands key by key.
+    (`|` and `>` included) over the real worlds in several states
+    (`keyboardScenarios`) and checks every reachable state: never a
+    dead end, every Enter terminates (or, for a command that never
+    ends, Ctrl+C is offered and ends it) with no stderr but permission
+    errors, and a pipeline leaves every file as it was.
   - `TestShellNextInvariant_EveryEnterStateTerminates` does the same on
-    a small fixture with every command; `TestShellNextInvariant_Lines`
-    pins whole lines per bug class.
-  - The hint-guided fuzz can't catch these alone: it follows the
-    planner's exact output, never exploring partial-input states.
-- Known gaps: `ssh` to a host listed in /etc/hosts but not booted
-  says "connection refused" (a real consequence; no world does that
-  today, and the walk would flag it).
+    a small fixture with every command (`testBinaries`);
+    `TestShellNextInvariant_Lines` pins whole lines per bug class.
+- Known gaps: `ssh` to a host in /etc/hosts that isn't booted says
+  "connection refused" (no world does that today).
 
 ### 2. Real Unix, not a toy (simulation layer)
 
@@ -132,131 +108,85 @@ minimal — implementations of the real concepts. When the player learns
 Concrete implications (these all flow from this single principle):
 - **Identity is real.** The username chosen at login is the player's
   account on every machine. The prompt (`<user>@<host>:<path>>`) is
-  ground truth — it matches `whoami`, owns the files the player
-  creates, and is what `CanWrite` checks against. Existing accounts
-  (root, nixy: `game.Accounts`, every owner in the world definitions)
-  can't be taken at login: real login would ask for their password,
-  and the game has none, so the login keyboard never offers Enter on
-  one.
-- **Per-user homes.** `MachineRegistry.bootMachine` provisions
-  `/home/<username>` on every booted machine. Other users (Nixy) have
-  their own homes. World definitions don't ship a placeholder
-  `/home/user` — each player gets a real one.
-- **$HOME is real.** A shell's home comes from its owner
-  (`file.Home`: `/home/<user>`, `/root` for root). Login shells
-  (`shell -l`: the laptop login and ssh) start there, falling back to
-  `/` if it can't be entered; bare `cd` goes there, and like `cd DIR`
-  is offered only when it would move. The prompt shows home as `~`,
-  like bash's `\w`. The shell expands `~` and `~/...` in every arg
-  before the command runs (`file.ExpandHome`; under sudo it is still
-  the player's home), and path validators offer `~` at the start of a
-  path through the same function, so typing and running agree. The
-  `~` key sits at the end of the keyboard's bottom letter row.
+  ground truth: it matches `whoami`, owns the files the player
+  creates, and is what `CanWrite` checks. Existing accounts (root,
+  nixy: `game.Accounts`, every owner in the world definitions) can't
+  be taken at login, as there are no passwords to prove them.
+- **Homes and $HOME are real.** `MachineRegistry.bootMachine`
+  provisions `/home/<username>` on every machine as it boots; worlds
+  ship no placeholder home. A shell's home is its owner's
+  (`file.Home`; `/root` for root). Login shells (`sim.Login`: the
+  laptop login and ssh; `-sh` in ps) start there, or in `/` if it
+  can't be entered; bare `cd` goes there. The prompt shows it as `~`.
+  The shell expands `~` and `~/...` in every arg before the command
+  runs (`file.ExpandHome`; under sudo it is still the player's home),
+  and path validators offer `~` through the same function.
 - **Permissions matter.** Don't work around `CanWrite`/`CanRead` to
-  make a quest succeed. If the player can't do something, that's a
-  teaching opportunity — fix the world (perms, ownership) or the
-  quest. The Permissions quest specifically teaches `sudo`; preserve
-  the model it depends on. `/home/nixy` ships `Common: Write` on
-  purpose — Nixy is loose with perms so early quests work without
-  `sudo` — and the Lockdown quest (after Permissions) tightens it to
-  Read: the player's `rm old.txt` there is denied (deleting writes
-  the folder) and `sudo rm old.txt` is the way back in.
+  make a quest succeed: fix the world or the quest. `/home/nixy` ships
+  `Common: Write` on purpose (Nixy is loose with perms, so early
+  quests need no sudo); the Lockdown quest tightens it to Read, and
+  `sudo rm old.txt` becomes the way back in.
+- **Permissions are checked one way.** Three levels (None/Read/Write);
+  on a folder, Read means listing and search (Unix's r and x), Write
+  adds creating and deleting entries. `file.Lookup(path, user)` walks
+  a path as the kernel does: every folder passed through must be
+  readable. Commands use it (or `LookupDir`, `ReadFile`, `CreateFile`,
+  `DeleteFile`); `Navigate` ignores permissions and is for the game
+  layer only. Root passes every check. Completion respects the same
+  rules: an unreadable folder can be named (`ls /root` → permission
+  denied, a real lesson) but nothing inside it is offered.
 - **Installing software takes root.** `apt install` writes `/bin` as
   whoever runs it, so a normal user gets real apt's lock error ("are
-  you root?") and `sudo apt install` works; installed files are owned
-  by the installer. Worlds ship the everyday basics real systems have
-  everywhere (`pkg/game/worlds`): ls, cat, pwd, whoami and man on
-  every machine, plus echo, mkdir, ps and kill on the laptop and nixy.
-  Nixy also ships grep, rm and touch (and sudo, for Lockdown) so the
-  early quests need no apt; apt arrives with sudo in the Permissions
-  quest (the server is a bare box that lacks touch; the planner has
-  the player try `apt install touch`, read the error, then use sudo),
-  and later quests install what they teach (wc, yes) through `need`.
-  Files created under sudo are owned by root.
-- **Permissions are checked one way.** The model has three levels
-  (None/Read/Write); on a folder, Read means both listing and search
-  (real Unix's r and x), Write adds creating and deleting entries.
-  `file.Lookup(path, user)` walks a path as the kernel does: every
-  folder passed through must be readable. Commands go through it (or
-  `LookupDir`, `ReadFile`, `CreateFile`, `DeleteFile`, which use it);
-  `Navigate` ignores permissions and is for the game layer only (quest
-  checks, world setup). Root passes every check.
-- **Completion respects permissions.** Validators see `ArgContext.User`
-  (root under sudo). A folder the user can't read can still be named
-  (`ls /root`, `cd /root` → permission denied, a real lesson), but
-  nothing inside it is offered, so the keyboard never steers into an
-  unreadable tree or leaks its names.
-- **Errors look like Unix errors.** File errors are `file.Err*`
-  sentinels carrying strerror text; `command.Fail` prints them the way
-  coreutils does (`cat: foo: No such file or directory`, `rm: cannot
-  remove 'x': Permission denied`). Stderr surfaces normally, exit vs.
-  EOF behave correctly, etc.
+  you root?"). Worlds (`pkg/game/worlds`) ship the everyday basics;
+  the rest are a `sudo apt install` away, which is where quests teach
+  them. Files created under sudo are owned by root.
+- **Errors and output look like Unix.** File errors are `file.Err*`
+  sentinels carrying strerror text; `command.Fail` prints them as
+  coreutils does (`cat: foo: No such file or directory`). Exit
+  statuses are real: 0 success, 1 failure (grep: 1 no match, 2
+  trouble), 126 not allowed to run, 127 not found, 128+n killed by
+  signal n. Commands print data as it is (`cat` adds no newline);
+  output that doesn't end its line is ended before the next prompt,
+  as zsh does. World text files end in a newline
+  (`TestTextFilesEndInNewline`), so `wc -l` agrees with `cat`.
 - **Processes are real** (`pkg/process`). A process's output is one
-  ordered sequence of stdout and stderr writes (`Read`), shown on the
-  terminal in the order written. Every process exits with a status
-  (`Exit`; 0 is success, 1 for a failed command, 127 command not
-  found, 126 not allowed to run, 137 killed). End of input
-  (`CloseStdin`) is not `Kill`: a pipe closes the next stage's stdin
-  when the stage before it exits, and a stage that doesn't read stdin
-  ignores that and still prints. Every stage's stderr reaches the
-  terminal; a pipeline's status is its last stage's. The shell keeps
-  `$?` (`shell.Info.LastStatus`), and the tracker records it on every
-  command line (`CommandRecord.Status`; `Running` for one still going,
-  like ssh or `yes`, until the session sees it end and calls
-  `Tracker.Finish`: ^C makes `yes` 130, logout and nx panic hang up
-  whatever still runs, 129), so quests can check what a command did. Embed
-  `process.Written` to get the output queue and exit status for free.
+  ordered sequence of stdout and stderr writes (`Read`). Every process
+  exits with a status (`Exit`). End of input (`CloseStdin`) is not
+  `Kill`: a pipe closes the next stage's stdin when the stage before
+  it exits. A pipeline's status is its last stage's; every stage's
+  stderr reaches the terminal. Commands embed `command.Proc` (output
+  queue, exit status, owner, no input); a pipe reader adds Stdin and
+  CloseStdin.
 - **Every process is in a process table.** Everything starts through
-  `sim.Start` (or `sim.Launch` by binary name), which puts it in its
-  computer's table with a PID and its command line; it leaves the
-  table when it exits. `computer.C.Processes()` lists PID, owner and
-  command line; `computer.C.Signal(pid, user, sig)` (and `Kill`) lets
-  only the owner or root signal (`process.ErrNotPermitted`,
-  `ErrNoProcess`). Each pipeline stage is its own process; ssh shows
-  as `ssh HOST` on the client and its remote `shell -l` on the
-  server. `ps` (yours) and `ps -e` (everyone's) print `PID USER CMD`
-  and read the table when first read, so they list themselves and
-  their pipeline; `kill [-9] PID` offers only PIDs in the table.
-  (ssh is not yet a process of its own: its table entry is the remote
+  `sim.Start` (or `sim.Launch` by name, or `sim.Login`), which puts it
+  in its computer's table with a PID and command line until it exits.
+  `computer.C.Signal(pid, user, sig)` is kill(2): owner or root only.
+  `ps` / `ps -e` read the table when first read, so they list
+  themselves; `kill [-9] PID` offers only live PIDs. (ssh is not a
+  process of its own: its table entry on the client is the remote
   shell, so `kill -9` of it reports "Killed", not a closed
   connection.)
-- **Redirection is done by the shell, as the player.** Before any
-  command runs the shell opens the target (`shell.openRedirect`):
-  creating it owned by the player, or emptying it for `>`, so `ls >
-  files` lists `files`, and a redirect that fails (`echo hi >
-  /etc/motd` → `/etc/motd: Permission denied`) runs nothing. Under
-  `sudo` the command is root but the file is still opened as the
-  player, the classic real-Unix lesson. The job's stdout goes to the
-  file it opened (like a file descriptor, it follows the file, not the
-  name); stderr still reaches the terminal.
+- **Signals are real.** The default action (`process.Written.Signal`)
+  is to die with 128+n. Interactive shells ignore SIGINT and SIGTERM,
+  like bash. A pipeline signals every stage, and a writer whose reader
+  has exited gets SIGPIPE, so `yes | head` ends. The shell reports a
+  job killed by SIGKILL/SIGTERM/SIGHUP as `Killed`/`Terminated`/`Hangup`.
+- **Ctrl+C is SIGINT to the foreground job.** While a command runs,
+  the shell offers `process.SigInt` as a key, echoes `^C` and signals
+  the job (`$?` 130). It isn't offered at an idle prompt, nor by a
+  shell whose job is interactive (ssh): the remote shell decides. So a
+  command that never ends always has a way out.
+- **Redirection is the shell's, as the player.** Before any command
+  runs the shell opens the target (`shell.openRedirect`), creating it
+  or emptying it, so `ls > files` lists `files` and a redirect that
+  fails runs nothing. Under `sudo` the file is still opened as the
+  player, the classic lesson. The job's stdout goes to the file it
+  opened, like a file descriptor.
 - **Nothing hangs.** Processes act only when called. A pipeline moves
   data one step per `Read`, and the session reads a bounded number of
   times per keystroke, so a source that never ends can't freeze the
-  game. Within that bound it keeps reading while a command runs, even
-  through quiet reads, so a pipeline that works before it prints
-  (`yes | head | wc -l`) finishes in the keystroke that started it.
-- **Signals are real.** `P.Signal(sig)` delivers one; the default
-  (`Written.Signal`) is to die of it with status 128+n (`SigInt` 130,
-  `SigPipe` 141, `SigTerm` 143; `SigKill` is `Kill`, 137).
-  `computer.C.Signal(pid, user, sig)` is kill(2): owner or root only.
-  Interactive shells ignore SIGINT and SIGTERM like bash (SIGHUP and
-  SIGKILL end them). A pipeline signals every stage, and a stage whose
-  reader has exited gets SIGPIPE, so `yes | head` ends. When a
-  foreground job dies of SIGKILL/SIGTERM/SIGHUP the shell prints
-  `Killed`/`Terminated`/`Hangup` on stderr, as bash does.
-- **Ctrl+C is SIGINT to the foreground job.** While a command runs,
-  the shell offers `process.SigInt` as a key (on top of whatever the
-  job offers), echoes `^C` and signals the job; `$?` is 130. It is not
-  offered at an idle prompt, nor by a shell whose job is interactive
-  (ssh): there the remote shell decides, by the same rule. So a
-  command that never ends (`yes`) always leaves a way out, and the
-  keyboard is never empty. The key is `^C` on the on-screen keyboard
-  (`terminal.KeyName`); the CLI sends it on Ctrl+C only when it is
-  offered, and the web build maps Ctrl+C to it unless text is
-  selected. While the player's last line is still running (and isn't
-  an ssh session), `Game.GetPlannedCommand` plans `game.Interrupt`
-  whatever the quest, and the hint is the ^C key: nothing else can
-  be typed until it ends.
+  game; within that bound it keeps reading while a command runs, so
+  `yes | head | wc -l` finishes in the keystroke that started it.
 
 When choosing how to fix a bug or add a feature, ask: *would this
 choice make sense in real Unix?* If it papers over a real concept,
@@ -268,55 +198,48 @@ A bare faithful-Unix shell would be useless to a beginner. The game
 loop wraps it in scaffolding:
 
 - **Quests** introduce concepts in order, each unlocked by achievements
-  granted by the prior one. New quests should build on what's been
-  taught, not require leaping forward. The line (`quests.All`):
-  Connect (ssh) → Orientation (pwd, ls, cd) → Inspection (cat, grep)
-  → Modification (rm, touch) → Composition (`|`) → Permissions
-  (server: apt, sudo) → Lockdown (sudo in Nixy's locked home) →
-  Identity (whoami, sudo whoami) → Notes (mkdir, echo, `>`, `>>`) →
-  Manual (install wc, man) → Counting (wc -l, grep | wc -l) →
-  Interrupt (yes, ^C) → Processes (ps -e, kill refused, sudo kill).
+  granted by the prior one, each building on what's been taught. The
+  line (`quests.All`): Connect (ssh) → Orientation (pwd, ls, cd) →
+  Inspection (cat, grep) → Modification (rm, touch) → Composition
+  (`|`) → Permissions (server: apt, sudo) → Lockdown (sudo in Nixy's
+  locked home) → Identity (whoami, sudo whoami) → Notes (mkdir, echo,
+  `>`, `>>`) → Manual (install wc, man) → Counting (wc -l, grep | wc
+  -l) → Interrupt (yes, ^C) → Processes (ps -e, kill refused, sudo
+  kill).
 - **The planner** (`Quest.PlanNextCommand`, `game.PlanHint`) computes
-  the next concrete keystroke toward the active quest. This is what
-  the green hint key on the keyboard means. `game.PlanThought` says
-  why, in the thought line; every plannable command has a thought.
+  the next keystroke toward the active quest: the green hint key.
+  `game.PlanThought` says why, in the thought line; every plannable
+  command has a thought. While the player's last line still runs (and
+  isn't ssh), `Game.GetPlannedCommand` plans `game.Interrupt` (the ^C
+  key), whatever the quest.
 - **Quests check outcomes, not spelling.** A quest whose goal is an
-  effect checks the world (`/etc/config` exists, junk.txt is gone).
-  Otherwise it asks the tracker what ran and how it ended:
-  `CommandRecord.Invocations()` parses the line into programs (sudo
-  seen through, `~` expanded, each named for the program that really
-  ran: the session resolves the line through /bin before running it,
-  `game.Resolve`, so `cat x` with /bin/cat replaced by rm is an rm) whose args resolve as paths from the
+  effect checks the world (`/etc/config` exists). Otherwise it asks
+  the tracker what ran and how it ended: `CommandRecord.Invocations()`
+  parses the line into programs (sudo seen through, `~` expanded, each
+  named for the program that really ran, resolved through /bin before
+  the line runs: `game.Resolve`), with args resolved as paths from the
   folder the command ran in (`Invocation.HasPath`), and `OK()` /
-  `Failed()` read its status. So `cat readme.txt`, `cat
-  /home/nixy/readme.txt` and `cat ~/../nixy/readme.txt | grep x` all
-  count as reading Nixy's readme, while a grep that matched nothing,
-  `lsx`, or a rejected command don't. A deliberate failure is an
-  outcome too: Permissions plans `apt install touch` until a failed
-  one is recorded, Lockdown plans `rm old.txt` until a denied one
-  is. Never match command strings.
+  `Failed()` read its status. So `cat readme.txt` and `cat
+  ~/../nixy/readme.txt | grep x` both read Nixy's readme, while a grep
+  that matched nothing or a rejected key don't. A deliberate failure
+  is an outcome too: Permissions plans `apt install touch` until a
+  failed one is recorded. Never match command strings.
 - **Recovery: the player can break anything, never the quest line.**
   Planners compute each step from the world as it is now, and:
-  - before planning a command they call `need(ctx, name)`: when
-    `/bin/<name>` is missing they plan `sudo apt install <name>` (if
-    sudo and apt work), and otherwise, or when it's been replaced by
-    another program, `nx panic`. `nx panic` puts every machine's
-    `/bin` back as shipped, keeping properly installed programs and
-    dropping anything else, so after it `sudo apt install` always
-    works. It is introduced in the Permissions dialog, where sudo
-    makes breaking things possible.
-  - a quest implementing `game.Repairer` puts back its own fixtures
-    after every command while it's active (readme.txt until it's
-    read, the system log until it's searched, the projects folder and
-    its files, Nixy's home, the server's /etc), from the world
-    definition, keeping whatever is there and of the right type. Nixy
-    says so in the dialog ("/home/nixy/readme.txt went missing. I put
-    it back"): it's her file, and she's a real user on her machine.
-  Hints are never filtered to hide a bad plan: a hint the keyboard
-  rejects is a planner bug, and the fuzz fails on it.
-- **Nixy's dialog** (`pkg/character/`) frames each concept narratively,
-  before and after. The player isn't memorizing — they're helping
-  someone.
+  - before planning a command they call `need(ctx, name)`: a missing
+    `/bin/<name>` gets `sudo apt install <name>` (if sudo and apt
+    work), anything else (sudo or apt gone, a program replaced by
+    another) gets `nx panic`, which puts every machine's `/bin` back
+    as shipped, keeping properly installed programs.
+  - a quest implementing `game.Repairer` puts its fixtures back after
+    every command while it's active, from the world definition
+    (`restore`; `restoreText` when the contents matter, like a system
+    log with errors to find). Nixy says so in the dialog.
+  A hint the keyboard rejects is a planner bug, and the fuzz fails on
+  it; hints are never filtered to hide one.
+- **Nixy's dialog** (`pkg/character/`) frames each concept
+  narratively, before and after. The player isn't memorizing — they're
+  helping someone.
 
 Hint vs. validation are two separate systems and often conflated:
 - **Validation** (`shell.Next()` → `guide.Stdin`): *what can be typed*.
@@ -352,124 +275,93 @@ suite for both.
 
 ### Entry points
 
-- `cmd/repl/` — CLI via Bubbletea. Handles `tea.KeyMsg` → `process.Datum`
-  and `tea.WindowSizeMsg` for resize. Owns Ctrl+C double-press exit and
-  Ctrl+\ snapshot dump. Ctrl+C is SIGINT instead whenever the keyboard
-  offers `^C` (a command is running); only at a prompt does it count
-  toward the double-press quit.
-- `cmd/web/` — WASM via `syscall/js`. Exports `nixyInit`,
-  `nixyKeystroke`, `nixyResize`, `nixyDumpState` to JavaScript.
-  The on-screen keyboard is tappable: `Layout()` sets `Segment.Key` on
-  keys valid right now, HTMLRenderer emits it as `data-key`, and
-  `web/index.html` sends it to `nixyKeystroke` like a typed key
-  (`terminal.KeyName` / `KeyDatum` are the one mapping).
-- Both use `pkg/session/` for shared game/guide/shell initialization.
-- The session never ends itself. `exit` on the laptop logs out to the
-  `login:` prompt; each username keeps its own game, so logging back in
-  resumes it. `nx panic` puts back every machine's shipped `/bin`
-  (from its world definition; programs installed since stay, anything
-  else there goes) and replaces the whole shell stack with a fresh
-  laptop shell (never a logout). Only the CLI's double Ctrl+C quits.
-  The keyboard must never be empty — the web build has no other input.
+- `cmd/repl/` — CLI via Bubbletea: `tea.KeyMsg` → `process.Datum`,
+  resize, Ctrl+\ snapshot dump. Ctrl+C is SIGINT whenever the keyboard
+  offers `^C`; only at a prompt does it count toward the double-press
+  quit.
+- `cmd/web/` — WASM via `syscall/js`, exporting `nixyInit`,
+  `nixyKeystroke`, `nixyResize`, `nixyDumpState`. The on-screen
+  keyboard is tappable: `Layout()` sets `Segment.Key` on keys valid
+  now, HTMLRenderer emits it as `data-key`, and `web/index.html` sends
+  it like a typed key. `terminal.KeyName` / `KeyDatum` are the one
+  mapping, Ctrl+C (`^C`) and Ctrl+L (`^L`) included.
+- Both use `pkg/session/`. The session never ends itself: `exit` on
+  the laptop logs out to `login:`, and each username keeps its own
+  game, so logging back in resumes it. `nx panic` restores `/bin` and
+  replaces the whole shell stack with a fresh laptop shell. Only the
+  CLI's double Ctrl+C quits. The keyboard must never be empty — the
+  web build has no other input.
 
 ### Key packages
 
-- `pkg/process/` — `Process` interface (ordered output, end of input,
-  exit status), `Written` (embed it), process tables (`Space`), Datum
-  types.
-- `pkg/simulation/` — Binary registry, computer management, process
-  launching. `Binary.ValidArgs` (required) drives the keyboard.
-- `pkg/command/shell/` — Shell with builtins, pipeline support, and
-  the pipe-aware `Next()` that enforces principle #1.
-- `pkg/guide/` — Wraps a process, validates input against `Next()`
-  before forwarding. The bouncer for principle #1.
-- `pkg/game/` — Quest manager, planner (keystroke hints), command
-  tracker, machine registry. `MachineRegistry.bootMachine` provisions
-  per-user homes.
+- `pkg/process/` — `P` interface (ordered output, end of input, exit
+  status, signals), `Written`, process tables (`Space`), Datum types.
+- `pkg/simulation/` — Binary registry, computers, process launching.
+- `pkg/command/` — validator parts (`args.go`), `Parse`, `Proc`, and
+  one package per command; `shell/` holds the shell, its builtins,
+  pipelines, redirection and the pipe-aware `Next()`.
+- `pkg/guide/` — wraps a process and forwards only keys its `Next()`
+  offers. The bouncer for principle #1.
+- `pkg/game/` — quest manager, planner, command tracker, machine
+  registry; `quests/` and `worlds/` are the content.
 - `pkg/character/` — Nixy's dialog data and queue.
-- `pkg/debug/` — Snapshot ring (last N keystrokes' state). Ctrl+\
-  dumps it to disk; useful when something weird happens in `make repl`.
+- `pkg/debug/` — snapshot ring of the last keystrokes' state; Ctrl+\
+  dumps it to disk.
 
 ## Testing
 
 - `make test` — full suite. Packages and sessions share no mutable
-  state: the binary registry is filled from `init` and read-only from
-  the first lookup (`Register` panics after that), and nx reaches the
-  shell through the game's simulation (`simulation.S.Nx`), not a
-  global.
+  state: the binary registry is filled from `init` and read-only after
+  the first lookup, and nx reaches the shell through
+  `simulation.S.Nx`, not a global.
 - `make fuzz` — runs the fuzz tests 10× each.
-- `make check-wasm` — confirms the web build still compiles (no
-  Bubbletea or other non-WASM imports leaked into `pkg/`).
+- `make check-wasm` — confirms the web build still compiles.
 
-### Fuzz strategy
+Fuzz and liveness tests, with different goals:
 
-Fuzz and liveness tests with different goals:
-
-- `TestFuzzQuests` (`pkg/game/quests/`) — drives quests via
-  `shellState`, which types whole lines into a real login shell and
-  records them as the session does, but bypasses the keyboard. Catches
-  quest-logic bugs but **cannot** catch keystroke-level regressions.
-- `TestFuzzE2EHintGuided` (`pkg/session/`) — drives keystrokes through
-  `Session.HandleKeystroke`, the same chokepoint used by both CLI and
-  web. The canary for end-to-end correctness. Every key is typed
-  through `pressAccepted`, which fails if the keyboard doesn't offer
-  it or if the hint key isn't itself valid.
-- `TestFuzzE2ERandomKeys` (`pkg/session/`) — random valid keys (half
-  the time the hint) through the same chokepoint, wandering into rm,
-  mv, sudo and long pipelines, and on through logouts, logins and nx
-  panics; each seed starts random play at a different quest and now
-  and then types lines that break things (`sudo rm /bin/sudo`, delete
-  a quest's file). Fails on panics, an empty keyboard, stderr other
-  than permission denied (or `Killed` for a job the player killed),
-  or a hint that isn't a valid key. Then the
-  liveness check: from wherever random play left the world, following
-  only the hints (`followHints`) must finish every quest within
-  `hintFinishKeys` keys, never meeting an invalid hint, a plan without
-  a thought, or an empty prompt with no plan.
-- `TestBrokenPrerequisitesRecover` (`pkg/session/`, deterministic) —
-  for each quest, breaks what it depends on (its files, the commands
-  it plans, sudo, apt) and demands the hints still finish the line.
+- `TestFuzzQuests` (`pkg/game/quests/`) — types whole lines into a
+  real login shell (`shellState`), bypassing the keyboard. Catches
+  quest-logic bugs, not keystroke-level ones.
+- `TestFuzzE2EHintGuided` (`pkg/session/`) — keystrokes through
+  `Session.HandleKeystroke`, the chokepoint both front ends use, 80%
+  following the planner. Every key goes through `pressAccepted`,
+  which fails if the keyboard doesn't offer it or the hint isn't
+  valid. Liveness is keyed on quest progression (`worldKey`), not
+  tracker size, which grows on every Enter and would let a stuck
+  quest look like progress.
+- `TestFuzzE2ERandomKeys` — random valid keys (half the time the hint)
+  on through logouts, logins and nx panics, now and then typing lines
+  that break things (`scriptedLines`). Fails on panics, an empty
+  keyboard, a hint that isn't valid, stderr other than a real
+  consequence, or an input line that isn't what the shell holds. Then
+  following only the hints (`followHints`) must finish every quest.
+- `TestFuzzE2ERejectedKeys` — random play that also presses keys the
+  keyboard doesn't offer, failing if any changes anything observable,
+  and checks the process tables hold exactly the live shells.
+- `TestBrokenPrerequisitesRecover` — for each quest, breaks what it
+  depends on and demands the hints still finish the line.
 - `TestPlannedCommandsAreTaught` (`pkg/game/quests/`) — every program
   a plan runs appears in backticks in Nixy's dialog before it's
   planned.
-- `TestPlaythrough` (`pkg/session/`) — presses only the hint keys from
-  login to the last quest and keeps a transcript of what the player
-  sees (dialog, thoughts, terminal). `NIXY_TRANSCRIPT=FILE go test
-  ./pkg/session -run TestPlaythrough` writes it out: read it after
-  changing quests or dialog. Text files end in a newline, in the
-  worlds (`TestTextFilesEndInNewline`) and after the playthrough, so
-  `wc -l` agrees with `cat`.
-- `TestFuzzE2ERejectedKeys` (`pkg/session/`) — random play that also
-  presses keys the keyboard doesn't offer, failing if any changes
-  anything observable, and checks after every key that the process
-  tables hold exactly the live shells (plus the job of a line still
-  running, and other users' processes, like Nixy's runaway yes).
-
-Liveness in the E2E fuzz is keyed on quest progression
-(`activeQuestID + numCompletedQuests + hostname + cwd`). Tracker
-record count is deliberately **not** included — it grows on every
-Enter even when nothing real is happening, which lets stuck quests
-masquerade as progress. Terminal demands all-Complete; "planner has
-a path" is too lenient.
+- `TestPlaythrough` (`pkg/session/`) — presses only hint keys from
+  login to the end and keeps a transcript: `NIXY_TRANSCRIPT=FILE go
+  test ./pkg/session -run TestPlaythrough` writes it out. Read it
+  after changing quests or dialog.
 
 ## Conventions
 
 - All dev gestures are Makefile targets: `test`, `fuzz`, `build`,
-  `repl`, `web`, `serve`, `check-wasm`. Don't invent ad-hoc invocations.
+  `repl`, `web`, `serve`, `check-wasm`, `lint`. Don't invent ad-hoc
+  invocations.
 - Bubbletea is only imported in `cmd/repl/` — never in `pkg/` (would
   break WASM compilation).
 - `web/nixy.wasm` and `web/wasm_exec.js` are build artifacts
   (`.gitignored`).
-- New commands registered via `simulation.Register` need a `ValidArgs`
-  built from the parts in `pkg/command/args.go` (usually
-  `Positional`), and `Interactive` if they take over the terminal.
-  Add the command to `testBinaries` in `pkg/command/shell/shell_test.go`
-  so the structural walk covers it, import it in `pkg/command/all`
-  (what the front ends and session tests import), and give it an apt
-  package in `apt.PackageRegistry` (`TestEveryPackageIsRegistered`
-  checks every package runs). Worlds ship the basics; the rest are a
-  `sudo apt install` away, which is where quests teach them. Write
-  its manual page in `pkg/command/man/pages.go`
-  (`TestEveryCommandHasAPage`): short, and true of the real command.
-  `man CMD` offers only commands in /bin with a page; `help [BUILTIN]`
-  is the shell's, for its builtins (`shell.builtinHelp`).
+- A new command: register it with `simulation.Register` and a
+  `ValidArgs` built from `pkg/command/args.go` (usually `Positional`),
+  `Interactive` if it takes over the terminal. Add it to
+  `testBinaries` in `pkg/command/shell/shell_test.go`, import it in
+  `pkg/command/all`, give it an apt package in `apt.PackageRegistry`
+  (`TestEveryPackageIsRegistered`), and write its manual page in
+  `pkg/command/man/pages.go` (`TestEveryCommandHasAPage`): short, and
+  true of the real command.
