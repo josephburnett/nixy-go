@@ -1,6 +1,7 @@
 package grep
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
@@ -32,7 +33,7 @@ func launch(
 	args []string,
 ) (process.P, error) {
 	if len(args) == 0 {
-		return command.NewErrorProcess(owner, "Usage: grep PATTERN [FILE]\n"), nil
+		return command.Exited(owner, "", "Usage: grep PATTERN [FILE]\n", 2), nil
 	}
 
 	pattern := args[0]
@@ -45,7 +46,8 @@ func launch(
 		}
 		data, err := c.Filesystem.ReadFile(file.Resolve(cwd, args[1]), owner)
 		if err != nil {
-			return command.Fail(owner, "grep", args[1], err), nil
+			// Trouble (not "no match") is status 2, as in real grep.
+			return command.Exited(owner, "", fmt.Sprintf("grep: %s: %v\n", args[1], err), 2), nil
 		}
 		return result(owner, filterLines(data, pattern)), nil
 	}

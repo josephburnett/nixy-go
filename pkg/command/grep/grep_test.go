@@ -80,3 +80,22 @@ func TestGrepStdin(t *testing.T) {
 		t.Fatalf("should not contain 'goodbye', got %q", out)
 	}
 }
+
+// Exit status is 0 on a match, 1 on none, 2 on trouble, as in grep(1).
+func TestGrepStatus(t *testing.T) {
+	sim := testSetup(t)
+	for _, tc := range []struct {
+		args []string
+		want int
+	}{
+		{[]string{"error", "log.txt"}, 0},
+		{[]string{"warning", "log.txt"}, 1},
+		{[]string{"error", "missing.txt"}, 2},
+		{nil, 2},
+	} {
+		p, _ := launch(sim, "user", "test", nil, tc.args)
+		if status, _ := p.Exit(); status != tc.want {
+			t.Errorf("grep %v: status %d, want %d", tc.args, status, tc.want)
+		}
+	}
+}
