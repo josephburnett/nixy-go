@@ -17,6 +17,7 @@ import (
 	_ "github.com/josephburnett/nixy-go/pkg/command/sudo"
 	_ "github.com/josephburnett/nixy-go/pkg/command/touch"
 
+	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/game"
 	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/process"
@@ -62,11 +63,12 @@ type shellState struct {
 type shellFrame struct {
 	shell    process.P
 	hostname string
+	cwd      []string
 }
 
 func newShellState(t *testing.T, g *game.Game) *shellState {
 	t.Helper()
-	p, err := g.Sim.Launch("laptop", "user", "shell", nil, []string{})
+	p, err := g.Sim.Launch("laptop", "user", "shell", []string{"-l"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +76,7 @@ func newShellState(t *testing.T, g *game.Game) *shellState {
 		game:     g,
 		shell:    p,
 		hostname: "laptop",
-		cwd:      []string{},
+		cwd:      file.Home("user"),
 	}
 }
 
@@ -97,14 +99,14 @@ func (s *shellState) executeCommand(t *testing.T, cmd string) {
 	}
 	if strings.HasPrefix(cmd, "ssh ") {
 		targetHost := strings.TrimPrefix(cmd, "ssh ")
-		s.shells = append(s.shells, shellFrame{shell: s.shell, hostname: s.hostname})
-		remoteShell, err := s.game.Sim.Launch(targetHost, "user", "shell", nil, []string{})
+		s.shells = append(s.shells, shellFrame{shell: s.shell, hostname: s.hostname, cwd: s.cwd})
+		remoteShell, err := s.game.Sim.Launch(targetHost, "user", "shell", []string{"-l"}, nil)
 		if err != nil {
 			t.Fatalf("ssh failed: %v", err)
 		}
 		s.shell = remoteShell
 		s.hostname = targetHost
-		s.cwd = []string{}
+		s.cwd = file.Home("user")
 		s.game.AfterCommand()
 		return
 	}
@@ -189,7 +191,7 @@ func (s *shellState) handleExit(t *testing.T) {
 		s.shells = s.shells[:len(s.shells)-1]
 		s.shell = frame.shell
 		s.hostname = frame.hostname
-		s.cwd = []string{}
+		s.cwd = frame.cwd
 	}
 }
 

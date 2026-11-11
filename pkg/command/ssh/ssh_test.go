@@ -36,6 +36,13 @@ func testSetup(t *testing.T) *simulation.S {
 		Type: file.Folder, Owner: file.OwnerRoot,
 		OwnerPermission: file.Write, CommonPermission: file.Read,
 		Files: map[string]*file.F{
+			"home": {Type: file.Folder, Owner: file.OwnerRoot,
+				OwnerPermission: file.Write, CommonPermission: file.Read,
+				Files: map[string]*file.F{
+					"user": {Type: file.Folder, Owner: "user",
+						OwnerPermission: file.Write, CommonPermission: file.Read,
+						Files: map[string]*file.F{}},
+				}},
 			"bin": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.Read,
 				Files: map[string]*file.F{
@@ -84,8 +91,9 @@ func TestSshConnect(t *testing.T) {
 			s += string(c)
 		}
 	}
-	if !strings.Contains(s, "/") {
-		t.Fatalf("expected pwd output, got %q", s)
+	// ssh opens a login shell: it starts in the user's home.
+	if !strings.Contains(s, "/home/user\n") {
+		t.Fatalf("expected pwd to print /home/user, got %q", s)
 	}
 }
 

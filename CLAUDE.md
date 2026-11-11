@@ -96,6 +96,12 @@ Concrete implications (these all flow from this single principle):
   `/home/<username>` on every booted machine. Other users (Nixy) have
   their own homes. World definitions don't ship a placeholder
   `/home/user` — each player gets a real one.
+- **$HOME is real.** A shell's home comes from its owner
+  (`file.Home`: `/home/<user>`, `/root` for root). Login shells
+  (`shell -l`: the laptop login and ssh) start there, falling back to
+  `/` if it can't be entered; bare `cd` goes there, and like `cd DIR`
+  is offered only when it would move. The prompt shows home as `~`,
+  like bash's `\w`.
 - **Permissions matter.** Don't work around `CanWrite`/`CanRead` to
   make a quest succeed. If the player can't do something, that's a
   teaching opportunity — fix the world (perms, ownership) or the

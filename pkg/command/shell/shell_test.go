@@ -910,3 +910,58 @@ func TestShellPipelineFindsBinariesFirst(t *testing.T) {
 		t.Fatalf("unexpected error: %q", errOut)
 	}
 }
+
+// canRunFresh is canRun that clears the line afterwards.
+func canRunFresh(p process.P, line string) bool {
+	ok := canRun(p, line)
+	_, _ = p.Stdin(process.Data{process.TermClear})
+	_, _, _ = p.Stdout()
+	return ok
+}
+
+func runLine(t *testing.T, p process.P, line string) string {
+	t.Helper()
+	writeString(t, p, line)
+	writeEnter(t, p)
+	return strings.TrimPrefix(readAllStdout(t, p), line)
+}
+
+// TestShellHome: a login shell starts in $HOME, bare `cd` goes there,
+// and bare `cd` isn't offered when already home (a no-op, like `cd .`).
+func TestShellHome(t *testing.T) {
+	sim, _ := testSetup(t)
+	p, err := sim.Launch("test", "user", "shell", []string{"-l"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := runLine(t, p, "pwd"); got != "/home/user\n" {
+		t.Fatalf("login shell starts in %q, want /home/user", got)
+	}
+	if canRunFresh(p, "cd") {
+		t.Error("bare cd offered while already home")
+	}
+	runLine(t, p, "cd /etc")
+	if !canRunFresh(p, "cd") {
+		t.Fatal("bare cd not offered away from home")
+	}
+	runLine(t, p, "cd")
+	if got := runLine(t, p, "pwd"); got != "/home/user\n" {
+		t.Fatalf("bare cd went to %q, want /home/user", got)
+	}
+}
+
+// TestShellLoginWithoutHome: like login(1), a user whose home can't be
+// entered starts at /.
+func TestShellLoginWithoutHome(t *testing.T) {
+	sim, _ := testSetup(t)
+	p, err := sim.Launch("test", "ghost", "shell", []string{"-l"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := runLine(t, p, "pwd"); got != "/\n" {
+		t.Fatalf("got %q, want /", got)
+	}
+	if canRunFresh(p, "cd") {
+		t.Error("bare cd offered with no home to go to")
+	}
+}

@@ -65,6 +65,9 @@ type ArgContext struct {
 	// User is who the command runs as: the shell's owner, or root
 	// under sudo. Completion only looks inside folders User can read.
 	User string
+	// Home is the shell owner's home folder ($HOME). It stays the
+	// player's under sudo, as the shell expands ~ before sudo runs.
+	Home []string
 	// InPipe is true when the command reads stdin from an upstream
 	// pipe, so it may need fewer arguments (`ls | grep x`).
 	InPipe bool

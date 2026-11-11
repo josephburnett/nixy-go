@@ -170,3 +170,45 @@ func TestOrientationQuestCompletes(t *testing.T) {
 		t.Fatalf("inspection should be active after orientation, got %v", state)
 	}
 }
+
+func TestPromptPath(t *testing.T) {
+	home := []string{"home", "alice"}
+	for _, tc := range []struct {
+		cwd  []string
+		want string
+	}{
+		{[]string{}, "/"},
+		{[]string{"home"}, "/home"},
+		{[]string{"home", "alice"}, "~"},
+		{[]string{"home", "alice", "docs"}, "~/docs"},
+		{[]string{"home", "alicex"}, "/home/alicex"},
+		{[]string{"home", "nixy"}, "/home/nixy"},
+	} {
+		if got := promptPath(tc.cwd, home); got != tc.want {
+			t.Errorf("promptPath(%v) = %q, want %q", tc.cwd, got, tc.want)
+		}
+	}
+}
+
+// TestLoginLandsHome: the laptop login and ssh both start in the
+// player's home, and the prompt says so the way bash does.
+func TestLoginLandsHome(t *testing.T) {
+	sess, _ := New()
+	term := terminal.New(terminal.NewANSI())
+	term.Resize(80, 24)
+	sess.InitTerminal(term)
+	loginAs(t, sess, term, "alice")
+	if got := strings.Join(sess.Shell.CurrentDirectory(), "/"); got != "home/alice" {
+		t.Fatalf("login cwd = %q, want home/alice", got)
+	}
+	if p := term.State.Prompt.Path; p != "~" {
+		t.Errorf("prompt path = %q, want ~", p)
+	}
+	typeLine(t, sess, term, "ssh nixy")
+	if sess.Shell.Hostname() != "nixy" {
+		t.Fatalf("ssh nixy failed: on %q", sess.Shell.Hostname())
+	}
+	if got := strings.Join(sess.Shell.CurrentDirectory(), "/"); got != "home/alice" {
+		t.Fatalf("ssh cwd = %q, want home/alice", got)
+	}
+}

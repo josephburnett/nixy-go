@@ -19,19 +19,30 @@ func init() {
 	})
 }
 
+// launch starts a shell in cwd. With -l it is a login shell (the laptop
+// login, ssh), which starts in the owner's home instead.
 func launch(
 	sim *simulation.S,
 	owner string,
 	hostname string,
 	cwd []string,
-	_ []string,
+	args []string,
 ) (process.P, error) {
-	return &shell{
+	s := &shell{
 		simulation:       sim,
 		owner:            owner,
 		hostname:         hostname,
+		home:             file.Home(owner),
 		currentDirectory: cwd,
-	}, nil
+	}
+	if len(args) == 1 && args[0] == "-l" {
+		// Like login(1): fall back to / when home can't be entered.
+		s.currentDirectory = []string{}
+		if s.canEnter(s.home) {
+			s.currentDirectory = append([]string{}, s.home...)
+		}
+	}
+	return s, nil
 }
 
 // NxHandler handles nx builtin subcommands. Set by the game layer.
@@ -50,6 +61,7 @@ type shell struct {
 	simulation *simulation.S
 	owner      string
 	hostname   string
+	home       []string // $HOME: where login and bare `cd` land
 	exited     bool
 
 	childProcess     process.P
@@ -334,34 +346,35 @@ func (p *pipeline) pipe() {
 	}
 }
 
+// builtinCd changes directory; bare `cd` goes home.
 func (s *shell) builtinCd(args []string) error {
-	if len(args) == 0 {
-		s.currentDirectory = []string{}
-		return nil
-	}
 	if len(args) > 1 {
 		return fmt.Errorf("cd: too many arguments")
 	}
-	target := args[0]
+	target := "/" + strings.Join(s.home, "/")
+	if len(args) == 1 {
+		target = args[0]
+	}
 	newDir := file.Resolve(s.currentDirectory, target)
-
-	c, err := s.simulation.GetComputer(s.hostname)
-	if err != nil {
-		return err
-	}
-	f, err := c.Filesystem.Lookup(newDir, s.owner)
-	if err == nil && f.Type != file.Folder {
-		err = file.ErrNotDir
-	}
-	if err == nil && !f.CanRead(s.owner) {
-		err = file.ErrPermission
-	}
-	if err != nil {
+	if err := s.enter(newDir); err != nil {
 		return fmt.Errorf("cd: %v: %v", target, err)
 	}
 	s.currentDirectory = newDir
 	return nil
 }
+
+// enter checks that the owner can make dir the cwd: a reachable,
+// readable folder.
+func (s *shell) enter(dir []string) error {
+	c, err := s.simulation.GetComputer(s.hostname)
+	if err != nil {
+		return err
+	}
+	_, err = c.Filesystem.LookupDir(dir, s.owner)
+	return err
+}
+
+func (s *shell) canEnter(dir []string) bool { return s.enter(dir) == nil }
 
 // Next returns the keystrokes that lead to a correct, executable action
 // at the current cursor position. The invariant: a player can never type
@@ -394,6 +407,7 @@ func (s *shell) Next() []process.Datum {
 		Hostname: s.hostname,
 		Cwd:      s.currentDirectory,
 		User:     s.owner,
+		Home:     s.home,
 		InPipe:   p.InPipe(),
 	}
 	text := last.Name
@@ -418,13 +432,23 @@ func (s *shell) Next() []process.Datum {
 
 // builtinArgs are the validators for the shell's builtins.
 var builtinArgs = map[string]simulation.ValidArgs{
-	"cd":   command.Positional{Args: []command.Arg{command.CdTarget}}.Validate,
+	"cd":   cdArgs,
 	"exit": command.NoArgs,
 	"nx": command.Subcommands(map[string]simulation.ValidArgs{
 		"quest": command.NoArgs,
 		"log":   command.NoArgs,
 		"panic": command.NoArgs,
 	}),
+}
+
+// cdArgs is `cd [DIR]`. Bare `cd` goes home, so like `cd DIR` it is
+// offered only when it would move: not when already home.
+func cdArgs(ctx simulation.ArgContext, partial string) simulation.Suggestion {
+	sug := command.Positional{Args: []command.Arg{command.CdTarget}}.Validate(ctx, partial)
+	if partial == "" {
+		sug.Complete = command.CdTarget(ctx, nil, "/"+strings.Join(ctx.Home, "/")).Complete
+	}
+	return sug
 }
 
 // commandNames lists what may be typed in command position: builtins

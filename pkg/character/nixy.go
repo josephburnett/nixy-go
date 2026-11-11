@@ -19,7 +19,8 @@ func AllDialog() []DialogEntry {
 		{OnQuestActivate, "orientation",
 			[]string{
 				"Great! Now let's look around.",
-				"Try `pwd` to see where you are, `ls` to look around, and `cd` to move.",
+				"You start in your own home folder. `pwd` shows where you are.",
+				"`ls /home` shows whose homes are here, and `cd` moves you. Come visit mine!",
 			}},
 		{OnQuestComplete, "orientation",
 			[]string{

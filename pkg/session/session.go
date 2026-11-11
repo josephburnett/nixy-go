@@ -1,9 +1,11 @@
 package session
 
 import (
+	"slices"
 	"strings"
 
 	shellpkg "github.com/josephburnett/nixy-go/pkg/command/shell"
+	"github.com/josephburnett/nixy-go/pkg/file"
 	"github.com/josephburnett/nixy-go/pkg/game"
 	"github.com/josephburnett/nixy-go/pkg/game/quests"
 	"github.com/josephburnett/nixy-go/pkg/game/worlds"
@@ -233,7 +235,7 @@ func (s *Session) startLoginShell() error {
 	if s.loginSh != nil {
 		s.loginSh.Kill()
 	}
-	proc, err := s.Game.Sim.Launch("laptop", s.Username, "shell", nil, []string{})
+	proc, err := s.Game.Sim.Launch("laptop", s.Username, "shell", []string{"-l"}, nil)
 	if err != nil {
 		return err
 	}
@@ -366,9 +368,17 @@ func (s *Session) updatePlayingTerminal(t *terminal.T) {
 }
 
 func (s *Session) promptFor(hostname string, cwd []string) terminal.PromptInfo {
-	path := "/"
-	if len(cwd) > 0 {
-		path = "/" + strings.Join(cwd, "/")
+	return terminal.PromptInfo{User: s.Username, Host: hostname, Path: promptPath(cwd, file.Home(s.Username))}
+}
+
+// promptPath is the cwd as bash's \w shows it: home and paths below it
+// start with `~`, everything else is absolute.
+func promptPath(cwd, home []string) string {
+	if len(cwd) >= len(home) && slices.Equal(cwd[:len(home)], home) {
+		if rest := cwd[len(home):]; len(rest) > 0 {
+			return "~/" + strings.Join(rest, "/")
+		}
+		return "~"
 	}
-	return terminal.PromptInfo{User: s.Username, Host: hostname, Path: path}
+	return "/" + strings.Join(cwd, "/")
 }

@@ -37,7 +37,9 @@ func (q *Orientation) PlanNextCommand(_ *simulation.S, tracker *game.CommandTrac
 		return "pwd"
 	}
 	if !tracker.HasCommandPrefix("nixy", "ls") {
-		return "ls"
+		// The player starts in their own, empty home: /home shows
+		// whose homes are here, Nixy's included.
+		return "ls /home"
 	}
 	if !tracker.HasVisitedDir("nixy", []string{"home", "nixy"}) {
 		return "cd /home/nixy"
