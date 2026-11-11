@@ -33,8 +33,10 @@ type Snapshot struct {
 	Thought  string
 	Active   string
 	Quests   []QuestState
-	Tracker  []TrackerRow
-	History  []string
+	Tracker  []TrackerRow // the most recent records only
+	// TrackerTotal is how many commands the tracker holds in all.
+	TrackerTotal int
+	History      []string
 }
 
 type QuestState struct {
@@ -78,7 +80,9 @@ func Capture(sess *session.Session, term *terminal.T, datum process.Datum) Snaps
 				State: questStateString(mgr.GetQuestState(q.ID())),
 			})
 		}
-		for _, r := range lastN(mgr.Tracker.Records(), 20) {
+		records := mgr.Tracker.Records()
+		s.TrackerTotal = len(records)
+		for _, r := range lastN(records, 20) {
 			s.Tracker = append(s.Tracker, TrackerRow{
 				Host: r.Hostname,
 				Cwd:  "/" + strings.Join(r.Cwd, "/"),
@@ -147,7 +151,7 @@ func writeSnapshot(sb *strings.Builder, s Snapshot) {
 		}
 	}
 	if len(s.Tracker) > 0 {
-		fmt.Fprintf(sb, "tracker (%d, last %d shown):\n", len(s.Tracker), len(s.Tracker))
+		fmt.Fprintf(sb, "tracker (%d, last %d shown):\n", s.TrackerTotal, len(s.Tracker))
 		for _, r := range s.Tracker {
 			fmt.Fprintf(sb, "  %-8s %-20s %s\n", r.Host, r.Cwd, r.Cmd)
 		}

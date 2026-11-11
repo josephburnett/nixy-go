@@ -103,3 +103,16 @@ func TestRecorderInitialSnapshotIsLogin(t *testing.T) {
 		t.Fatalf("expected initial keystroke marker in dump:\n%s", dump)
 	}
 }
+
+// TestDumpShowsTrackerTotal: the tracker header reports how many commands
+// the tracker holds, not just how many rows the snapshot kept.
+func TestDumpShowsTrackerTotal(t *testing.T) {
+	var sb strings.Builder
+	writeSnapshot(&sb, Snapshot{
+		Tracker:      []TrackerRow{{Host: "nixy", Cwd: "/", Cmd: "ls"}, {Host: "nixy", Cwd: "/", Cmd: "pwd"}},
+		TrackerTotal: 57,
+	})
+	if want := "tracker (57, last 2 shown)"; !strings.Contains(sb.String(), want) {
+		t.Fatalf("dump missing %q:\n%s", want, sb.String())
+	}
+}
