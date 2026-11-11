@@ -1,6 +1,8 @@
 package quests
 
 import (
+	"strings"
+
 	"github.com/josephburnett/nixy-go/pkg/game"
 	"github.com/josephburnett/nixy-go/pkg/game/worlds"
 	"github.com/josephburnett/nixy-go/pkg/simulation"
@@ -69,7 +71,10 @@ func (q *Inspection) Repair(sim *simulation.S, tracker *game.CommandTracker, _ s
 		lines = append(lines, restore(sim, "nixy", worlds.Nixy(), readme, false)...)
 	}
 	if !searchedLog(tracker) {
-		lines = append(lines, restore(sim, "nixy", worlds.Nixy(), systemLog, false)...)
+		// The search needs errors to find: grep with no match fails.
+		lines = append(lines, restoreText(sim, "nixy", worlds.Nixy(), systemLog, func(data string) bool {
+			return strings.Contains(data, "error")
+		})...)
 	}
 	return lines
 }

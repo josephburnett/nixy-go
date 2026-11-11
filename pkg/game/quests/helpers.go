@@ -145,6 +145,22 @@ func restore(sim *simulation.S, hostname string, world *file.F, path []string, d
 	return nil
 }
 
+// restoreText is restore for a text file whose contents matter: one
+// that no longer passes keep (the player emptied or replaced it) is
+// put back as world has it too.
+func restoreText(sim *simulation.S, hostname string, world *file.F, path []string, keep func(data string) bool) []string {
+	if lines := restore(sim, hostname, world, path, false); lines != nil {
+		return lines
+	}
+	f, ok := lookup(sim, hostname, path)
+	w, wok := world.Navigate(path)
+	if !ok || wok != nil || f.Type != file.Text || keep(f.Data) {
+		return nil
+	}
+	*f = *w
+	return []string{fmt.Sprintf("Huh, /%s isn't what it was. I put it back so we can keep going.", strings.Join(path, "/"))}
+}
+
 // putBackMissing adds want's entries that are missing from have (or of
 // the wrong type), recursively, and reports whether it changed have.
 func putBackMissing(have, want *file.F) bool {

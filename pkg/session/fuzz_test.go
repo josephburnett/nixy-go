@@ -441,6 +441,7 @@ var scriptedLines = []string{
 	"sudo rm /bin/touch", "sudo rm /bin/apt", "sudo rm /bin/sudo",
 	"sudo apt install mv",
 	"sudo mv /home/nixy/readme.txt /home/nixy/r.txt",
+	"sudo mv /home/nixy/readme.txt /var/log/system.log",
 	"sudo mv /bin/grep /bin/g",
 	"sudo mv /bin/ls /bin/cat",
 }

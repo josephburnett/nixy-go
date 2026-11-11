@@ -21,6 +21,8 @@ func TestBrokenPrerequisitesRecover(t *testing.T) {
 	}{
 		{"readme deleted", "inspection", "nixy", []string{"rm /home/nixy/readme.txt"}},
 		{"system log deleted", "inspection", "nixy", []string{"sudo rm /var/log/system.log"}},
+		{"system log emptied", "inspection", "nixy", []string{
+			"sudo apt install mv", "touch /home/user/x", "sudo mv /home/user/x /var/log/system.log"}},
 		{"cat and grep deleted", "inspection", "nixy", []string{"sudo rm /bin/cat", "sudo rm /bin/grep"}},
 		{"grep and sudo deleted", "inspection", "nixy", []string{"sudo rm /bin/grep", "sudo rm /bin/sudo"}},
 		{"cat replaced by rm", "inspection", "nixy", []string{
