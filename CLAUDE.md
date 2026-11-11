@@ -269,7 +269,13 @@ loop wraps it in scaffolding:
 
 - **Quests** introduce concepts in order, each unlocked by achievements
   granted by the prior one. New quests should build on what's been
-  taught, not require leaping forward.
+  taught, not require leaping forward. The line (`quests.All`):
+  Connect (ssh) → Orientation (pwd, ls, cd) → Inspection (cat, grep)
+  → Modification (rm, touch) → Composition (`|`) → Permissions
+  (server: apt, sudo) → Lockdown (sudo in Nixy's locked home) →
+  Identity (whoami, sudo whoami) → Notes (mkdir, echo, `>`, `>>`) →
+  Manual (install wc, man) → Counting (wc -l, grep | wc -l) →
+  Interrupt (yes, ^C) → Processes (ps -e, kill refused, sudo kill).
 - **The planner** (`Quest.PlanNextCommand`, `game.PlanHint`) computes
   the next concrete keystroke toward the active quest. This is what
   the green hint key on the keyboard means. `game.PlanThought` says
