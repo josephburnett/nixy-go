@@ -298,6 +298,10 @@ func TestFuzzE2ERandomKeys(t *testing.T) {
 			if sess.Mode != ModePlaying {
 				continue // logged out: play on at the login prompt
 			}
+			if _, done := sess.Shell.Active().LastStatus(); done && term.State.Line != sess.Shell.CurrentCommand() {
+				t.Fatalf("seed %d step %d: after %q + %s the input line is %q but the shell holds %q",
+					seed, step, line, keyName(d), term.State.Line, sess.Shell.CurrentCommand())
+			}
 			if wasLogin {
 				logins++
 			}
@@ -428,7 +432,7 @@ func randomKey(rng *rand.Rand, sess *Session, term *terminal.T, script *[]proces
 // leave a shell, and ones that break what quests depend on (each is
 // skipped where it can't be typed).
 var scriptedLines = []string{
-	"exit", "nx panic", "ssh nixy",
+	"exit", "nx panic", "ssh nixy", "echo -n hi",
 	"rm /home/nixy/readme.txt",
 	"sudo rm /home/nixy/readme.txt",
 	"sudo rm /var/log/system.log",

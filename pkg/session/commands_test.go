@@ -103,3 +103,22 @@ func TestSessionHintsCtrlCWhileAJobRuns(t *testing.T) {
 		t.Fatal("still planning ^C after it")
 	}
 }
+
+// Output that doesn't end its line (echo -n) is ended before the next
+// prompt, so what the player types next is the whole input line: the
+// tracker records the command the shell ran, not the output glued to
+// it.
+func TestSessionPromptAfterUnendedOutput(t *testing.T) {
+	sess, term := newLoggedIn(t, "alice")
+	typeCommand(t, sess, term, "echo -n hi")
+	if term.State.Line != "" {
+		t.Fatalf("input line after echo -n is %q", term.State.Line)
+	}
+	typeCommand(t, sess, term, "whoami")
+	if got := sess.Game.Manager.Tracker.LastN(1)[0].Command; got != "whoami" {
+		t.Fatalf("recorded %q, want whoami", got)
+	}
+	if !historyContains(term, "hi") {
+		t.Fatal("echo -n's output is not in the scrollback")
+	}
+}

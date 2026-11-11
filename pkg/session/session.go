@@ -327,7 +327,7 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 	var cmdCwd []string
 	var programs []game.Program
 	if datum == process.TermEnter {
-		cmdLine = strings.TrimSpace(t.State.Line)
+		cmdLine = strings.TrimSpace(s.Shell.CurrentCommand())
 		cmdHost = s.Shell.Hostname()
 		cmdCwd = s.Shell.CurrentDirectory()
 		programs = game.Resolve(s.Game.Sim, cmdHost, s.Username, cmdLine)
@@ -361,6 +361,13 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 		if _, done := s.Shell.Active().LastStatus(); len(outs) == 0 && done {
 			break
 		}
+	}
+
+	// A prompt starts on a new line: output that didn't end its last
+	// line (`echo -n hi`) is ended first, as zsh and fish do, so the
+	// terminal's input line is only ever what the shell holds.
+	if _, done := s.Shell.Active().LastStatus(); done && t.State.Line != s.Shell.CurrentCommand() {
+		t.Write(process.CharsData("\n"))
 	}
 
 	// nx panic disconnects the player back to the laptop: every nested
