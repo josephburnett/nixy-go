@@ -96,8 +96,9 @@ func TestAptList(t *testing.T) {
 	sim := testSetup(t)
 	p, _ := launch(sim, "user", "test", nil, []string{"list"})
 	out := stdout(t, p)
-	if !strings.Contains(out, "grep") || !strings.Contains(out, "ls") {
-		t.Fatalf("expected package list, got %q", out)
+	want := "apt\ncat\ngrep\nls\nmv\npwd\nrm\nssh\nsudo\ntouch\n"
+	if out != want {
+		t.Fatalf("expected sorted package list %q, got %q", want, out)
 	}
 }
 

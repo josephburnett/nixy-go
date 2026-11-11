@@ -2,6 +2,7 @@ package apt
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/josephburnett/nixy-go/pkg/command"
 	"github.com/josephburnett/nixy-go/pkg/file"
@@ -97,8 +98,18 @@ func aptInstall(sim *simulation.S, owner, hostname string, args []string) (proce
 
 func aptList(owner string) (process.P, error) {
 	var output string
-	for pkg := range PackageRegistry {
+	for _, pkg := range packageNames() {
 		output += pkg + "\n"
 	}
 	return command.NewSingleValueProcess(owner, output), nil
+}
+
+// packageNames returns the known package names, sorted.
+func packageNames() []string {
+	names := make([]string, 0, len(PackageRegistry))
+	for pkg := range PackageRegistry {
+		names = append(names, pkg)
+	}
+	sort.Strings(names)
+	return names
 }
