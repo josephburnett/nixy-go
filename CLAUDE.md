@@ -165,6 +165,10 @@ suite for both.
   Ctrl+\ snapshot dump.
 - `cmd/web/` — WASM via `syscall/js`. Exports `nixyInit`,
   `nixyKeystroke`, `nixyResize`, `nixyDumpState` to JavaScript.
+  The on-screen keyboard is tappable: `Layout()` sets `Segment.Key` on
+  keys valid right now, HTMLRenderer emits it as `data-key`, and
+  `web/index.html` sends it to `nixyKeystroke` like a typed key
+  (`terminal.KeyName` / `KeyDatum` are the one mapping).
 - Both use `pkg/session/` for shared game/guide/shell initialization.
 - The session never ends itself. `exit` on the laptop logs out to the
   `login:` prompt; each username keeps its own game, so logging back in
