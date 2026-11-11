@@ -61,6 +61,7 @@ func testFS() *file.F {
 func testSetup(t *testing.T) (*simulation.S, process.P) {
 	t.Helper()
 	sim := simulation.New()
+	sim.Nx = stubNx{}
 	if err := sim.Boot("test", testFS()); err != nil {
 		t.Fatal(err)
 	}
@@ -515,8 +516,6 @@ type stubNx struct{}
 func (stubNx) NxQuest() string { return "quest\n" }
 func (stubNx) NxLog() string   { return "log\n" }
 func (stubNx) NxPanic() string { return "panic\n" }
-
-func init() { DefaultNxHandler = stubNx{} }
 
 // isFreshPrompt reports whether the shell looks like it's at an empty
 // prompt (childProcess nil, currentCommand empty). At that point Next()
@@ -1035,5 +1034,19 @@ func TestShellTildeExpansion(t *testing.T) {
 	}
 	if canRunFresh(p, "cd ~") {
 		t.Error("cd ~ offered while already home")
+	}
+}
+
+// TestShellWithoutNx: nx comes from the game. A simulation without one
+// doesn't offer nx, rather than offering it and then failing.
+func TestShellWithoutNx(t *testing.T) {
+	sim, _ := testSetup(t)
+	sim.Nx = nil
+	p, err := sim.Launch("test", "user", "shell", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if typeable(p, "nx") {
+		t.Fatal("nx offered without a game")
 	}
 }

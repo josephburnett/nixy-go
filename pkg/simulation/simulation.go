@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/josephburnett/nixy-go/pkg/computer"
 	"github.com/josephburnett/nixy-go/pkg/file"
@@ -13,6 +14,17 @@ import (
 
 type S struct {
 	computers map[string]*computer.C
+	// Nx is the game's own command, built into every shell (nx
+	// quest|log|panic). The game sets it; without one, shells have no
+	// nx.
+	Nx Nx
+}
+
+// Nx answers the nx builtin's subcommands.
+type Nx interface {
+	NxQuest() string
+	NxLog() string
+	NxPanic() string
 }
 
 func New() *S {
@@ -24,7 +36,7 @@ func New() *S {
 // Launch starts the registered binary binaryName on hostname as owner,
 // like Start. The game uses it for shells (login, ssh).
 func (s *S) Launch(hostname, owner, binaryName string, args []string, cwd []string) (process.P, error) {
-	b, ok := registry[binaryName]
+	b, ok := lookup(binaryName)
 	if !ok {
 		return nil, fmt.Errorf("binary %v not found", binaryName)
 	}
@@ -105,20 +117,41 @@ type Launch func(
 	args []string,
 ) (process.P, error)
 
-var registry = map[string]*Binary{}
+// registry maps the name in a /bin entry's Data to the code it runs.
+// It is code, not game state: commands register from init, and it is
+// read-only from the first lookup on, so any number of simulations
+// (sessions, parallel tests) can share it.
+var (
+	registry = map[string]*Binary{}
+	sealed   atomic.Bool
+)
 
-// Register adds a binary to the registry. Launch and ValidArgs are
-// required; a missing validator would leave the keyboard with no way to
-// know what may be typed.
+// Register adds a binary to the registry, from an init function.
+// Launch and ValidArgs are required; a missing validator would leave
+// the keyboard with no way to know what may be typed.
 func Register(name string, b *Binary) {
 	if b.Launch == nil || b.ValidArgs == nil {
 		panic(fmt.Sprintf("simulation.Register(%q): Launch and ValidArgs are required", name))
 	}
+	if sealed.Load() {
+		panic(fmt.Sprintf("simulation.Register(%q): register from init, before any lookup", name))
+	}
+	if _, dup := registry[name]; dup {
+		panic(fmt.Sprintf("simulation.Register(%q): already registered", name))
+	}
 	registry[name] = b
 }
 
+func lookup(name string) (*Binary, bool) {
+	if !sealed.Load() {
+		sealed.Store(true)
+	}
+	b, ok := registry[name]
+	return b, ok
+}
+
 func GetBinary(name string) (*Binary, error) {
-	if b, ok := registry[name]; ok {
+	if b, ok := lookup(name); ok {
 		return b, nil
 	}
 	return nil, fmt.Errorf("binary %v not registered", name)

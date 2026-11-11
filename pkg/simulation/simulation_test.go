@@ -115,3 +115,23 @@ func TestGetBinaryNotFound(t *testing.T) {
 		t.Fatal("expected error for unregistered binary")
 	}
 }
+
+// The registry is read-only once anything has been looked up, and a
+// name can't be registered twice.
+func TestRegisterIsInitOnly(t *testing.T) {
+	b := &Binary{
+		Launch:    func(*S, string, string, []string, []string) (process.P, error) { return nil, nil },
+		ValidArgs: func(ArgContext, string) Suggestion { return Suggestion{} },
+	}
+	for _, name := range []string{"test-cmd", "late-cmd"} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("Register(%q) after a lookup must panic", name)
+				}
+			}()
+			_, _ = GetBinary("test-cmd")
+			Register(name, b)
+		}()
+	}
+}

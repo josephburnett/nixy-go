@@ -46,16 +46,6 @@ func launch(
 	return s, nil
 }
 
-// NxHandler handles nx builtin subcommands. Set by the game layer.
-type NxHandler interface {
-	NxQuest() string
-	NxLog() string
-	NxPanic() string
-}
-
-// DefaultNxHandler is set by the game layer at startup.
-var DefaultNxHandler NxHandler
-
 var _ process.P = &shell{}
 
 type shell struct {
@@ -249,8 +239,9 @@ func (s *shell) executeSingle(seg command.Segment) {
 }
 
 func (s *shell) builtinNx(args []string) {
-	if DefaultNxHandler == nil {
-		s.fail(1, "nx: game not initialized")
+	nx := s.simulation.Nx
+	if nx == nil {
+		s.fail(127, "nx: command not found")
 		return
 	}
 	if len(args) == 0 {
@@ -261,11 +252,11 @@ func (s *shell) builtinNx(args []string) {
 	var output string
 	switch args[0] {
 	case "quest":
-		output = DefaultNxHandler.NxQuest()
+		output = nx.NxQuest()
 	case "log":
-		output = DefaultNxHandler.NxLog()
+		output = nx.NxLog()
 	case "panic":
-		output = DefaultNxHandler.NxPanic()
+		output = nx.NxPanic()
 	default:
 		s.fail(1, fmt.Sprintf("nx: unknown subcommand '%v'", args[0]))
 		return
@@ -484,7 +475,9 @@ func (s *shell) commandNames(inPipe bool) []string {
 	var names []string
 	if !inPipe {
 		for name := range builtinArgs {
-			names = append(names, name)
+			if _, ok := s.builtin(name); ok {
+				names = append(names, name)
+			}
 		}
 	}
 	for _, name := range s.simulation.Commands(s.hostname, s.owner) {
@@ -499,7 +492,7 @@ func (s *shell) commandNames(inPipe bool) []string {
 // validator finds a command's args validator: builtins first, then the
 // binary at /bin/<name>.
 func (s *shell) validator(name string) (simulation.ValidArgs, bool) {
-	if va, ok := builtinArgs[name]; ok {
+	if va, ok := s.builtin(name); ok {
 		return va, true
 	}
 	b, err := s.simulation.LookupBinary(s.hostname, s.owner, name)
@@ -507,6 +500,16 @@ func (s *shell) validator(name string) (simulation.ValidArgs, bool) {
 		return nil, false
 	}
 	return b.ValidArgs, true
+}
+
+// builtin returns a builtin's validator. nx exists only in a game:
+// a simulation without one has no nx to offer.
+func (s *shell) builtin(name string) (simulation.ValidArgs, bool) {
+	if name == "nx" && s.simulation.Nx == nil {
+		return nil, false
+	}
+	va, ok := builtinArgs[name]
+	return va, ok
 }
 
 // pipeable reports whether a command can sit on either side of `|` at

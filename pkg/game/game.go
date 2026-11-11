@@ -32,10 +32,12 @@ func NewGame(quests []Quest, machines []MachineEntry, username string) (*Game, e
 	// Activate first quest
 	mgr.AfterCommand(sim)
 
-	return &Game{
+	g := &Game{
 		Sim:     sim,
 		Manager: mgr,
-	}, nil
+	}
+	sim.Nx = g
+	return g, nil
 }
 
 // AfterCommand should be called after each command executes.

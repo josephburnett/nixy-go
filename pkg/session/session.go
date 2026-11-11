@@ -239,7 +239,6 @@ func (s *Session) login(name string, t *terminal.T) error {
 		t.State.Dialog = nil
 	}
 	s.lastUser = name
-	shellpkg.DefaultNxHandler = g
 	s.Username = name
 	s.Game = g
 	if err := s.startLoginShell(); err != nil {

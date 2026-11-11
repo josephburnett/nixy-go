@@ -256,7 +256,9 @@ suite for both.
 
 ### Key packages
 
-- `pkg/process/` — `Process` interface and Datum types.
+- `pkg/process/` — `Process` interface (ordered output, end of input,
+  exit status), `Written` (embed it), process tables (`Space`), Datum
+  types.
 - `pkg/simulation/` — Binary registry, computer management, process
   launching. `Binary.ValidArgs` (required) drives the keyboard.
 - `pkg/command/shell/` — Shell with builtins, pipeline support, and
@@ -272,8 +274,11 @@ suite for both.
 
 ## Testing
 
-- `make test` — full suite, requires `-p 1` due to the global binary
-  registry.
+- `make test` — full suite. Packages and sessions share no mutable
+  state: the binary registry is filled from `init` and read-only from
+  the first lookup (`Register` panics after that), and nx reaches the
+  shell through the game's simulation (`simulation.S.Nx`), not a
+  global.
 - `make fuzz` — runs the fuzz tests 10× each.
 - `make check-wasm` — confirms the web build still compiles (no
   Bubbletea or other non-WASM imports leaked into `pkg/`).
@@ -292,9 +297,14 @@ Three fuzz tests with different goals:
   it or if the hint key isn't itself valid.
 - `TestFuzzE2ERandomKeys` (`pkg/session/`) — random valid keys (half
   the time the hint) through the same chokepoint, wandering into rm,
-  mv, sudo and long pipelines. Fails on panics, an empty keyboard, or
-  stderr other than permission denied. No liveness demand: random play
-  can strand a quest.
+  mv, sudo and long pipelines, and on through logouts, logins and nx
+  panics. Fails on panics, an empty keyboard, or stderr other than
+  permission denied. No liveness demand: random play can strand a
+  quest.
+- `TestFuzzE2ERejectedKeys` (`pkg/session/`) — random play that also
+  presses keys the keyboard doesn't offer, failing if any changes
+  anything observable, and checks after every key that the process
+  tables hold exactly the live shells.
 
 Liveness in the E2E fuzz is keyed on quest progression
 (`activeQuestID + numCompletedQuests + hostname + cwd`). Tracker
