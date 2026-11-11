@@ -15,7 +15,13 @@ func init() {
 	simulation.Register("ls", &simulation.Binary{
 		Launch: launch,
 		// `ls` lists the cwd; `ls PATH` a folder, or names a file.
-		ValidArgs: command.Positional{Args: []command.Arg{command.AnyPath}, Writes: true}.Validate,
+		// Names starting with `.` are hidden unless -a (all), which
+		// also lists `.` and `..`.
+		ValidArgs: command.Positional{
+			Args:   []command.Arg{command.AnyPath},
+			Flags:  "a",
+			Writes: true,
+		}.Validate,
 	})
 }
 
@@ -31,6 +37,8 @@ func launch(
 		return nil, err
 	}
 
+	flags, args := command.Options(args)
+	all := strings.ContainsRune(flags, 'a')
 	target, operand := cwd, "."
 	if len(args) > 0 {
 		target, operand = file.Resolve(cwd, args[0]), args[0]
@@ -49,8 +57,13 @@ func launch(
 	}
 
 	var names []string
+	if all {
+		names = append(names, ".", "..")
+	}
 	for name := range f.Files {
-		names = append(names, name)
+		if all || !strings.HasPrefix(name, ".") {
+			names = append(names, name)
+		}
 	}
 	sort.Strings(names)
 

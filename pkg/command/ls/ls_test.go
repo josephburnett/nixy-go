@@ -29,6 +29,8 @@ func testSetup(t *testing.T) *simulation.S {
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "hello"},
 					"b.txt": {Type: file.Text, Owner: "user",
 						OwnerPermission: file.Write, CommonPermission: file.Read, Data: "world"},
+					".hidden": {Type: file.Text, Owner: "user",
+						OwnerPermission: file.Write, CommonPermission: file.Read},
 				}},
 			"secret": {Type: file.Folder, Owner: file.OwnerRoot,
 				OwnerPermission: file.Write, CommonPermission: file.None,
@@ -73,6 +75,26 @@ func TestLsPath(t *testing.T) {
 	out := stdout(t, p)
 	if !strings.Contains(out, "a.txt") || !strings.Contains(out, "b.txt") {
 		t.Fatalf("expected a.txt and b.txt, got %q", out)
+	}
+}
+
+// Dotfiles are hidden unless -a, which also lists . and ..
+func TestLsHidden(t *testing.T) {
+	sim := testSetup(t)
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"home"}, "a.txt\nb.txt\n"},
+		{[]string{"-a", "home"}, ".\n..\n.hidden\na.txt\nb.txt\n"},
+	} {
+		p, err := launch(sim, "user", "test", []string{}, tc.args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := stdout(t, p); got != tc.want {
+			t.Errorf("ls %v = %q, want %q", tc.args, got, tc.want)
+		}
 	}
 }
 

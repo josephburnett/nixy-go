@@ -52,6 +52,7 @@ func testFS() *file.F {
 		"home": dir(file.OwnerRoot, map[string]*file.F{
 			"user": dir("user", map[string]*file.F{
 				"notes.txt": text("user", "a note\nanother"),
+				".profile":  text("user", "hidden"),
 				"docs":      dir("user", map[string]*file.F{}),
 			}),
 		}),
@@ -908,6 +909,19 @@ func TestShellNextInvariant_Lines(t *testing.T) {
 		{"sudo cat ~/notes.txt", true},
 		{"ls ~x", false},
 		{"grep ~ ~/notes.txt", false},
+		// Options come first, each once, from the command's flags.
+		{"ls -a", true},
+		{"ls -a ~", true},
+		{"ls -a | grep profile", true},
+		{"ls -", false},
+		{"ls -aa", false},
+		{"ls -a -a", false},
+		{"ls -x", false},
+		{"ls ~ -a", false},
+		{"cat -a ~/notes.txt", false},
+		{"sudo ls -a /root", true},
+		// Hidden files are named like any other.
+		{"cat ~/.profile", true},
 	} {
 		_, p := testSetup(t)
 		if got := canRun(p, tc.line); got != tc.ok {

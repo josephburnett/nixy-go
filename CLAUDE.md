@@ -48,7 +48,12 @@ Implementation:
     and in a pipe (`ReadsStdin`, `PipeRequired`), and whether the
     command prints (`Writes`). It offers the space
     between args and the trailing space before `|`. `NoArgs` is the
-    empty one.
+    empty one. `Variadic` repeats the last Arg (`echo WORD...`).
+  - Options are `Positional.Flags`: single-character flags, each at
+    most once, alone or bundled, before the first argument (`ls -a
+    DIR`, `ps -e`, `kill -9 PID`). The launch side reads them with
+    `command.Options(args)`, which splits them off the same way. Add
+    a flag to a command this way, never by parsing `-x` ad hoc.
   - `ValidCommand` — "NAME ARGS" over a set of names, each with its
     own validator. Used for the shell's command position, sudo (any
     non-interactive /bin command, then that command's validator) and

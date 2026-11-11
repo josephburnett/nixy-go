@@ -16,11 +16,20 @@ import (
 type Arg func(ctx simulation.ArgContext, prev []string, token string) simulation.Suggestion
 
 // Positional is the validator for a command that takes a fixed list of
-// positional arguments, e.g. `mv SRC DST` or `grep PATTERN [FILE]`.
+// positional arguments, e.g. `mv SRC DST` or `grep PATTERN [FILE]`,
+// optionally preceded by single-letter options (`ls -a DIR`).
 type Positional struct {
 	Args []Arg
-	// Required is how many args a standalone run needs.
+	// Variadic repeats the last Arg: any number of them (echo WORD...).
+	Variadic bool
+	// Required is how many args a standalone run needs (options don't
+	// count).
 	Required int
+	// Flags are the single-character options the command takes, each
+	// at most once, before any argument, alone or bundled: `ls -a`,
+	// `kill -9 PID`, `ps -e`. Commands read them with Options. As in
+	// POSIX, the first word that isn't an option ends them.
+	Flags string
 	// Writes commands print their results to stdout (ls, cat, grep),
 	// so `|` may follow them. Commands that only change the world (rm,
 	// mv, touch) print nothing; piping them is never offered, which
@@ -47,7 +56,7 @@ func (p Positional) Validate(ctx simulation.ArgContext, partial string) simulati
 		if !p.ReadsStdin {
 			return simulation.Suggestion{}
 		}
-		p.Args, p.Required = p.Args[:p.PipeRequired], p.PipeRequired
+		p.Args, p.Required, p.Variadic = p.Args[:p.PipeRequired], p.PipeRequired, false
 	}
 	sug := p.validate(ctx, partial)
 	sug.Writes = sug.Complete && p.Writes
@@ -58,37 +67,141 @@ func (p Positional) validate(ctx simulation.ArgContext, partial string) simulati
 	tokens := strings.Split(partial, " ")
 	i := len(tokens) - 1
 	prev, cur := tokens[:i], tokens[i]
-	for j, tok := range prev {
-		if j >= len(p.Args) || tok == "" || !p.Args[j](ctx, prev[:j], tok).Complete {
+
+	// Options come first: every word starting with `-` until the first
+	// argument.
+	used := ""
+	nf := 0
+	for ; nf < len(prev) && p.isOption(prev[nf]); nf++ {
+		letters, ok := p.optionLetters(prev[nf], used)
+		if !ok || letters == "" {
+			return simulation.Suggestion{}
+		}
+		used += letters
+	}
+	args := prev[nf:]
+	for j, tok := range args {
+		a := p.arg(j)
+		if a == nil || tok == "" || !a(ctx, args[:j], tok).Complete {
 			return simulation.Suggestion{}
 		}
 	}
-	if i >= len(p.Args) {
+	k := len(args) // cur is the k-th argument
+
+	if k == 0 && p.isOption(cur) {
+		return p.validateOption(ctx, cur, used)
+	}
+
+	a := p.arg(k)
+	if a == nil {
 		// Only the trailing space after the last argument.
 		if cur != "" {
 			return simulation.Suggestion{}
 		}
-		return simulation.Suggestion{Complete: p.enough(i)}
+		return simulation.Suggestion{Complete: p.enough(k)}
 	}
 
-	sug := p.Args[i](ctx, prev, cur)
+	sug := a(ctx, args, cur)
 	var chars []rune
 	for _, r := range sug.Chars {
-		if r != ' ' && r != '|' {
+		if r != ' ' && r != '|' && !(k == 0 && cur == "" && r == '-' && p.Flags != "") {
 			chars = append(chars, r)
 		}
 	}
 	if cur == "" {
-		return simulation.Suggestion{Chars: chars, Complete: p.enough(i)}
+		if k == 0 && p.moreOptions(used) && p.afterOptions(ctx) {
+			chars = append(chars, '-')
+		}
+		return simulation.Suggestion{Chars: chars, Complete: p.enough(k)}
 	}
 	if !sug.Complete {
 		return simulation.Suggestion{Chars: chars}
 	}
-	complete := p.enough(i + 1)
-	if complete || (i+1 < len(p.Args) && live(p.Args[i+1](ctx, tokens, ""))) {
+	complete := p.enough(k + 1)
+	if next := p.arg(k + 1); complete || (next != nil && live(next(ctx, append(args, cur), ""))) {
 		chars = append(chars, ' ')
 	}
 	return simulation.Suggestion{Chars: chars, Complete: complete}
+}
+
+// arg is the validator for the k-th argument, nil past the last.
+func (p Positional) arg(k int) Arg {
+	switch {
+	case k < len(p.Args):
+		return p.Args[k]
+	case p.Variadic && len(p.Args) > 0:
+		return p.Args[len(p.Args)-1]
+	}
+	return nil
+}
+
+func (p Positional) isOption(tok string) bool {
+	return p.Flags != "" && strings.HasPrefix(tok, "-")
+}
+
+// optionLetters returns the letters of an option word (`-al` → "al"),
+// false if any isn't a flag or is given twice.
+func (p Positional) optionLetters(tok, used string) (string, bool) {
+	letters := tok[1:]
+	for i, r := range letters {
+		if !strings.ContainsRune(p.Flags, r) || strings.ContainsRune(used, r) || strings.ContainsRune(letters[:i], r) {
+			return "", false
+		}
+	}
+	return letters, true
+}
+
+// moreOptions reports whether some flag hasn't been given yet.
+func (p Positional) moreOptions(used string) bool {
+	for _, r := range p.Flags {
+		if !strings.ContainsRune(used, r) {
+			return true
+		}
+	}
+	return false
+}
+
+// afterOptions reports whether the command leads somewhere once its
+// options are given: it can run, or its first argument can be typed.
+func (p Positional) afterOptions(ctx simulation.ArgContext) bool {
+	a := p.arg(0)
+	return p.enough(0) || (a != nil && live(a(ctx, nil, "")))
+}
+
+// validateOption validates the option word being typed.
+func (p Positional) validateOption(ctx simulation.ArgContext, cur, used string) simulation.Suggestion {
+	letters, ok := p.optionLetters(cur, used)
+	if !ok {
+		return simulation.Suggestion{}
+	}
+	all := used + letters
+	var chars []rune
+	for _, r := range p.Flags {
+		if !strings.ContainsRune(all, r) {
+			chars = append(chars, r)
+		}
+	}
+	sort.Slice(chars, func(i, j int) bool { return chars[i] < chars[j] })
+	if letters == "" {
+		return simulation.Suggestion{Chars: chars}
+	}
+	if p.afterOptions(ctx) {
+		chars = append(chars, ' ')
+	}
+	return simulation.Suggestion{Chars: chars, Complete: p.enough(0)}
+}
+
+// Options splits the leading options off a command's args, the way
+// Positional validated them: `-a -l x` → "al", ["x"]. A lone `-` is an
+// argument.
+func Options(args []string) (flags string, rest []string) {
+	for i, a := range args {
+		if len(a) < 2 || a[0] != '-' {
+			return flags, args[i:]
+		}
+		flags += a[1:]
+	}
+	return flags, nil
 }
 
 // enough reports whether n complete args make a runnable command.
@@ -198,6 +311,20 @@ var Hostname = OneOf(func(ctx simulation.ArgContext) []string {
 	}
 	return hosts
 })
+
+// Word accepts a free-form word, e.g. for echo: portable filename
+// characters, which no shell interprets, and no leading `-` (an
+// option).
+func Word(_ simulation.ArgContext, _ []string, token string) simulation.Suggestion {
+	var chars []rune
+	for _, r := range wordChars {
+		if r == '-' && token == "" {
+			continue
+		}
+		chars = append(chars, r)
+	}
+	return simulation.Suggestion{Chars: chars, Complete: token != ""}
+}
 
 // Pattern accepts a literal search word for grep. It is limited to
 // characters that mean nothing special to a real shell or to grep's
