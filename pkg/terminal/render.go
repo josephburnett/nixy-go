@@ -16,7 +16,7 @@ type Frame struct {
 	ValidKeys      []process.Datum
 	HintKey        process.Datum
 	Width          int
-	Height         int
+	Height         int // history rows; the box has one more for the prompt, which a long line can take over
 }
 
 // Renderer produces platform-specific output from a Frame.

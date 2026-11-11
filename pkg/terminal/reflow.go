@@ -27,63 +27,88 @@ func WrapLine(line string, width int) []string {
 	return result
 }
 
-// ReflowLines wraps all original lines to the given width, then returns
-// the last height display lines (for scrolling).
+// ReflowLines wraps lines to the given width and returns the last height
+// display lines (for scrolling).
+// Only the lines needed to fill height are wrapped.
 func ReflowLines(lines []string, width, height int) []string {
-	var display []string
-	for _, line := range lines {
-		display = append(display, WrapLine(line, width)...)
+	return tailWrap(lines, height, func(l string) []string { return WrapLine(l, width) })
+}
+
+// tailWrap wraps entries from the newest backwards until it has height
+// display lines, then returns those lines oldest first. Rendering costs
+// what's on screen, however long the history is.
+func tailWrap[E, L any](entries []E, height int, wrap func(E) []L) []L {
+	var rev [][]L
+	n := 0
+	for i := len(entries) - 1; i >= 0 && n < height; i-- {
+		w := wrap(entries[i])
+		rev = append(rev, w)
+		n += len(w)
 	}
-	if len(display) > height {
-		display = display[len(display)-height:]
+	out := make([]L, 0, n)
+	for i := len(rev) - 1; i >= 0; i-- {
+		out = append(out, rev[i]...)
 	}
-	return display
+	if len(out) > height {
+		out = out[len(out)-height:]
+	}
+	return out
 }
 
 // DisplayLine is one rendered line in the terminal box. Prompt (if set)
-// renders in the prompt-color spans (per-host) and only appears on the
-// first line of a wrapped block; continuation lines have a zero Prompt.
+// renders in the prompt-color spans (per-host). A wrapped entry carries
+// its Prompt on every row that shows part of the prompt; PromptSkip is how
+// many prompt runes earlier rows already showed. Rows holding only input
+// have a zero Prompt.
 type DisplayLine struct {
-	Prompt PromptInfo
-	Text   string
+	Prompt     PromptInfo
+	PromptSkip int
+	Text       string
 }
 
 // ReflowHistory wraps each history entry to the given width and returns the
-// last height display lines. The prompt prefix (if any) appears only on the
-// first wrapped sub-line of each entry.
+// last height display lines.
 func ReflowHistory(lines []HistoryLine, width, height int) []DisplayLine {
-	var display []DisplayLine
-	for _, hl := range lines {
-		display = append(display, wrapHistoryLine(hl, width)...)
-	}
-	if len(display) > height {
-		display = display[len(display)-height:]
-	}
-	return display
+	return tailWrap(lines, height, func(hl HistoryLine) []DisplayLine { return wrapHistoryLine(hl, width) })
 }
 
+// wrapHistoryLine wraps prompt and input as one run of text, the way a
+// terminal does, so a prompt wider than the box still leaves the input
+// visible on the rows below.
 func wrapHistoryLine(hl HistoryLine, width int) []DisplayLine {
-	prefixText := hl.Prompt.promptPrefixText()
 	if hl.Prompt.IsZero() {
 		// Output line — no prompt prefix.
-		prefixText = ""
+		var out []DisplayLine
+		for _, w := range WrapLine(hl.Input, width) {
+			out = append(out, DisplayLine{Text: w})
+		}
+		return out
 	}
 	if width <= 0 {
 		return []DisplayLine{{Prompt: hl.Prompt, Text: hl.Input}}
 	}
-	prefixLen := utf8.RuneCountInString(prefixText)
-	if prefixLen >= width {
-		// Prefix alone overflows — show the prompt only and skip the input.
-		return []DisplayLine{{Prompt: hl.Prompt}}
+	prefixLen := utf8.RuneCountInString(hl.Prompt.promptPrefixText())
+	input := []rune(hl.Input)
+	var out []DisplayLine
+	skip := 0
+	for skip < prefixLen {
+		room := width - (prefixLen - skip)
+		if room < 0 {
+			out = append(out, DisplayLine{Prompt: hl.Prompt, PromptSkip: skip})
+			skip += width
+			continue
+		}
+		if room > len(input) {
+			room = len(input)
+		}
+		out = append(out, DisplayLine{Prompt: hl.Prompt, PromptSkip: skip, Text: string(input[:room])})
+		input = input[room:]
+		skip = prefixLen
 	}
-	first := width - prefixLen
-	inputRunes := []rune(hl.Input)
-	if len(inputRunes) <= first {
-		return []DisplayLine{{Prompt: hl.Prompt, Text: hl.Input}}
-	}
-	out := []DisplayLine{{Prompt: hl.Prompt, Text: string(inputRunes[:first])}}
-	for _, w := range WrapLine(string(inputRunes[first:]), width) {
-		out = append(out, DisplayLine{Text: w})
+	if len(input) > 0 {
+		for _, w := range WrapLine(string(input), width) {
+			out = append(out, DisplayLine{Text: w})
+		}
 	}
 	return out
 }

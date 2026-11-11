@@ -72,6 +72,13 @@ func (t *T) SetDialog(lines []string) {
 	for _, l := range lines {
 		t.State.Dialog = append(t.State.Dialog, DialogLine{Text: l})
 	}
+	if excess := len(t.State.Dialog) - maxDialog; excess > 0 {
+		d := t.State.Dialog[excess:]
+		for len(d) > 0 && d[0].Text == "" {
+			d = d[1:]
+		}
+		t.State.Dialog = d
+	}
 }
 
 func (t *T) SetKeyboard(valid []process.Datum, hint process.Datum) {
@@ -109,26 +116,18 @@ func (t *T) Render() string {
 		dialogSpace = 0
 	}
 
-	// Wrap each accumulated dialog line to the screen width. Empty entries
-	// are paragraph separators — preserve them as-is.
-	var wrappedDialog []DialogLine
-	for _, dl := range t.State.Dialog {
+	// Wrap the newest dialog lines to the screen width. Empty entries are
+	// paragraph separators — preserve them as-is.
+	dialogToShow := tailWrap(t.State.Dialog, dialogSpace, func(dl DialogLine) []DialogLine {
 		if dl.Text == "" {
-			wrappedDialog = append(wrappedDialog, DialogLine{})
-			continue
+			return []DialogLine{{}}
 		}
+		var out []DialogLine
 		for _, w := range WrapWords(dl.Text, t.ScreenWidth) {
-			wrappedDialog = append(wrappedDialog, DialogLine{Text: w})
+			out = append(out, DialogLine{Text: w})
 		}
-	}
-	var dialogToShow []DialogLine
-	if dialogSpace > 0 && len(wrappedDialog) > 0 {
-		start := len(wrappedDialog) - dialogSpace
-		if start < 0 {
-			start = 0
-		}
-		dialogToShow = wrappedDialog[start:]
-	}
+		return out
+	})
 
 	displayLines := ReflowHistory(t.State.Lines, contentWidth, termContentHeight)
 	onPath, offPath := splitOnPath(t.State.Line, t.State.PromptTarget)

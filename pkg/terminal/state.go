@@ -51,13 +51,31 @@ type State struct {
 	HintKey      process.Datum
 }
 
+// Retention limits. Like a real terminal's scrollback limit, the oldest
+// lines are dropped once these are reached. Both are far more than the
+// screen can show.
+const (
+	maxScrollback = 1000 // history lines
+	maxDialog     = 500  // dialog lines, separators included
+)
+
+// addLine appends to the scrollback, dropping the oldest line when full.
+// Reslicing keeps appends amortized O(1); the next reallocation copies only
+// the kept lines, so memory stays bounded.
+func (s *State) addLine(hl HistoryLine) {
+	s.Lines = append(s.Lines, hl)
+	if excess := len(s.Lines) - maxScrollback; excess > 0 {
+		s.Lines = s.Lines[excess:]
+	}
+}
+
 func (s *State) Write(in process.Data) error {
 	for _, d := range in {
 		switch d := d.(type) {
 		case process.Chars:
 			for _, c := range string(d) {
 				if c == '\n' {
-					s.Lines = append(s.Lines, HistoryLine{Input: s.Line})
+					s.addLine(HistoryLine{Input: s.Line})
 					s.Line = ""
 				} else {
 					s.Line += string(c)
@@ -74,7 +92,7 @@ func (s *State) Write(in process.Data) error {
 				s.Line = ""
 				s.Lines = nil
 			case process.TermEnter:
-				s.Lines = append(s.Lines, HistoryLine{Prompt: s.Prompt, Input: s.Line})
+				s.addLine(HistoryLine{Prompt: s.Prompt, Input: s.Line})
 				s.Line = ""
 			default:
 				return fmt.Errorf("unknown term code: %v", d)
