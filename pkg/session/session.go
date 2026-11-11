@@ -96,6 +96,9 @@ func (s *Session) HandleKeystroke(datum process.Datum, t *terminal.T) {
 // (lowercase a-z, length 1-8, Backspace when non-empty, Enter when valid)
 // and bootstraps the game on a successful Enter.
 func (s *Session) handleLoginKeystroke(datum process.Datum, t *terminal.T) {
+	if !slices.Contains(loginValidKeys(t.State.Line), datum) {
+		return // like the shell: a key not offered does nothing
+	}
 	t.Notify("")
 	switch d := datum.(type) {
 	case process.Chars:
@@ -295,9 +298,12 @@ func (s *Session) handlePlayingKeystroke(datum process.Datum, t *terminal.T) {
 		cmdCwd = s.Shell.CurrentDirectory()
 	}
 
-	// Invalid keystrokes return an error from the guide; we silently swallow
-	// it so the user gets no negative feedback.
-	_, _ = s.Guide.Stdin(process.Data{datum})
+	// A key the keyboard didn't offer has no effect at all: nothing is
+	// recorded or run, and the screen stays as it was. There is no
+	// negative feedback either; the key just does nothing.
+	if _, err := s.Guide.Stdin(process.Data{datum}); err != nil {
+		return
+	}
 	t.Notify("")
 
 	loggedOut := false
